@@ -35,7 +35,7 @@ der höchstens ~10 km von der Route entfernt liegt.
 | Autobahn bevorzugen | Standard an: Route **ohne** `maximum_speed` (`preference: fastest`), Fahrzeit danach je Schritt auf max. km/h gedeckelt. Grund: mit 80-km/h-Limit wählt ORS oft Landstraßen. Aus: altes Verhalten mit `maximum_speed` |
 | Maut meiden | Standard aus; `options.avoid_features: ['tollways']` (gilt nur fürs Routing, nicht für die Umweg-Matrix) |
 | Speichern | localStorage im Browser, GPX-Export, Tour-Datei (`.etappen.json`) Export/Import; optional Online-Speicher (s. u.) |
-| Online-Speicher | privates GitHub-Repo (Standard `sebciox/gespann-touren`), Fine-grained Token nur für dieses Repo („Contents: Read and write“), Token bleibt lokal je Gerät. Synchronisiert Touren **und** Einstellungen inkl. ORS-Schlüssel |
+| Online-Speicher | privates GitHub-Repo (Standard `sebciox/touren`), Fine-grained Token nur für dieses Repo („Contents: Read and write“), Token bleibt lokal je Gerät. Synchronisiert Touren **und** Einstellungen inkl. ORS-Schlüssel |
 | Layout | Handy: Karte Vollbild + aufziehbares Bottom-Sheet; ab 900 px: Seitenleiste links |
 
 ## Ideale Etappenlänge (Kernlogik)

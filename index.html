@@ -199,7 +199,7 @@ a{color:var(--brand)}
     <h3 style="margin:18px 0 6px">Online-Speicher (privates GitHub-Repo)</h3>
     <div class="muted" style="margin-bottom:8px">Touren und Einstellungen (inkl. ORS-Schlüssel) werden dort gespeichert – so hast du sie auf Handy und Laptop. Der Token bleibt nur in diesem Browser.</div>
     <div class="field"><label for="sRepo">Repo (Besitzer/Name)</label>
-      <input id="sRepo" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="sebciox/gespann-touren"></div>
+      <input id="sRepo" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="sebciox/touren"></div>
     <div class="field"><label for="sToken">GitHub-Token</label>
       <input id="sToken" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="github_pat_…">
       <div class="muted">Fine-grained Token, nur für dieses Repo, Recht „Contents: Read and write“. Leer lassen = nur lokal speichern.</div></div>
@@ -229,7 +229,7 @@ a{color:var(--brand)}
 /* ---------- Konstanten & Einstellungen ---------- */
 const COL = { brand:'#1f6b52', pending:'#6f7a85', corridor:'#e07b24', ok:'#2e8b57', unk:'#8a8f98' };
 const DEF = { key:'', speed:80, cmin:350, cmax:450, detour:10, highway:true, noToll:false,
-              ghRepo:'sebciox/gespann-touren', ghToken:'', savedAt:null };
+              ghRepo:'sebciox/touren', ghToken:'', savedAt:null };
 const ORS = 'https://api.openrouteservice.org';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
                   'https://overpass.private.coffee/api/interpreter'];
@@ -238,7 +238,11 @@ const AREA_ZOOM = 10;
 const DEMO = { start:'Witten', end:'Sant Pere Pescador, CT, Spanien' };
 
 let settings = loadSettings();
-function loadSettings(){ try { return { ...DEF, ...JSON.parse(localStorage.getItem('gp.settings') || '{}') }; } catch(e){ return { ...DEF }; } }
+function loadSettings(){
+  let st; try { st = { ...DEF, ...JSON.parse(localStorage.getItem('gp.settings') || '{}') }; } catch(e){ st = { ...DEF }; }
+  if (st.ghRepo === 'sebciox/gespann-touren' && !st.ghToken) st.ghRepo = DEF.ghRepo;   // früherer Standardname
+  return st;
+}
 function saveSettings(){ try { localStorage.setItem('gp.settings', JSON.stringify(settings)); } catch(e){} }
 
 const state = { start:null, end:null, stages:[], pending:null, done:false, busy:false, tourId:null, endCands:[],
