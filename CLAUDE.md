@@ -34,7 +34,8 @@ der höchstens ~10 km von der Route entfernt liegt.
 | Geschwindigkeit | max. 80 km/h (ORS-Minimum ist 80) |
 | Autobahn bevorzugen | Standard an: Route **ohne** `maximum_speed` (`preference: fastest`), Fahrzeit danach je Schritt auf max. km/h gedeckelt. Grund: mit 80-km/h-Limit wählt ORS oft Landstraßen. Aus: altes Verhalten mit `maximum_speed` |
 | Maut meiden | Standard aus; `options.avoid_features: ['tollways']` (gilt nur fürs Routing, nicht für die Umweg-Matrix) |
-| Speichern | localStorage im Browser, GPX-Export, Tour-Datei (`.etappen.json`) Export/Import |
+| Speichern | localStorage im Browser, GPX-Export, Tour-Datei (`.etappen.json`) Export/Import; optional Online-Speicher (s. u.) |
+| Online-Speicher | privates GitHub-Repo (Standard `sebciox/gespann-touren`), Fine-grained Token nur für dieses Repo („Contents: Read and write“), Token bleibt lokal je Gerät. Synchronisiert Touren **und** Einstellungen inkl. ORS-Schlüssel |
 | Layout | Handy: Karte Vollbild + aufziehbares Bottom-Sheet; ab 900 px: Seitenleiste links |
 
 ## Ideale Etappenlänge (Kernlogik)
@@ -67,7 +68,13 @@ Hintergrund: Sebastians erste Testtour Witten → Sant Pere Pescador ergab 3 Üb
   Touren vor (Zwischenspeicher wird geleert).
 - **Kartenkacheln:** `tile.openstreetmap.org`. Funktioniert nur über GitHub Pages/Webserver – als lokal geöffnete
   Datei (file://) blockiert OSM die Kacheln (403). CARTO-Basemaps verlangen inzwischen einen API-Key → nicht nutzen.
-- localStorage-Schlüssel: `gp.settings`, `gp.tours`, `gp.cache.op`, `gp.cache.mx`.
+- **Online-Speicher:** GitHub Contents-API (`api.github.com/repos/<repo>/contents/…`, CORS ok). Dateien:
+  `einstellungen.json` (`SYNC_KEYS`, ohne Token) und `touren/<id>.json` (Format wie Tour-Datei, importierbar).
+  `gp.sync` merkt je Tour `{sha, at}` des letzten Abgleichs + ausstehende Löschungen. Regeln: neuere `savedAt`
+  gewinnt; online fehlend + früher abgeglichen → auf anderem Gerät gelöscht; neue Verbindung (Token/Repo geändert)
+  → Online-Einstellungen haben Vorrang. Abgleich beim Start, beim Öffnen von „Touren“, nach Speichern/Löschen/
+  Import und nach dem Speichern der Einstellungen. 409/422 (sha veraltet) → aktuellen sha holen, überschreiben.
+- localStorage-Schlüssel: `gp.settings`, `gp.tours`, `gp.sync`, `gp.cache.op`, `gp.cache.mx`.
 
 ## Datenquellen – rechtlicher Rahmen
 
@@ -81,10 +88,9 @@ Hintergrund: Sebastians erste Testtour Witten → Sant Pere Pescador ergab 3 Üb
 Die Arbeitsumgebung erreicht ORS/Overpass oft nicht. Bewährt: Playwright-Test mit gemockten Antworten
 (`page.route` für ORS-Directions/Matrix/Geocode und Overpass, Leaflet lokal aus npm, `serviceWorkers:'block'`),
 Ablauf: planen → Plätze wählen → Zielplatz → Tour-Datei exportieren → neu → importieren.
+Online-Speicher: GitHub-API mit In-Memory-Repo mocken, zwei Browser-Kontexte (Laptop/Handy) gegeneinander.
 
 ## Offene Ideen
 
-- Synchronisation der Touren über ein **privates** GitHub-Repository (das App-Repo ist öffentlich → Touren dort
-  wären sichtbar). Bräuchte einen Fine-grained Token, den die App speichert.
 - Start/Ziel sind vorerst zum Testen vorausgefüllt (`DEMO` in `index.html`: Witten → Sant Pere Pescador) – später entfernen.
 - Echte Tests mit realen Diensten stehen noch aus (park4night-Link-Ziel ungeprüft).

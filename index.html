@@ -183,7 +183,7 @@ a{color:var(--brand)}
     <div class="field">
       <label for="sKey">OpenRouteService-Schlüssel</label>
       <input id="sKey" autocomplete="off" spellcheck="false">
-      <div class="muted">Kostenlos unter <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a>. Wird nur in diesem Browser gespeichert.</div>
+      <div class="muted">Kostenlos über das HeiGIT-Konto (<a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a>). Wird auch im Online-Speicher abgelegt, falls eingerichtet.</div>
     </div>
     <div class="grid2">
       <div class="field"><label for="sSpeed">Max. km/h</label><input id="sSpeed" type="number" min="80" max="130" step="1" inputmode="numeric"></div>
@@ -196,6 +196,13 @@ a{color:var(--brand)}
     <label class="check"><input id="sToll" type="checkbox"><span>Maut meiden
       <small>Mautstraßen umfahren (z.&nbsp;B. Autobahnen in Frankreich, Italien, Spanien).</small></span></label>
     <div class="muted" style="margin-top:10px">Umweg = Strecke auf der Straße von der Route zum Platz, einfache Richtung. OpenRouteService rechnet mit mindestens 80 km/h.</div>
+    <h3 style="margin:18px 0 6px">Online-Speicher (privates GitHub-Repo)</h3>
+    <div class="muted" style="margin-bottom:8px">Touren und Einstellungen (inkl. ORS-Schlüssel) werden dort gespeichert – so hast du sie auf Handy und Laptop. Der Token bleibt nur in diesem Browser.</div>
+    <div class="field"><label for="sRepo">Repo (Besitzer/Name)</label>
+      <input id="sRepo" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="sebciox/gespann-touren"></div>
+    <div class="field"><label for="sToken">GitHub-Token</label>
+      <input id="sToken" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="github_pat_…">
+      <div class="muted">Fine-grained Token, nur für dieses Repo, Recht „Contents: Read and write“. Leer lassen = nur lokal speichern.</div></div>
     </div>
     <div class="dlg-actions">
       <button class="btn" value="cancel" type="submit">Abbrechen</button>
@@ -207,8 +214,9 @@ a{color:var(--brand)}
 <dialog id="toursDlg">
   <div class="dlg-head"><h2>Gespeicherte Touren</h2>
     <button class="btn ghost dlg-x" type="button" id="toursX" aria-label="Schließen" title="Schließen">✕</button></div>
-  <div class="dlg-body"><ul class="tours" id="toursList"></ul></div>
+  <div class="dlg-body"><div class="muted" id="syncInfo" style="margin-bottom:6px"></div><ul class="tours" id="toursList"></ul></div>
   <div class="dlg-actions">
+    <button class="btn" type="button" id="syncBtn" hidden>Abgleichen</button>
     <button class="btn" type="button" id="importBtn">Tour-Datei öffnen</button>
     <button class="btn" type="button" id="toursClose">Schließen</button>
   </div>
@@ -220,7 +228,8 @@ a{color:var(--brand)}
 'use strict';
 /* ---------- Konstanten & Einstellungen ---------- */
 const COL = { brand:'#1f6b52', pending:'#6f7a85', corridor:'#e07b24', ok:'#2e8b57', unk:'#8a8f98' };
-const DEF = { key:'', speed:80, cmin:350, cmax:450, detour:10, highway:true, noToll:false };
+const DEF = { key:'', speed:80, cmin:350, cmax:450, detour:10, highway:true, noToll:false,
+              ghRepo:'sebciox/gespann-touren', ghToken:'', savedAt:null };
 const ORS = 'https://api.openrouteservice.org';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
                   'https://overpass.private.coffee/api/interpreter'];
@@ -914,6 +923,156 @@ $('#planForm').addEventListener('submit', e => {
   });
 });
 
+/* ---------- Online-Speicher: privates GitHub-Repo ----------
+   Dateien: einstellungen.json (ohne Token) und touren/<id>.json (Format wie die Tour-Datei).
+   gp.sync merkt sich je Tour den zuletzt abgeglichenen Stand { sha, at } und ausstehende Löschungen. */
+const GH = 'https://api.github.com';
+const SYNC_KEYS = ['key', 'speed', 'detour', 'cmin', 'cmax', 'highway', 'noToll'];
+const ghOn = () => !!(settings.ghToken && /^[\w.-]+\/[\w.-]+$/.test(settings.ghRepo || ''));
+function syncMeta(){
+  try { return { known:{}, deleted:[], ...JSON.parse(localStorage.getItem('gp.sync') || '{}') }; } catch(e){ return { known:{}, deleted:[] }; }
+}
+function saveSyncMeta(m){ try { localStorage.setItem('gp.sync', JSON.stringify(m)); } catch(e){} }
+function b64enc(str){
+  const b = new TextEncoder().encode(str); let out = '';
+  for (let i = 0; i < b.length; i += 0x8000) out += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  return btoa(out);
+}
+function b64dec(b64){
+  const bin = atob(String(b64).replace(/\s/g, '')), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(u);
+}
+async function gh(method, path, body, raw){
+  let res;
+  try {
+    res = await fetch(`${GH}/repos/${settings.ghRepo}${path}`, { method, cache:'no-store',
+      headers:{ 'Authorization':'Bearer ' + settings.ghToken, 'X-GitHub-Api-Version':'2022-11-28',
+                'Accept': raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json',
+                ...(body ? { 'Content-Type':'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined });
+  } catch(e){ throw new Error('GitHub nicht erreichbar (Netzwerk).'); }
+  if (res.status === 404 && method === 'GET' && path) return null;   // Datei/Ordner gibt es (noch) nicht
+  if (!res.ok){
+    let msg = ''; try { msg = (await res.json()).message || ''; } catch(e){}
+    const err = new Error(res.status === 401 ? 'GitHub-Token ungültig oder abgelaufen.'
+      : (res.status === 403 || res.status === 404) && !/sha/i.test(msg) ? `Kein Zugriff auf ${settings.ghRepo} – Repo-Name und Token-Recht „Contents: Read and write“ prüfen.`
+      : `GitHub-Fehler ${res.status}${msg ? ': ' + msg : ''}`);
+    err.status = res.status; throw err;
+  }
+  return raw ? res.text() : res.json();
+}
+async function ghRead(path){
+  const j = await gh('GET', '/contents/' + path);
+  if (!j) return null;
+  const text = j.content ? b64dec(j.content) : await gh('GET', '/contents/' + path, null, true);   // > 1 MB: roh laden
+  return { sha:j.sha, data:JSON.parse(text) };
+}
+async function ghWrite(path, data, sha, message){
+  const put = sh => gh('PUT', '/contents/' + path, { message, content:b64enc(JSON.stringify(data, null, 1)), ...(sh ? { sha:sh } : {}) });
+  try { return (await put(sha)).content.sha; }
+  catch(e){
+    if (![409, 422].includes(e.status)) throw e;
+    const cur = await gh('GET', '/contents/' + path);          // Stand hat sich geändert → aktuellen sha holen, überschreiben
+    return (await put(cur && cur.sha)).content.sha;
+  }
+}
+async function ghDelete(path, sha, message){
+  try { await gh('DELETE', '/contents/' + path, { message, sha }); }
+  catch(e){
+    if (e.status === 404) return;
+    if (![409, 422].includes(e.status)) throw e;
+    const cur = await gh('GET', '/contents/' + path);
+    if (cur) await gh('DELETE', '/contents/' + path, { message, sha:cur.sha });
+  }
+}
+const tourPath = id => `touren/${id}.json`;
+const tourFile = t => ({ app:'gespann-etappen', version:1, tour:t });
+
+let syncing = null;
+function syncNow(){
+  if (!ghOn()) return Promise.resolve(null);
+  if (!syncing) syncing = doSync().finally(() => { syncing = null; });
+  return syncing;
+}
+async function doSync(){
+  await gh('GET', '');                      // Repo erreichbar und Token gültig?
+  const meta = syncMeta(), res = { settings:false, pulled:0, pushed:0, removed:0 };
+  // 1) Einstellungen
+  const f = await ghRead('einstellungen.json');
+  const pushSettings = async sha => {
+    const data = { app:'gespann-etappen', savedAt:settings.savedAt || new Date().toISOString(), settings:{} };
+    SYNC_KEYS.forEach(k => data.settings[k] = settings[k]);
+    meta.set = { sha: await ghWrite('einstellungen.json', data, sha, 'Einstellungen gespeichert'), at:data.savedAt };
+    if (!settings.savedAt){ settings.savedAt = data.savedAt; saveSettings(); }
+  };
+  if (!f) await pushSettings(null);
+  else if (meta.set && meta.set.sha === f.sha){                       // online unverändert
+    if (settings.savedAt && settings.savedAt !== meta.set.at) await pushSettings(f.sha);
+  } else if (!meta.set || !settings.savedAt || new Date(f.data.savedAt) >= new Date(settings.savedAt)){
+    const rs = f.data.settings || {};                                  // online neuer bzw. erstes Verbinden → übernehmen
+    SYNC_KEYS.forEach(k => { if (rs[k] !== undefined) settings[k] = rs[k]; });
+    settings.savedAt = f.data.savedAt; saveSettings();
+    meta.set = { sha:f.sha, at:f.data.savedAt }; res.settings = true;
+  } else await pushSettings(f.sha);
+  saveSyncMeta(meta);
+  // 2) ausstehende Löschungen
+  for (const id of meta.deleted.slice()){
+    await ghDelete(tourPath(id), meta.known[id]?.sha, 'Tour gelöscht');
+    delete meta.known[id]; meta.deleted = meta.deleted.filter(x => x !== id); saveSyncMeta(meta);
+  }
+  // 3) Touren abgleichen
+  const list = (await gh('GET', '/contents/touren')) || [];
+  const remote = new Map((Array.isArray(list) ? list : []).filter(x => /^\d+\.json$/.test(x.name)).map(x => [+x.name.slice(0, -5), x.sha]));
+  const local = new Map(loadTours().map(t => [t.id, t]));
+  let changed = false;
+  const push = async (t, sha) => {
+    meta.known[t.id] = { sha: await ghWrite(tourPath(t.id), tourFile(t), sha, `Tour „${t.name}“ gespeichert`), at:t.savedAt };
+    res.pushed++;
+  };
+  for (const id of new Set([...remote.keys(), ...local.keys()])){
+    if (meta.deleted.includes(id)) continue;
+    const r = remote.get(id), l = local.get(id), k = meta.known[id];
+    const localChanged = l && (!k || k.at !== l.savedAt);
+    if (r && (!k || k.sha !== r || !l)){                                 // online neu oder geändert
+      const rf = await ghRead(tourPath(id)); if (!rf) continue;
+      const rt = rf.data.tour || rf.data;
+      if (!l || !localChanged || new Date(rt.savedAt) >= new Date(l.savedAt)){
+        local.set(id, rt); changed = true; res.pulled++;
+        meta.known[id] = { sha:rf.sha, at:rt.savedAt };
+      } else await push(l, rf.sha);
+    } else if (r && localChanged) await push(l, r);
+    else if (!r && l){
+      if (k && !localChanged){ local.delete(id); delete meta.known[id]; changed = true; res.removed++; }   // auf anderem Gerät gelöscht
+      else await push(l, null);
+    }
+    saveSyncMeta(meta);
+  }
+  if (changed){
+    const arr = [...local.values()].sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+    try { localStorage.setItem('gp.tours', JSON.stringify(arr)); }
+    catch(e){ cacheClear(); localStorage.setItem('gp.tours', JSON.stringify(arr)); }
+  }
+  meta.last = new Date().toISOString(); saveSyncMeta(meta);
+  return res;
+}
+// Abgleich im Hintergrund mit kurzer Rückmeldung
+async function syncAndReport(okMsg, errMsg){
+  if (!ghOn()) return;
+  try {
+    const r = await syncNow();
+    if (r && r.settings && $('#status').classList.contains('error') && settings.key) setStatus('');
+    const parts = !r ? [] : [r.settings && 'Einstellungen übernommen',
+      r.pulled && `${r.pulled} ${r.pulled === 1 ? 'Tour' : 'Touren'} geladen`, r.removed && `${r.removed} gelöscht`].filter(Boolean);
+    if (okMsg) flash(okMsg + ' ✓' + (parts.length ? ' – ' + parts.join(', ') : ''));
+    else if (parts.length) flash('Online-Speicher: ' + parts.join(', ') + '.');
+  } catch(e){
+    console.warn(e);
+    setStatus((errMsg || 'Online-Speicher: ') + e.message, 'error');
+  }
+  if ($('#toursDlg').open) openTours();
+}
+
 /* ---------- Speichern, Laden, GPX ---------- */
 function loadTours(){ try { return JSON.parse(localStorage.getItem('gp.tours') || '[]'); } catch(e){ return []; } }
 function slimPoint(p){ const o = { lat:p.lat, lon:p.lon, label:p.label, kind:p.kind }; if (p.kind === 'camp'){ o.id = p.id; o.tags = p.tags; o.detour = p.detour; } return o; }
@@ -938,8 +1097,11 @@ function saveTour(){
   const name = prompt('Name der Tour', old ? old.name : defaultName());
   if (name === null) return;
   const tour = buildTour(name);
-  try { storeTour(tour); state.tourId = tour.id; flash('Tour gespeichert.'); }
-  catch(e){ setStatus('Speicher voll – bitte alte Touren löschen.', 'error'); }
+  try { storeTour(tour); state.tourId = tour.id; }
+  catch(e){ setStatus('Speicher voll – bitte alte Touren löschen.', 'error'); return; }
+  if (ghOn()){ setStatus('Tour gespeichert – wird online gesichert …', 'busy');
+    syncAndReport('Tour gespeichert · online gesichert', 'Tour gespeichert – aber nur in diesem Browser. '); }
+  else flash('Tour gespeichert.');
 }
 function download(text, fname, type){
   const a = document.createElement('a');
@@ -978,10 +1140,15 @@ async function importTour(file){
     if ($('#toursDlg').open) $('#toursDlg').close();
     loadTour(t.id, t);
     flash(`„${t.name}“ geladen und gespeichert.`);
+    syncAndReport();
   } catch(e){ setStatus('Diese Datei ist keine gültige Tour-Datei.', 'error'); }
 }
-function openTours(){
-  const tours = loadTours(), ul = $('#toursList');
+function openTours(fromButton){
+  const tours = loadTours(), ul = $('#toursList'), meta = syncMeta();
+  $('#syncBtn').hidden = !ghOn();
+  $('#syncInfo').innerHTML = ghOn()
+    ? `Online-Speicher: ${esc(settings.ghRepo)}${syncing ? ' · wird abgeglichen …' : meta.last ? ' · abgeglichen ' + new Date(meta.last).toLocaleString('de-DE', { dateStyle:'short', timeStyle:'short' }) : ''}`
+    : 'Nur in diesem Browser gespeichert. Online-Speicher für Handy + Laptop unter ⚙︎ einrichten.';
   ul.innerHTML = tours.length ? tours.map(t => {
     const km = t.stages.reduce((a, s) => a + s.dist, 0);
     return `<li><div class="t"><b>${esc(t.name)}</b><div class="muted">${t.stages.length} Etappen${t.done ? '' : ' (unvollständig)'} · ${fkm(km)} · ${new Date(t.savedAt).toLocaleDateString('de-DE')}</div></div>
@@ -994,10 +1161,13 @@ function openTours(){
     if (t && confirm(`„${t.name}“ löschen?`)){
       try { localStorage.setItem('gp.tours', JSON.stringify(loadTours().filter(x => x.id !== t.id))); } catch(e){}
       if (state.tourId === t.id) state.tourId = null;
+      const m = syncMeta();
+      if (m.known[t.id] && !m.deleted.includes(t.id)){ m.deleted.push(t.id); saveSyncMeta(m); }
       openTours();
+      syncAndReport();
     }
   });
-  if (!$('#toursDlg').open) $('#toursDlg').showModal();
+  if (!$('#toursDlg').open){ $('#toursDlg').showModal(); if (ghOn() && !fromButton) syncAndReport(); }
 }
 function loadTour(id, given){
   const t = given || loadTours().find(x => x.id === id); if (!t || state.busy) return;
@@ -1046,6 +1216,7 @@ function openSettings(){
   $('#sKey').value = settings.key; $('#sSpeed').value = settings.speed; $('#sDetour').value = settings.detour;
   $('#sMin').value = settings.cmin; $('#sMax').value = settings.cmax;
   $('#sHighway').checked = !!settings.highway; $('#sToll').checked = !!settings.noToll;
+  $('#sRepo').value = settings.ghRepo || ''; $('#sToken').value = settings.ghToken || '';
   $('#settingsDlg').returnValue = '';   // sonst würde Esc/Zurück nach einem früheren „Speichern“ erneut speichern
   $('#settingsDlg').showModal();
 }
@@ -1054,14 +1225,22 @@ $('#settingsDlg').addEventListener('close', () => {
   const n = (v, d) => { const x = parseFloat(v); return isFinite(x) ? x : d; };
   let cmin = n($('#sMin').value, DEF.cmin), cmax = n($('#sMax').value, DEF.cmax);
   if (cmax <= cmin) cmax = cmin + 50;
-  settings = { key: $('#sKey').value.trim(), speed: Math.max(80, n($('#sSpeed').value, DEF.speed)),
+  const ghRepo = $('#sRepo').value.trim().replace(/^https:\/\/github\.com\//, '').replace(/\.git$|\/$/g, ''), ghToken = $('#sToken').value.trim();
+  const newConn = ghToken && (ghToken !== settings.ghToken || ghRepo !== settings.ghRepo);
+  settings = { ...settings, key: $('#sKey').value.trim(), speed: Math.max(80, n($('#sSpeed').value, DEF.speed)),
     detour: Math.max(1, n($('#sDetour').value, DEF.detour)), cmin, cmax,
-    highway: $('#sHighway').checked, noToll: $('#sToll').checked };
+    highway: $('#sHighway').checked, noToll: $('#sToll').checked, ghRepo, ghToken };
+  if (newConn){ try { localStorage.removeItem('gp.sync'); } catch(e){} }   // neue Verbindung: Online-Einstellungen haben Vorrang
+  else settings.savedAt = new Date().toISOString();
   saveSettings();
   if ($('#status').classList.contains('error') && settings.key) setStatus('');
+  if (ghOn()){ setStatus(newConn ? 'Verbinde mit dem Online-Speicher …' : 'Einstellungen werden online gesichert …', 'busy');
+    if (newConn) syncAndReport('Online-Speicher verbunden', 'Verbindung zum Online-Speicher fehlgeschlagen: ');
+    else syncAndReport('Einstellungen gespeichert · online gesichert', 'Einstellungen gespeichert – aber nur in diesem Browser. '); }
 });
 $('#settingsBtn').onclick = openSettings;
-$('#toursBtn').onclick = openTours;
+$('#toursBtn').onclick = () => openTours();
+$('#syncBtn').onclick = () => { const p = syncAndReport(); openTours(true); p.then(() => openTours(true)); };
 $('#toursClose').onclick = $('#toursX').onclick = () => $('#toursDlg').close();
 // Tippen neben den Dialog (auf den abgedunkelten Hintergrund) schließt ihn ohne zu speichern
 for (const d of [$('#settingsDlg'), $('#toursDlg')]) d.addEventListener('click', e => {
@@ -1075,7 +1254,8 @@ $('#importIn').addEventListener('change', e => { const f = e.target.files[0]; e.
 /* ---------- Start ---------- */
 $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end;
 renderAll();
-if (!settings.key) setStatus('Willkommen! Trag zuerst unter ⚙︎ deinen kostenlosen OpenRouteService-Schlüssel ein.');
+if (!settings.key && !ghOn()) setStatus('Willkommen! Trag zuerst unter ⚙︎ deinen kostenlosen OpenRouteService-Schlüssel ein.');
+syncAndReport();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
