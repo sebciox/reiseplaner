@@ -1888,19 +1888,30 @@ function moveVia(i, j){
 }
 // Drag & Drop am Griff (Maus und Finger): Eintrag folgt dem Zeiger, beim Loslassen einsortieren
 function startViaDrag(e, grip){
-  const ul = $('#viaList'), li = grip.closest('li'), i = +grip.dataset.vgrip;
-  const items = [...ul.children], mids = items.map(x => { const r = x.getBoundingClientRect(); return r.top + r.height / 2; });
-  const y0 = e.clientY; let target = i, moved = false;
+  const ul = $('#viaList'), sc = $('#scroll'), li = grip.closest('li'), i = +grip.dataset.vgrip;
+  const items = [...ul.children], mids = items.map(x => x.offsetTop + x.offsetHeight / 2);   // relativ zur Liste
+  const y0 = e.clientY, s0 = sc.scrollTop; let target = i, moved = false, lastY = e.clientY, raf = 0, active = true;
   grip.setPointerCapture(e.pointerId); e.preventDefault();
-  const move = ev => {
-    const dy = ev.clientY - y0; if (Math.abs(dy) > 4) moved = true;
+  const update = () => {
+    const dy = lastY - y0 + (sc.scrollTop - s0); if (Math.abs(dy) > 4) moved = true;
     li.classList.add('dragging'); li.style.transform = `translateY(${dy}px)`;
     const y = mids[i] + dy;
     target = mids.filter((m, k) => k !== i && m < y).length;
     items.forEach((x, k) => x.classList.toggle('drop-before', k !== i && k === (target >= i ? target + 1 : target)));
     ul.classList.toggle('drop-end', target === items.length - 1 && target !== i);
   };
+  // Am oberen/unteren Rand der Leiste automatisch weiterscrollen
+  const tick = () => {
+    if (!active) return;
+    const r = sc.getBoundingClientRect(), edge = 50;
+    const v = lastY > r.bottom - edge ? Math.min(20, (lastY - (r.bottom - edge)) / 2) : lastY < r.top + edge ? -Math.min(20, ((r.top + edge) - lastY) / 2) : 0;
+    if (v){ sc.scrollTop += v; update(); }
+    raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+  const move = ev => { lastY = ev.clientY; update(); };
   const up = () => {
+    active = false; cancelAnimationFrame(raf);
     grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up);
     items.forEach(x => x.classList.remove('drop-before')); ul.classList.remove('drop-end');
     li.classList.remove('dragging'); li.style.transform = '';
