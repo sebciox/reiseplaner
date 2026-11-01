@@ -20,14 +20,15 @@ der höchstens ~10 km von der Route entfernt liegt.
 | Plattform | PWA, rein clientseitig, Hosting GitHub Pages |
 | Planung | vorab zu Hause (keine Live-Navigation) |
 | Eingabe | nur Start und Ziel (keine Zwischenziele, kein „Fähren meiden“) |
-| Etappenlänge | Korridor, Standard 350–450 km (einstellbar), gemessen in km; Fahrzeit wird angezeigt |
+| Ablauf | 1. „Strecke berechnen“ → Gesamtstrecke + Fahrzeit anzeigen. 2. Frage „Wie viele Etappen?“ (Optionen Empfehlung ±2 mit km/Fahrzeit je Etappe, oder eigene Zahl). 3. Plätze je Etappe wählen. „Anzahl ändern“ führt zurück zu 2. |
+| Etappenlänge | ideale Länge = Reststrecke / übrige Etappen; Suchkorridor ± (max − min)/2 (Standard ±50 km), gemessen in km; Fahrzeit wird angezeigt |
 | Abstand zur Route | **echter Umweg auf der Straße** (einfache Richtung), Standard max. 10 km |
 | Plätze | nur Campingplätze (`tourism=camp_site`), keine Wohnmobil-Stellplätze |
 | Wohnwagen-Status | `caravans=no` ausblenden; `yes`/`designated` grün, ohne Angabe grau |
 | Öffnungszeiten | **keine Prüfung** (nur Anzeige, falls in OSM) |
 | Auswahl | alle Treffer im Korridor auf der Karte + Liste; Nutzer wählt |
 | Verkettung | jede Etappe startet am gewählten Platz der vorherigen |
-| Letzte Etappe | Reststrecke ≤ max (450 km) → direkt zum Ziel, danach Liste „Campingplatz am Ziel“ |
+| Letzte Etappe | gewählte Anzahl erreicht → direkt zum Ziel, danach Liste „Campingplatz am Ziel“ |
 | Nichts gefunden | stufenweise erweitern: Umweg 20 km, dann Korridor ±50 km; Hinweis anzeigen |
 | Manuelle Wahl | jeder Campingplatz beim Reinzoomen (Zoom ≥ 10) als Etappenziel wählbar |
 | Geschwindigkeit | max. 80 km/h (ORS-Minimum ist 80) |
@@ -38,10 +39,11 @@ der höchstens ~10 km von der Route entfernt liegt.
 
 ## Ideale Etappenlänge (Kernlogik)
 
-`plan(R)`: n = ceil(R / max), Länge = R / n → so wenige Etappen wie möglich, alle gleich lang.
-Korridor wird nach unten erweitert (bis ideal − 30 km), falls die ideale Länge unter dem Minimum liegt.
-Pro Kandidat: Reststrecke ≈ verbleibende Route − Etappen-km + Umweg → Vorschau „danach n Etappen à ~x km ·
-y Übernachtungen gesamt“. Sortierung: wenigste Übernachtungen, dann Nähe zur idealen Länge; Bester = „Empfehlung“.
+Der Nutzer wählt die Anzahl `state.n` (gespeichert in der Tour als `n`). Empfehlung: `plan(R)`: n = ceil(R / max)
+→ so wenige Etappen wie möglich, alle gleich lang. Bei jeder Etappe: ideal = verbleibende Route / übrige Etappen,
+Korridor ideal ± (max − min)/2. Pro Kandidat: Reststrecke ≈ verbleibende Route − Etappen-km + Umweg → Vorschau
+„danach noch k Etappen à ~x km“. Sortierung: Nähe zur idealen Länge; Bester = „Empfehlung“. Die Gesamtroute
+(`state.overview`) wird für Etappe 1 wiederverwendet (keine zweite ORS-Anfrage).
 Hintergrund: Sebastians erste Testtour Witten → Sant Pere Pescador ergab 3 Übernachtungen, ideal wären 2 gewesen.
 
 ## Technik

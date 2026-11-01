@@ -105,6 +105,18 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .badge.ok{background:var(--ok)} .badge.unk{background:var(--unk)}
 .badge.best{background:var(--accent);vertical-align:1px;margin-left:4px}
 .ideal{margin:2px 0 4px;padding:8px 10px;border-radius:10px;background:var(--warn-soft);font-size:14px}
+.total{padding:12px;border-radius:12px;background:var(--brand-soft);margin:8px 0 12px}
+.total .big{font-size:22px;font-weight:700}
+.opts{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:6px}
+.opts button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font:inherit;color:var(--text);
+  background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer}
+.opts button:hover,.opts button:focus-visible{border-color:var(--brand)}
+.opts button.rec{border:2px solid var(--brand)}
+.opts .n{font-size:20px;font-weight:700;min-width:28px;text-align:center}
+.opts .d{flex:1}
+.custom{display:flex;gap:8px;align-items:center;margin-top:10px}
+.custom input{width:90px;flex:none}
+.linkbtn{font:inherit;font-size:13px;background:none;border:0;padding:0;color:var(--brand);text-decoration:underline;cursor:pointer}
 .cand .after{font-size:13px;color:var(--ok);margin-top:2px}
 .cand .after.worse{color:var(--danger)}
 .pin{width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#1f6b52;
@@ -149,7 +161,7 @@ a{color:var(--brand)}
         <input id="endIn" placeholder="z. B. Malmö" enterkeyhint="go">
         <ul class="sugg" id="endSugg"></ul>
       </div>
-      <button class="btn primary wide" id="planBtn" type="submit">Etappen planen</button>
+      <button class="btn primary wide" id="planBtn" type="submit">Strecke berechnen</button>
     </form>
     <section id="result"></section>
   </div>
@@ -206,7 +218,9 @@ let settings = loadSettings();
 function loadSettings(){ try { return { ...DEF, ...JSON.parse(localStorage.getItem('gp.settings') || '{}') }; } catch(e){ return { ...DEF }; } }
 function saveSettings(){ try { localStorage.setItem('gp.settings', JSON.stringify(settings)); } catch(e){} }
 
-const state = { start:null, end:null, stages:[], pending:null, done:false, busy:false, tourId:null, endCands:[] };
+const state = { start:null, end:null, stages:[], pending:null, done:false, busy:false, tourId:null, endCands:[],
+                n:null,          // gewünschte Anzahl Etappen (vom Nutzer gewählt)
+                overview:null }; // Gesamtroute Start → Ziel { from, line, dist, dur }
 const campIndex = new Map();
 const $ = s => document.querySelector(s);
 
@@ -395,11 +409,16 @@ async function findCandidates(line, cum, cminKm, cmaxKm, detourKm){
               .sort((a, b) => a.detour.d - b.detour.d);
 }
 
+/* Suchkorridor um die ideale Etappenlänge (km); stufenweise erweitern, wenn nichts gefunden wird */
+function corridor(optKm, extra){
+  const hw = halfWidth() + extra;
+  return { cmin: Math.max(10, Math.round((optKm - hw) / 5) * 5), cmax: Math.round((optKm + hw) / 5) * 5 };
+}
 const LEVELS = [
-  s => ({ cmin:+s.cmin, cmax:+s.cmax, detour:+s.detour, note:null }),
-  s => ({ cmin:+s.cmin, cmax:+s.cmax, detour:Math.max(20, +s.detour), note:'Nichts im normalen Korridor – Umweg auf 20 km erweitert.' }),
-  s => ({ cmin:+s.cmin - 50, cmax:+s.cmax + 50, detour:Math.max(20, +s.detour),
-          note:`Nichts gefunden – Korridor auf ${+s.cmin - 50}–${+s.cmax + 50} km und 20 km Umweg erweitert.` })
+  k => ({ ...corridor(k, 0), detour:+settings.detour, note:null }),
+  k => ({ ...corridor(k, 0), detour:Math.max(20, +settings.detour), note:'Nichts im normalen Korridor – Umweg auf 20 km erweitert.' }),
+  k => { const c = corridor(k, 50);
+         return { ...c, detour:Math.max(20, +settings.detour), note:`Nichts gefunden – Korridor auf ${c.cmin}–${c.cmax} km und 20 km Umweg erweitert.` }; }
 ];
 
 function campPoint(c){
@@ -407,18 +426,38 @@ function campPoint(c){
            label: c.tags.name || 'Campingplatz ohne Namen', detour: c.detour || null };
 }
 
-/* Ideale Aufteilung: so wenige Etappen wie möglich (jede ≤ max), alle gleich lang */
+/* Empfehlung: so wenige Etappen wie möglich (jede ≤ max), alle gleich lang */
 function plan(R){
   const cm = +settings.cmax * 1000;
   const n = Math.max(1, Math.ceil(R / cm));
   return { n, len: R / n };
 }
+// halbe Korridorbreite um die ideale Etappenlänge (aus „Etappe min./max.“, Standard 350–450 → ±50 km)
+const halfWidth = () => Math.max(25, (+settings.cmax - +settings.cmin) / 2);
+
+/* Schritt 1: Gesamtstrecke berechnen, danach fragt das Panel nach der Anzahl der Etappen */
+async function computeOverview(){
+  state.stages = []; state.pending = null; state.done = false; state.endCands = []; state.n = null; state.tourId = null;
+  setStatus('Gesamtstrecke wird berechnet …', 'busy'); renderAll();
+  const r = await route(state.start, state.end);
+  state.overview = { from:state.start, ...r };
+  renderAll(); fitAll();
+}
+function chooseN(n){
+  n = Math.round(n);
+  if (!(n >= 1) || !state.overview || state.busy) return;
+  state.n = Math.min(n, 30); state.stages = []; state.done = false;
+  run(() => computeNext(state.start));
+}
 
 async function computeNext(from){
   state.pending = null; state.done = false; state.endCands = [];
   setStatus('Route wird berechnet …', 'busy'); renderAll();
-  const r = await route(from, state.end);
-  if (r.dist <= +settings.cmax * 1000){
+  const ov = state.overview;
+  const r = ov && ov.from === from ? ov : await route(from, state.end);
+  if (!state.n) state.n = plan(r.dist).n + state.stages.length;
+  const left = state.n - state.stages.length;            // noch zu fahrende Etappen inkl. dieser
+  if (left <= 1){
     state.stages.push({ from, to:{ ...state.end, kind:'end' }, line:r.line, dist:r.dist, dur:r.dur, note:null });
     state.done = true; state.pending = null;
     renderAll(); fitAll();
@@ -426,26 +465,22 @@ async function computeNext(from){
     return;
   }
   const cum = cumul(r.line);
-  const pl = plan(r.dist), optKm = pl.len / 1000;
+  const pl = { n:left, len:r.dist / left }, optKm = pl.len / 1000;   // Reststrecke gleichmäßig auf die übrigen Etappen
   for (let lv = 0; lv < LEVELS.length; lv++){
-    const L = LEVELS[lv](settings);
-    // Korridor nach unten erweitern, falls die ideale Etappenlänge kürzer ist als das eingestellte Minimum
-    const cmin = Math.max(50, Math.min(L.cmin, Math.floor(optKm - 30)));
+    const L = LEVELS[lv](optKm);
     setStatus(lv === 0 ? 'Suche Campingplätze im Korridor …' : 'Erweitere die Suche …', 'busy');
-    const cands = await findCandidates(r.line, cum, cmin, L.cmax, L.detour);
+    const cands = await findCandidates(r.line, cum, L.cmin, L.cmax, L.detour);
     if (cands.length || lv === LEVELS.length - 1){
-      const cm = +settings.cmax * 1000;
       cands.forEach(c => {
         campIndex.set(c.id, c);
         c.after = Math.max(0, r.dist - c.stageKm + c.detour.d);          // Reststrecke ab diesem Platz (Näherung)
-        c.afterPlan = c.after <= cm ? { n:1, len:c.after } : plan(c.after);
-        c.nights = state.stages.length + c.afterPlan.n;                    // Übernachtungen gesamt
+        c.afterPlan = { n:left - 1, len:c.after / (left - 1) };            // danach: übrige Etappen gleich lang
         c.dev = Math.abs(c.stageKm - pl.len);
       });
-      cands.sort((a, b) => a.nights - b.nights || a.dev - b.dev);
+      cands.sort((a, b) => a.dev - b.dev);
       cands.forEach((c, i) => c.best = i === 0);
-      state.pending = { from, line:r.line, cum, remain:r.dist, remainDur:r.dur, cands, cmin, cmax:L.cmax, detour:L.detour, plan:pl,
-        info: cmin < L.cmin ? `Suche ab ${cmin} km, damit die ideale Etappenlänge drin liegt.` : null,
+      state.pending = { from, line:r.line, cum, remain:r.dist, remainDur:r.dur, cands, cmin:L.cmin, cmax:L.cmax, detour:L.detour, plan:pl,
+        info: null,
         note: cands.length ? L.note : 'Keine Campingplätze gefunden. Zoom auf der Karte rein und wähle einen Platz manuell.' };
       break;
     }
@@ -534,8 +569,7 @@ function campInfo(c, mode){
 }
 function afterText(c){
   const a = c.afterPlan;
-  const tail = a.n === 1 ? `danach noch ${fkm(a.len)} bis zum Ziel` : `danach ${a.n} Etappen à ~${fkm(a.len)}`;
-  return `${tail} · ${c.nights} ${c.nights === 1 ? 'Übernachtung' : 'Übernachtungen'} gesamt`;
+  return a.n === 1 ? `danach noch ${fkm(a.len)} bis zum Ziel` : `danach noch ${a.n} Etappen à ~${fkm(a.len)}`;
 }
 map.on('popupopen', e => {
   e.popup.getElement().querySelectorAll('[data-pick]').forEach(b => {
@@ -549,6 +583,7 @@ map.on('popupopen', e => {
 function renderMap(){
   lyr.route.clearLayers(); lyr.corridor.clearLayers(); lyr.cands.clearLayers(); lyr.pins.clearLayers();
   state.stages.forEach(s => L.polyline(s.line, { color:COL.brand, weight:5, opacity:.9 }).addTo(lyr.route));
+  if (askingN()) L.polyline(state.overview.line, { color:COL.brand, weight:5, opacity:.8 }).addTo(lyr.route);
   const p = state.pending;
   if (p){
     L.polyline(p.line, { color:COL.pending, weight:4, opacity:.7, dashArray:'8 8' }).addTo(lyr.route);
@@ -591,7 +626,7 @@ function fitCorridor(){
   if (pts.length) map.fitBounds(L.latLngBounds(pts), sheetPad());
 }
 function fitAll(){
-  const pts = state.stages.flatMap(s => s.line);
+  const pts = askingN() ? state.overview.line : state.stages.flatMap(s => s.line);
   if (pts.length) map.fitBounds(L.latLngBounds(pts), sheetPad());
 }
 
@@ -620,10 +655,34 @@ const loadArea = debounce(async () => {
 map.on('moveend', loadArea);
 
 /* ---------- Panel ---------- */
+const askingN = () => !!(state.overview && !state.n && !state.stages.length);
+function nOptions(R){
+  const rec = plan(R).n, out = [];
+  for (let n = Math.max(1, rec - 2); n <= rec + 2; n++) if (n === 1 || R / n >= 100000) out.push(n);
+  return { rec, list: out };
+}
+function renderAsk(){
+  const o = state.overview, { rec, list } = nOptions(o.dist);
+  let h = `<div class="total"><div class="muted">Gesamtstrecke ${esc(shortLabel(state.start.label))} → ${esc(shortLabel(state.end.label))}</div>
+    <div class="big">${fkm(o.dist)}</div><div>ca. ${fdur(o.dur)} reine Fahrzeit (max. ${Math.max(80, +settings.speed || 80)} km/h)</div></div>
+    <h3>Wie viele Etappen?</h3><ul class="opts">`;
+  list.forEach(n => {
+    const nights = n - 1;
+    h += `<li><button type="button" data-n="${n}" class="${n === rec ? 'rec' : ''}" ${state.busy ? 'disabled' : ''}>
+      <span class="n">${n}</span><span class="d"><b>${n === 1 ? 'Etappe' : 'Etappen'} à ~${fkm(o.dist / n)}</b>${n === rec ? ' <span class="badge best">Empfehlung</span>' : ''}
+      <div class="muted">je ca. ${fdur(o.dur / n)} · ${nights ? nights + (nights === 1 ? ' Übernachtung' : ' Übernachtungen') : 'ohne Übernachtung'}</div></span></button></li>`;
+  });
+  h += `</ul><form class="custom" id="nForm"><label for="nIn" class="muted">Andere Anzahl:</label>
+    <input id="nIn" type="number" min="1" max="30" step="1" inputmode="numeric" value="${rec}">
+    <button class="btn" type="submit" ${state.busy ? 'disabled' : ''}>Planen</button></form>
+    <div class="muted" id="nHint" style="margin-top:4px">à ~${fkm(o.dist / rec)}</div>
+    <div class="muted" style="margin-top:8px">Empfehlung = so wenige Etappen wie möglich mit höchstens ${+settings.cmax} km (Einstellungen).</div>`;
+  return h;
+}
 function renderPanel(){
   const el = $('#result'), p = state.pending, busy = state.busy;
   $('#planBtn').disabled = busy;
-  let h = '';
+  let h = askingN() ? renderAsk() : '';
   if (state.stages.length){
     h += '<h3>Etappen</h3><ol class="stages">';
     state.stages.forEach((s, i) => {
@@ -655,9 +714,9 @@ function renderPanel(){
     }
   }
   if (p){
-    const nowN = state.stages.length + p.plan.n - 1;
-    h += `<h3>Etappe ${state.stages.length + 1}: Platz wählen</h3>
-      <div class="ideal">Ideal: noch <b>${p.plan.n} Etappen à ~${fkm(p.plan.len)}</b> → ${nowN} ${nowN === 1 ? 'Übernachtung' : 'Übernachtungen'} gesamt</div>
+    h += `<h3>Etappe ${state.stages.length + 1} von ${state.n}: Platz wählen</h3>
+      <div class="ideal">Ideal: noch <b>${p.plan.n} Etappen à ~${fkm(p.plan.len)}</b>
+        ${state.overview && !busy ? ` · <button class="linkbtn" type="button" id="nChange">Anzahl ändern</button>` : ''}</div>
       <div class="muted">Bis zum Ziel noch ${fkm(p.remain)} · Korridor ${p.cmin}–${p.cmax} km · Umweg bis ${p.detour} km${p.info ? '<br>' + esc(p.info) : ''}</div>
       ${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}
       <div class="legend"><span><i style="background:${COL.ok}"></i>Wohnwagen erlaubt</span><span><i style="background:${COL.unk}"></i>keine Angabe</span></div>
@@ -666,12 +725,12 @@ function renderPanel(){
       h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
         <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${c.best ? ' <span class="badge best">Empfehlung</span>' : ''}</div>
         <div class="muted">bei km ${fkm(c.stageKm)} · Umweg ${fkm1(c.detour.d)} · ${fdur(c.detour.t)}</div>
-        <div class="after${c.nights > nowN ? ' worse' : ''}">${afterText(c)}</div></div>
+        <div class="after">${afterText(c)}</div></div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
     });
-    h += `</ul><div class="muted" style="margin-top:8px">Sortiert nach wenigsten Übernachtungen und Nähe zur idealen Etappenlänge. Weitere Campingplätze erscheinen auf der Karte beim Reinzoomen.</div>`;
+    h += `</ul><div class="muted" style="margin-top:8px">Sortiert nach Nähe zur idealen Etappenlänge. Weitere Campingplätze erscheinen auf der Karte beim Reinzoomen.</div>`;
   }
-  if (state.stages.length && !state.done && !p && !busy){
+  if (state.n && !state.done && !p && !busy){
     h += `<button class="btn primary wide" type="button" id="contBtn" style="margin-top:6px">Erneut versuchen – Etappe ${state.stages.length + 1} planen</button>`;
   }
   if (state.stages.length){
@@ -694,7 +753,16 @@ function renderPanel(){
     if (window.innerWidth < 900) setSheet('min');
     setTimeout(() => { map.setView([c.lat, c.lon], Math.max(map.getZoom(), 11)); c._m && c._m.openPopup(); }, 280);
   });
-  const cb = $('#contBtn'); if (cb) cb.onclick = () => run(() => computeNext(state.stages[state.stages.length - 1].to));
+  el.querySelectorAll('[data-n]').forEach(b => b.onclick = () => chooseN(+b.dataset.n));
+  const nf = $('#nForm');
+  if (nf){
+    nf.onsubmit = e => { e.preventDefault(); chooseN(+$('#nIn').value); };
+    $('#nIn').oninput = () => { const n = Math.round(+$('#nIn').value);
+      $('#nHint').textContent = n >= 1 && n <= 30 ? `à ~${fkm(state.overview.dist / n)} · je ca. ${fdur(state.overview.dur / n)}` : ''; };
+  }
+  const nc = $('#nChange'); if (nc) nc.onclick = () => { if (state.busy) return;
+    Object.assign(state, { stages:[], pending:null, done:false, n:null, endCands:[] }); setStatus(''); renderAll(); fitAll(); };
+  const cb = $('#contBtn'); if (cb) cb.onclick = () => run(() => computeNext(state.stages.length ? state.stages[state.stages.length - 1].to : state.start));
   const sb = $('#saveBtn'); if (sb) sb.onclick = saveTour;
   const gb = $('#gpxBtn'); if (gb) gb.onclick = exportGpx;
   const xb = $('#expBtn'); if (xb) xb.onclick = exportTour;
@@ -735,8 +803,8 @@ $('#planForm').addEventListener('submit', e => {
     if (!state.start) state.start = await geocodeFirst($('#startIn').value);
     if (!state.end) state.end = await geocodeFirst($('#endIn').value);
     $('#startIn').value = state.start.label; $('#endIn').value = state.end.label;
-    state.stages = []; state.tourId = null;
-    await computeNext(state.start);
+    await computeOverview();
+    if (window.innerWidth < 900) setSheet('half');
   });
 });
 
@@ -746,7 +814,7 @@ function slimPoint(p){ const o = { lat:p.lat, lon:p.lon, label:p.label, kind:p.k
 const defaultName = () => `${shortLabel(state.start.label)} → ${shortLabel(state.end.label)}`;
 function buildTour(name, id){
   return { id: id || state.tourId || Date.now(), name: (name || '').trim() || defaultName(), savedAt: new Date().toISOString(),
-    start: slimPoint(state.start), end: slimPoint(state.end), done: state.done,
+    start: slimPoint(state.start), end: slimPoint(state.end), done: state.done, n: state.n,
     stages: state.stages.map(s => ({ from:slimPoint(s.from), to:slimPoint(s.to), dist:s.dist, dur:s.dur, note:s.note, line:thin(s.line) })) };
 }
 function storeTour(tour){
@@ -826,7 +894,8 @@ function openTours(){
 }
 function loadTour(id, given){
   const t = given || loadTours().find(x => x.id === id); if (!t || state.busy) return;
-  Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id, endCands:[] });
+  Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id, endCands:[],
+    n: t.n || (t.done ? t.stages.length : null), overview:null });
   t.stages.forEach(s => { if (s.to.kind === 'camp') campIndex.set(s.to.id, s.to); });
   $('#startIn').value = t.start.label; $('#endIn').value = t.end.label;
   setStatus(''); renderAll(); fitAll();
@@ -835,7 +904,7 @@ function loadTour(id, given){
 }
 function resetTour(){
   if (state.busy) return;
-  Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null, endCands:[] });
+  Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null, endCands:[], n:null, overview:null });
   $('#startIn').value = ''; $('#endIn').value = '';
   setStatus(''); renderAll();
 }

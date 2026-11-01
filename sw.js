@@ -1,5 +1,5 @@
 // Service Worker: hält die App-Dateien offline vor. Karten, Routing und Campingplatz-Abfragen brauchen Netz.
-const CACHE = 'gespann-etappen-v6';
+const CACHE = 'gespann-etappen-v7';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
