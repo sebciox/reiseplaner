@@ -182,7 +182,8 @@ a{color:var(--brand)}
 const COL = { brand:'#1f6b52', pending:'#6f7a85', corridor:'#e07b24', ok:'#2e8b57', unk:'#8a8f98' };
 const DEF = { key:'', speed:80, cmin:350, cmax:450, detour:10 };
 const ORS = 'https://api.openrouteservice.org';
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
+                  'https://overpass.private.coffee/api/interpreter'];
 const AREA_ZOOM = 10;
 
 let settings = loadSettings();
@@ -283,15 +284,24 @@ async function route(a, b){
   return { line: f.geometry.coordinates.map(c => [c[1], c[0]]),
            dist: f.properties.summary.distance || 0, dur: f.properties.summary.duration || 0 };
 }
-async function overpass(q){
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let opStart = 0;
+async function overpass(q, onRetry){
   let err;
-  for (const u of OVERPASS){
-    try {
-      const r = await fetch(u, { method:'POST', body:'data=' + encodeURIComponent(q),
-        headers:{ 'Content-Type':'application/x-www-form-urlencoded' } });
-      if (r.ok) return (await r.json()).elements || [];
-      err = new Error('Campingplatz-Abfrage fehlgeschlagen (' + r.status + ').');
-    } catch(e){ err = new Error('Campingplatz-Server nicht erreichbar.'); }
+  // Zwei Durchgänge über alle Server, beginnend beim zuletzt erfolgreichen
+  for (let pass = 0; pass < 2; pass++){
+    if (pass) { onRetry && onRetry(); await sleep(4000); }
+    for (let k = 0; k < OVERPASS.length; k++){
+      const i = (opStart + k) % OVERPASS.length;
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 70000);
+      try {
+        const r = await fetch(OVERPASS[i], { method:'POST', body:'data=' + encodeURIComponent(q), signal:ctl.signal,
+          headers:{ 'Content-Type':'application/x-www-form-urlencoded' } });
+        if (r.ok){ const j = await r.json(); opStart = i; return j.elements || []; }
+        err = new Error(`Campingplatz-Server überlastet (${r.status}). Bitte gleich nochmal versuchen.`);
+      } catch(e){ err = new Error('Campingplatz-Server nicht erreichbar. Bitte gleich nochmal versuchen.'); }
+      finally { clearTimeout(timer); }
+    }
   }
   throw err;
 }
@@ -312,16 +322,22 @@ async function findCandidates(line, cum, cminKm, cmaxKm, detourKm){
   const total = cum[cum.length-1];
   const d0 = cminKm * 1000, d1 = Math.min(cmaxKm * 1000, total);
   if (d1 <= d0) return [];
-  // 1) Vorauswahl per Luftlinie entlang des Korridors (Overpass, Polylinie alle ~2 km)
-  const poly = sample(line, cum, d0, d1, Math.max(2, Math.ceil((d1 - d0) / 2000)));
-  const coords = poly.map(o => o.p[0].toFixed(5) + ',' + o.p[1].toFixed(5)).join(',');
-  const q = `[out:json][timeout:90];nwr["tourism"="camp_site"](around:${Math.round(detourKm*1000)},${coords});out center tags;`;
-  let camps = parseCamps(await overpass(q));
+  // 1) Vorauswahl: alle Campingplätze im Rechteck um den Korridor (schonend für den Server),
+  //    dann Luftlinie zur Route lokal filtern
+  const poly = sample(line, cum, d0, d1, Math.max(2, Math.ceil((d1 - d0) / 1000)));
+  const lats = poly.map(o => o.p[0]), lons = poly.map(o => o.p[1]);
+  const midLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+  const pLat = detourKm / 111, pLon = detourKm / (111 * Math.cos(midLat * RAD));
+  const bbox = [Math.min(...lats) - pLat, Math.min(...lons) - pLon, Math.max(...lats) + pLat, Math.max(...lons) + pLon]
+    .map(v => v.toFixed(4)).join(',');
+  const q = `[out:json][timeout:60];nwr["tourism"="camp_site"](${bbox});out center tags;`;
+  let camps = parseCamps(await overpass(q, () => setStatus('Server ausgelastet – neuer Versuch …', 'busy')));
   for (const c of camps){
     let best = Infinity;
     for (const o of poly){ const h = hav(o.p, [c.lat, c.lon]); if (h < best) best = h; }
     c.air = best;
   }
+  camps = camps.filter(c => c.air <= detourKm * 1000);
   camps.sort((a, b) => a.air - b.air);
   camps = camps.slice(0, 60);
   if (!camps.length) return [];
@@ -415,8 +431,8 @@ function setStatus(text, kind){
 const map = L.map('map', { zoomControl:false, attributionControl:false }).setView([51.2, 10.4], 6);
 L.control.zoom({ position:'topright' }).addTo(map);
 L.control.attribution({ position:'topright', prefix:false }).addTo(map);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19,
-  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Routing © openrouteservice.org' }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19, subdomains:'abcd',
+  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a> · Routing © openrouteservice.org' }).addTo(map);
 const lyr = { route:L.layerGroup().addTo(map), corridor:L.layerGroup().addTo(map), area:L.layerGroup().addTo(map),
               cands:L.layerGroup().addTo(map), pins:L.layerGroup().addTo(map) };
 
@@ -541,6 +557,9 @@ function renderPanel(){
     });
     h += `</ul><div class="muted" style="margin-top:8px">Weitere Campingplätze erscheinen auf der Karte beim Reinzoomen.</div>`;
   }
+  if (state.stages.length && !state.done && !p && !busy){
+    h += `<button class="btn primary wide" type="button" id="contBtn" style="margin-top:6px">Erneut versuchen – Etappe ${state.stages.length + 1} planen</button>`;
+  }
   if (state.stages.length){
     h += `<div class="actions">
       <button class="btn" type="button" id="saveBtn" ${busy ? 'disabled' : ''}>Speichern</button>
@@ -559,6 +578,7 @@ function renderPanel(){
     if (window.innerWidth < 900) setSheet('min');
     setTimeout(() => { map.setView([c.lat, c.lon], Math.max(map.getZoom(), 11)); c._m && c._m.openPopup(); }, 280);
   });
+  const cb = $('#contBtn'); if (cb) cb.onclick = () => run(() => computeNext(state.stages[state.stages.length - 1].to));
   const sb = $('#saveBtn'); if (sb) sb.onclick = saveTour;
   const gb = $('#gpxBtn'); if (gb) gb.onclick = exportGpx;
   const nb = $('#newBtn'); if (nb) nb.onclick = resetTour;
