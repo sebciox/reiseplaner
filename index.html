@@ -123,12 +123,20 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
   border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
 .pin span{transform:rotate(45deg);color:#fff;font:700 12px system-ui,sans-serif}
 .pin.end{background:#b3412e}
-dialog{border:0;border-radius:16px;padding:18px;width:min(440px,92vw);background:var(--panel);color:var(--text);
-  box-shadow:0 20px 60px rgba(0,0,0,.35)}
+/* Dialoge: Kopf und Knopfleiste bleiben immer sichtbar, nur der Inhalt scrollt (wichtig am Handy) */
+dialog{border:0;border-radius:16px;padding:0;width:min(440px,94vw);max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);
+  background:var(--panel);color:var(--text);box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}
+dialog[open]{display:flex;flex-direction:column}
 dialog::backdrop{background:rgba(0,0,0,.4)}
+.dlg-form{display:flex;flex-direction:column;min-height:0;flex:1;margin:0}
+.dlg-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 8px 6px 18px}
+.dlg-head h2{margin:0;font-size:20px}
+.dlg-x{font-size:22px;line-height:1;min-width:44px;min-height:44px;padding:0}
+.dlg-body{overflow:auto;-webkit-overflow-scrolling:touch;padding:4px 18px 12px;min-height:0;flex:1}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.dlg-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
-.tours{list-style:none;margin:0;padding:0;max-height:55vh;overflow:auto}
+.dlg-actions{display:flex;justify-content:flex-end;gap:8px;padding:10px 18px calc(10px + env(safe-area-inset-bottom));
+  border-top:1px solid var(--line);background:var(--panel)}
+.tours{list-style:none;margin:0;padding:0}
 .tours li{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
 .tours li .t{flex:1;min-width:0}
 a{color:var(--brand)}
@@ -168,34 +176,38 @@ a{color:var(--brand)}
 </aside>
 
 <dialog id="settingsDlg">
-  <form method="dialog" id="settingsForm">
-    <h2>Einstellungen</h2>
+  <form method="dialog" id="settingsForm" class="dlg-form" novalidate>
+    <div class="dlg-head"><h2>Einstellungen</h2>
+      <button class="btn ghost dlg-x" value="cancel" type="submit" aria-label="Schließen" title="Schließen">✕</button></div>
+    <div class="dlg-body">
     <div class="field">
       <label for="sKey">OpenRouteService-Schlüssel</label>
       <input id="sKey" autocomplete="off" spellcheck="false">
       <div class="muted">Kostenlos unter <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a>. Wird nur in diesem Browser gespeichert.</div>
     </div>
     <div class="grid2">
-      <div class="field"><label for="sSpeed">Max. km/h</label><input id="sSpeed" type="number" min="80" max="130" step="5" inputmode="numeric"></div>
+      <div class="field"><label for="sSpeed">Max. km/h</label><input id="sSpeed" type="number" min="80" max="130" step="1" inputmode="numeric"></div>
       <div class="field"><label for="sDetour">Max. Umweg km</label><input id="sDetour" type="number" min="1" max="50" step="1" inputmode="numeric"></div>
-      <div class="field"><label for="sMin">Etappe min. km</label><input id="sMin" type="number" min="50" max="1500" step="10" inputmode="numeric"></div>
-      <div class="field"><label for="sMax">Etappe max. km</label><input id="sMax" type="number" min="60" max="1500" step="10" inputmode="numeric"></div>
+      <div class="field"><label for="sMin">Etappe min. km</label><input id="sMin" type="number" min="50" max="1500" step="1" inputmode="numeric"></div>
+      <div class="field"><label for="sMax">Etappe max. km</label><input id="sMax" type="number" min="60" max="1500" step="1" inputmode="numeric"></div>
     </div>
     <label class="check"><input id="sHighway" type="checkbox"><span>Autobahn bevorzugen
       <small>Route wird ohne Tempolimit berechnet (wählt Autobahnen), die Fahrzeit trotzdem mit max. km/h.</small></span></label>
     <label class="check"><input id="sToll" type="checkbox"><span>Maut meiden
       <small>Mautstraßen umfahren (z.&nbsp;B. Autobahnen in Frankreich, Italien, Spanien).</small></span></label>
     <div class="muted" style="margin-top:10px">Umweg = Strecke auf der Straße von der Route zum Platz, einfache Richtung. OpenRouteService rechnet mit mindestens 80 km/h.</div>
+    </div>
     <div class="dlg-actions">
-      <button class="btn" value="cancel" type="submit" formnovalidate>Abbrechen</button>
+      <button class="btn" value="cancel" type="submit">Abbrechen</button>
       <button class="btn primary" value="save" type="submit">Speichern</button>
     </div>
   </form>
 </dialog>
 
 <dialog id="toursDlg">
-  <h2>Gespeicherte Touren</h2>
-  <ul class="tours" id="toursList"></ul>
+  <div class="dlg-head"><h2>Gespeicherte Touren</h2>
+    <button class="btn ghost dlg-x" type="button" id="toursX" aria-label="Schließen" title="Schließen">✕</button></div>
+  <div class="dlg-body"><ul class="tours" id="toursList"></ul></div>
   <div class="dlg-actions">
     <button class="btn" type="button" id="importBtn">Tour-Datei öffnen</button>
     <button class="btn" type="button" id="toursClose">Schließen</button>
@@ -1034,6 +1046,7 @@ function openSettings(){
   $('#sKey').value = settings.key; $('#sSpeed').value = settings.speed; $('#sDetour').value = settings.detour;
   $('#sMin').value = settings.cmin; $('#sMax').value = settings.cmax;
   $('#sHighway').checked = !!settings.highway; $('#sToll').checked = !!settings.noToll;
+  $('#settingsDlg').returnValue = '';   // sonst würde Esc/Zurück nach einem früheren „Speichern“ erneut speichern
   $('#settingsDlg').showModal();
 }
 $('#settingsDlg').addEventListener('close', () => {
@@ -1049,7 +1062,13 @@ $('#settingsDlg').addEventListener('close', () => {
 });
 $('#settingsBtn').onclick = openSettings;
 $('#toursBtn').onclick = openTours;
-$('#toursClose').onclick = () => $('#toursDlg').close();
+$('#toursClose').onclick = $('#toursX').onclick = () => $('#toursDlg').close();
+// Tippen neben den Dialog (auf den abgedunkelten Hintergrund) schließt ihn ohne zu speichern
+for (const d of [$('#settingsDlg'), $('#toursDlg')]) d.addEventListener('click', e => {
+  if (e.target !== d) return;
+  const r = d.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close('cancel');
+});
 $('#importBtn').onclick = () => $('#importIn').click();
 $('#importIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importTour(f); });
 
