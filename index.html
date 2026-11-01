@@ -509,7 +509,7 @@ a{color:var(--brand-ink)}
     <div class="field"><label for="sRepo">Repo (Besitzer/Name)</label>
       <input id="sRepo" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="sebciox/touren"></div>
     <div class="field"><label for="sToken">GitHub-Token</label>
-      <input id="sToken" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="github_pat_…">
+      <div class="sweb"><input id="sToken" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="github_pat_…"><button class="btn small" type="button" id="sTokenShow" aria-label="Token anzeigen">anzeigen</button></div>
       <div class="muted">Fine-grained Token, nur für dieses Repo, Recht „Contents: Read and write“. Leer lassen = nur lokal speichern.</div></div>
     <div class="field" id="setupLinkBox" hidden><button class="btn small" type="button" id="setupLinkBtn">Link für anderen Browser kopieren</button>
       <div class="muted">Öffnet die App z. B. in Firefox oder am Handy gleich verbunden – mit allen Schlüsseln, Einstellungen und Touren. Der Link enthält deinen Token: nur an dich selbst schicken, nicht weitergeben.</div></div>
@@ -3068,7 +3068,7 @@ async function gh(method, path, body, raw){
   if (res.status === 404 && method === 'GET' && path) return null;   // Datei/Ordner gibt es (noch) nicht
   if (!res.ok){
     let msg = ''; try { msg = (await res.json()).message || ''; } catch(e){}
-    const err = new Error(res.status === 401 ? 'GitHub-Token ungültig oder abgelaufen.'
+    const err = new Error(res.status === 401 ? 'GitHub-Token ungültig oder abgelaufen. Tipp: Im Browser, in dem es funktioniert, unter ⚙︎ „Link für anderen Browser kopieren“ nutzen – oder auf GitHub einen neuen Token erzeugen.'
       : (res.status === 403 || res.status === 404) && !/sha/i.test(msg) ? `Kein Zugriff auf ${settings.ghRepo} – Repo-Name und Token-Recht „Contents: Read and write“ prüfen.`
       : `GitHub-Fehler ${res.status}${msg ? ': ' + msg : ''}`);
     err.status = res.status; throw err;
@@ -3716,7 +3716,7 @@ function openSettings(){
   $('#sMin').value = settings.cmin; $('#sMax').value = settings.cmax;
   $('#sHighway').checked = !!settings.highway; $('#sToll').checked = !!settings.noToll;
   $('#sRepo').value = settings.ghRepo || ''; $('#sToken').value = settings.ghToken || ''; $('#sGkey').value = settings.gkey || '';
-  $('#setupLinkBox').hidden = !ghOn();
+  $('#setupLinkBox').hidden = !ghOn(); $('#sToken').type = 'password'; $('#sTokenShow').textContent = 'anzeigen';
   $('#settingsDlg').returnValue = '';   // sonst würde Esc/Zurück nach einem früheren „Speichern“ erneut speichern
   $('#settingsDlg').showModal();
 }
@@ -3742,6 +3742,7 @@ $('#settingsBtn').onclick = $('#settingsBtnM').onclick = openSettings;
 /* Einrichtungs-Link: Repo + Token im Fragment (#einrichten=…, wird nie an einen Server geschickt) → anderer Browser ist sofort verbunden */
 const b64u = str => btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = str => decodeURIComponent(escape(atob(str.replace(/-/g, '+').replace(/_/g, '/'))));
+$('#sTokenShow').onclick = () => { const i = $('#sToken'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; $('#sTokenShow').textContent = show ? 'verbergen' : 'anzeigen'; };
 $('#setupLinkBtn').onclick = async () => {
   if (!ghOn()) return;
   const link = `${location.origin}${location.pathname}#einrichten=${b64u(JSON.stringify({ r:settings.ghRepo, t:settings.ghToken }))}`;

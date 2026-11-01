@@ -130,5 +130,8 @@ Online-Speicher: GitHub-API mit In-Memory-Repo mocken, zwei Browser-Kontexte (La
 - **Geplant (noch nicht umgesetzt, Details mit Sebastian klären):**
   - **Sehenswürdigkeiten-Vorschläge** in der Nähe eines Platzes (mit Google-Sternen), „Liste einfügen“ (mehrere Ziele auf einmal).
 
+- **Code aufteilen + Qualitätswerkzeuge (Sebastian will das, aber später – erst auf Zuruf umsetzen):**
+  1. Ohne Build-Schritt in ES-Module aufteilen (`styles.css`, `karte.js`, `routing.js`, `campingplaetze.js`, `google.js`, `reiseplan.js`, `export.js` …), weiter GitHub Pages.
+  2. Playwright-Tests (bisher nur in der Arbeitsumgebung, Scratchpad `t/`) ins Repo legen, GitHub Action lässt sie bei jedem Push laufen; ESLint + Prettier.
 - Start/Ziel sind vorerst zum Testen vorausgefüllt (`DEMO` in `index.html`: Witten → Sant Pere Pescador) – später entfernen.
 - Echte Tests mit realen Diensten stehen noch aus (park4night-Link-Ziel ungeprüft).
