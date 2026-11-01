@@ -132,6 +132,74 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
   border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
 .pin span{transform:rotate(45deg);color:#fff;font:700 12px system-ui,sans-serif}
 .pin.end{background:#b3412e}
+/* Etappen-Karten: Knöpfe, Details, Ausweichplatz */
+.sbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.sbtns .btn{min-height:34px;padding:4px 10px;font-size:13px}
+.sbtns .btn.on{background:var(--brand-soft);border-color:var(--brand)}
+.det{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);font-size:14px;display:grid;gap:6px}
+.det .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.det .rz{padding:6px 8px;border-radius:8px;background:var(--brand-soft)}
+.det .rz.none{background:var(--warn-soft)}
+.det .snip{font-size:12px;color:var(--muted);font-style:italic}
+.memo{display:grid;gap:6px;grid-template-columns:1fr auto;align-items:center}
+.memo input[type=text]{min-height:38px;padding:6px 10px}
+.memo .nights{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.memo .nights input{width:64px;min-height:34px;padding:4px 8px}
+.memo .check{margin:0}
+.badge.res{background:var(--brand);margin-left:6px;vertical-align:2px}
+.amen{font-size:13px;margin-left:4px;letter-spacing:1px}
+.alt{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
+.alt .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.alt select{font:inherit;padding:4px 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 2px;align-items:center}
+.chip{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:99px;padding:3px 10px;cursor:pointer}
+.chip.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.daterow{display:flex;align-items:center;gap:8px;margin:10px 0 2px;font-size:14px}
+.daterow input{width:auto;min-height:38px;padding:6px 10px}
+.endsel{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-top:8px}
+/* Schwebende Knöpfe am Handy: Menü ein/aus, Übersicht */
+#fabs{position:fixed;left:12px;top:calc(12px + env(safe-area-inset-top));z-index:1001;display:flex;flex-direction:column;gap:8px}
+.fab{width:46px;height:46px;border-radius:50%;border:0;background:var(--panel);color:var(--text);font-size:20px;
+  box-shadow:0 2px 10px rgba(0,0,0,.3);cursor:pointer;display:flex;align-items:center;justify-content:center}
+#panel.hide{transform:translateY(calc(100% + 20px))}
+#panel{transition:height .25s ease, transform .25s ease}
+[hidden]{display:none !important}
+@media (min-width:900px){ #fabs{display:none} }
+@media (max-width:899px){ #sumBtn{display:none !important} }
+/* Übersicht (Harmonika) */
+#sumDlg{width:min(760px,100vw)}
+@media (max-width:899px){ #sumDlg{width:100vw;max-width:100vw;max-height:100dvh;height:100dvh;border-radius:0;margin:0} }
+.acc details{border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden}
+.acc details[open]{border-color:var(--brand)}
+.acc summary{list-style:none;cursor:pointer;padding:10px 12px;display:flex;gap:10px;align-items:center}
+.acc summary::-webkit-details-marker{display:none}
+.acc summary::after{content:'▾';margin-left:auto;color:var(--muted);transition:transform .2s}
+.acc details[open] summary::after{transform:rotate(180deg)}
+.acc .sn{font-weight:700;color:var(--brand);min-width:22px}
+.acc .st{flex:1;min-width:0}
+.acc .st b{display:block;overflow-wrap:anywhere}
+.acc .now{background:var(--accent);color:#fff;border-radius:99px;font-size:11px;padding:1px 8px;margin-left:6px}
+.acc .bd{padding:0 12px 12px;display:grid;gap:6px;font-size:14px}
+.acc .bd .k{color:var(--muted);font-size:12px;min-width:90px;display:inline-block}
+.sumhead{padding:10px 12px;border-radius:12px;background:var(--brand-soft);margin-bottom:10px}
+/* Druck / PDF (A4 quer) */
+#print{position:absolute;left:-10000px;top:0;width:277mm;background:#fff;color:#111;font:10pt/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+#print h1{font-size:16pt;margin:0 0 2mm} #print .sub{color:#444;margin-bottom:3mm}
+#print .pmap{width:100%;height:78mm;border:1px solid #bbb;margin-bottom:4mm}
+#print table{width:100%;border-collapse:collapse;table-layout:fixed}
+#print th,#print td{border:1px solid #bbb;padding:1.5mm 2mm;vertical-align:top;text-align:left;overflow-wrap:anywhere}
+#print th{background:#e3f0ea;font-size:9pt}
+#print tr{break-inside:avoid}
+#print a{color:#1f6b52}
+#print .sm{font-size:8.5pt;color:#444}
+#print .foot{margin-top:3mm;font-size:8pt;color:#666}
+@media print{
+  @page{size:A4 landscape;margin:10mm}
+  body{background:#fff !important}
+  body > *:not(#print){display:none !important}
+  #print{position:static;width:auto}
+  #print .leaflet-control-container{display:none}
+}
 /* Dialoge: Kopf und Knopfleiste bleiben immer sichtbar, nur der Inhalt scrollt (wichtig am Handy) */
 dialog{border:0;border-radius:16px;padding:0;width:min(440px,94vw);max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);
   background:var(--panel);color:var(--text);box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}
@@ -155,6 +223,10 @@ a{color:var(--brand)}
 </head>
 <body>
 <div id="map" aria-label="Karte"></div>
+<div id="fabs">
+  <button class="fab" id="fabMenu" type="button" aria-label="Menü ein- oder ausblenden" title="Menü ein-/ausblenden">☰</button>
+  <button class="fab" id="fabSum" type="button" aria-label="Tourübersicht" title="Tourübersicht" hidden>📋</button>
+</div>
 
 <aside id="panel" class="half">
   <button id="handle" type="button" aria-label="Bereich vergrößern oder verkleinern"><span></span></button>
@@ -162,6 +234,7 @@ a{color:var(--brand)}
     <header class="top">
       <div class="brand"><img src="icon.svg" alt="" width="28" height="28"><h1>Gespann-Etappen</h1></div>
       <div>
+        <button class="btn ghost" id="sumBtn" type="button" hidden>Übersicht</button>
         <button class="btn ghost" id="toursBtn" type="button">Touren</button>
         <button class="btn ghost icon" id="settingsBtn" type="button" aria-label="Einstellungen" title="Einstellungen">⚙︎</button>
       </div>
@@ -232,13 +305,25 @@ a{color:var(--brand)}
   <input type="file" id="importIn" accept=".json,application/json" hidden>
 </dialog>
 
+<dialog id="sumDlg">
+  <div class="dlg-head"><h2>Tourübersicht</h2>
+    <button class="btn ghost dlg-x" type="button" id="sumX" aria-label="Schließen" title="Schließen">✕</button></div>
+  <div class="dlg-body"><div id="sumBody" class="acc"></div></div>
+  <div class="dlg-actions">
+    <button class="btn" type="button" id="printBtn">Drucken / PDF</button>
+    <button class="btn" type="button" id="sumClose">Schließen</button>
+  </div>
+</dialog>
+<div id="print" aria-hidden="true"></div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 'use strict';
 /* ---------- Konstanten & Einstellungen ---------- */
 const COL = { brand:'#1f6b52', pending:'#6f7a85', corridor:'#e07b24', ok:'#2e8b57', unk:'#8a8f98' };
 const DEF = { key:'', speed:80, cmin:350, cmax:450, detour:10, highway:true, noToll:false,
-              ghRepo:'sebciox/touren', ghToken:'', savedAt:null };
+              ghRepo:'sebciox/touren', ghToken:'', savedAt:null,
+              altRadius:10, filters:{ caravan:false, dog:false, power:false } };
 const ORS = 'https://api.openrouteservice.org';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
                   'https://overpass.private.coffee/api/interpreter'];
@@ -256,7 +341,10 @@ function saveSettings(){ try { localStorage.setItem('gp.settings', JSON.stringif
 
 const state = { start:null, end:null, stages:[], pending:null, done:false, busy:false, tourId:null, endCands:[],
                 n:null,          // gewünschte Anzahl Etappen (vom Nutzer gewählt)
-                overview:null }; // Gesamtroute Start → Ziel { from, line, dist, dur }
+                overview:null,   // Gesamtroute Start → Ziel { from, line, dist, dur }
+                date:null,       // Abfahrtsdatum 'JJJJ-MM-TT'
+                alt:null,        // Ausweichplatz-Suche { i, r, list }
+                openDet:new Set(), showEndList:false };
 const campIndex = new Map();
 const $ = s => document.querySelector(s);
 
@@ -373,7 +461,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ---------- Zwischenspeicher im Browser (7 Tage) ---------- */
 const CACHE_TTL = 7 * 864e5;
-const CK = { op:'gp.cache.op', mx:'gp.cache.mx' };
+const CK = { op:'gp.cache.op2', mx:'gp.cache.mx' };   // op2: mit Adress- und Ausstattungs-Tags
+try { localStorage.removeItem('gp.cache.op'); } catch(e){}
 function cacheLoad(k){
   try { const now = Date.now(); return JSON.parse(localStorage.getItem(k) || '[]').filter(e => now - e.t < CACHE_TTL); }
   catch(e){ return []; }
@@ -435,7 +524,9 @@ async function overpass(q, opts = {}){
 
 /* Campingplätze in einem Rechteck [süd, west, nord, ost] – aus dem Zwischenspeicher, wenn ein gespeichertes
    Rechteck es vollständig enthält, sonst eine Overpass-Abfrage */
-const KEEP_TAGS = ['name', 'caravans', 'website', 'contact:website', 'url', 'phone', 'contact:phone', 'opening_hours'];
+const KEEP_TAGS = ['name', 'caravans', 'website', 'contact:website', 'url', 'phone', 'contact:phone', 'opening_hours',
+  'addr:street', 'addr:housenumber', 'addr:postcode', 'addr:city', 'addr:place',
+  'dog', 'power_supply', 'internet_access', 'shower', 'swimming_pool'];
 let opCache = cacheLoad(CK.op);
 const boxIn = (a, b) => a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3];
 function slimEl(e){
@@ -481,6 +572,96 @@ function parseCamps(els){
   return out;
 }
 const isOk = c => ['yes','designated'].includes(c.tags?.caravans);
+
+/* Ausstattung aus OSM-Tags (oft lückenhaft – gefiltert wird nur auf ausdrückliche Angaben) */
+const AMEN = [
+  { k:'dog',    i:'🐕', t:'Hunde erlaubt', f: t => /^(yes|leashed|designated|unleashed)$/.test(t.dog || '') },
+  { k:'power',  i:'🔌', t:'Strom',         f: t => !!t.power_supply && t.power_supply !== 'no' },
+  { k:'wifi',   i:'📶', t:'WLAN',          f: t => !!t.internet_access && t.internet_access !== 'no' },
+  { k:'shower', i:'🚿', t:'Duschen',       f: t => !!t.shower && t.shower !== 'no' },
+  { k:'pool',   i:'🏊', t:'Pool',          f: t => !!t.swimming_pool && t.swimming_pool !== 'no' }
+];
+const amenList = c => AMEN.filter(a => a.f(c.tags || {}));
+function amenHtml(c){ const a = amenList(c); return a.length ? `<span class="amen" title="${a.map(x => x.t).join(', ')}">${a.map(x => x.i).join('')}</span>` : ''; }
+const FILTERS = [ { k:'caravan', l:'Wohnwagen ✓', f: c => isOk(c) }, { k:'dog', l:'🐕 Hund', f: c => AMEN[0].f(c.tags || {}) },
+                  { k:'power', l:'🔌 Strom', f: c => AMEN[1].f(c.tags || {}) } ];
+const passFilter = c => FILTERS.every(x => !(settings.filters || {})[x.k] || x.f(c));
+function chipsHtml(all){
+  const hidden = all.filter(c => !passFilter(c)).length;
+  return `<div class="chips"><span class="muted">Nur:</span>${FILTERS.map(x => `<button type="button" class="chip${(settings.filters || {})[x.k] ? ' on' : ''}" data-filter="${x.k}">${x.l}</button>`).join('')}
+    ${hidden ? `<span class="muted">${hidden} ausgeblendet</span>` : ''}</div>`;
+}
+
+/* Datum je Etappe: Abfahrt + Nächte an den Zwischenstopps (Standard 1) */
+function stageDates(){
+  if (!state.date || !state.stages.length) return null;
+  const d0 = new Date(state.date + 'T12:00:00'); if (isNaN(d0)) return null;
+  let off = 0;
+  return state.stages.map(s => { const d = new Date(d0); d.setDate(d.getDate() + off); off += Math.max(1, +s.nights || 1); return d; });
+}
+const fdate = d => d ? d.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'numeric' }) : '';
+const dayKey = d => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+// Während der Tour: Index der nächsten anstehenden Etappe, sonst -1
+function currentStage(){
+  const ds = stageDates(); if (!ds) return -1;
+  const today = dayKey(new Date());
+  if (today < dayKey(ds[0]) || today > dayKey(ds[ds.length - 1])) return -1;
+  return ds.findIndex(d => dayKey(d) >= today);
+}
+
+/* Links */
+const navUrl = p => `https://www.google.com/maps/dir/?api=1&destination=${p.lat.toFixed(6)},${p.lon.toFixed(6)}&travelmode=driving`;
+const mapsUrl = p => `https://www.google.com/maps/search/?api=1&query=${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
+const webOf = c => { const t = c.tags || {}; return t.website || t['contact:website'] || t.url || null; };
+const phoneOf = c => { const t = c.tags || {}; return t.phone || t['contact:phone'] || null; };
+const shortUrl = u => String(u).replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+
+/* Adresse: aus OSM-Tags, sonst einmalig per ORS-Ortssuche (rückwärts) ermitteln und in der Tour speichern */
+function addrFromTags(t = {}){
+  const st = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' ');
+  const city = [t['addr:postcode'], t['addr:city'] || t['addr:place']].filter(Boolean).join(' ');
+  return [st, city].filter(Boolean).join(', ') || null;
+}
+async function reverseAddr(p){
+  const url = `${ORS}/geocode/reverse?api_key=${encodeURIComponent(settings.key)}&point.lon=${p.lon}&point.lat=${p.lat}&size=1&lang=de`;
+  const r = await fetch(url); if (!r.ok) throw new Error('Adresse: ' + r.status);
+  const j = await r.json(); return j.features?.[0]?.properties?.label || null;
+}
+async function ensureAddrs(){
+  let changed = false;
+  for (const s of state.stages){
+    const c = s.to; if (c.kind !== 'camp' || c.addr) continue;
+    const a = addrFromTags(c.tags);
+    if (a){ c.addr = a; changed = true; continue; }
+    if (!settings.key) continue;
+    try { const r = await reverseAddr(c); if (r){ c.addr = r; changed = true; } } catch(e){ console.warn(e); }
+  }
+  if (changed) touch();
+  return changed;
+}
+
+/* Rezeptionszeiten (vom GitHub-Helfer im Online-Speicher, Datei rezeption.json) */
+let rzData = (() => { try { return JSON.parse(localStorage.getItem('gp.rezeption') || '{}'); } catch(e){ return {}; } })();
+function rzHtml(c, compact){
+  if (c.kind !== 'camp') return '';
+  const r = rzData[c.id], web = webOf(c);
+  if (r && r.status === 'ok' && web && r.website === web)
+    return `<div class="rz"><b>Rezeption: ${esc(r.hours || 'siehe Text')}</b>${compact ? '' : `<div class="snip">„${esc(r.snippet)}“</div>`}
+      <div><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener">Quelle: ${esc(shortUrl(r.url))}</a> <span class="muted">· geprüft ${new Date(r.checkedAt).toLocaleDateString('de-DE')}</span></div></div>`;
+  if (r && web && r.website === web)
+    return `<div class="rz none">Rezeptionszeiten: ${r.status === 'none' ? 'auf der Website nicht gefunden' : 'Website nicht erreichbar'}${compact ? '' : ` – bitte <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">selbst nachsehen</a>`}.</div>`;
+  if (!web) return compact ? '' : `<div class="rz none">Keine Website in OpenStreetMap – <a href="https://www.google.com/search?q=${encodeURIComponent((c.tags?.name || c.label) + ' ' + (c.addr || ''))}" target="_blank" rel="noopener">im Web suchen</a>.</div>`;
+  if (compact) return '';
+  return `<div class="rz none">Rezeptionszeiten: ${ghOn() ? (state.tourId ? 'werden gesucht (1–2 Min. nach dem Speichern) …' : 'werden nach dem Speichern der Tour gesucht.') : 'Suche braucht den Online-Speicher (⚙︎).'}</div>`;
+}
+
+/* Änderungen an einer gespeicherten Tour (Notiz, Datum, Adresse, Ausweichplatz) automatisch sichern */
+const touch = debounce(() => {
+  if (!state.tourId || !state.stages.length) return;
+  const old = loadTours().find(t => t.id === state.tourId);
+  try { storeTour(buildTour(old ? old.name : defaultName(), state.tourId)); } catch(e){ return; }
+  syncAndReport();
+}, 800);
 
 /* ---------- Kernlogik: Plätze im Korridor ---------- */
 async function findCandidates(line, cum, cminKm, cmaxKm, detourKm){
@@ -631,7 +812,37 @@ async function selectEnd(c){
   const to = campPoint(c); to.air = c.air;
   const r = await route(s.from, to);
   state.stages[i] = { from:s.from, to, line:r.line, dist:r.dist, dur:r.dur, note:null };
+  state.showEndList = false; state.alt = null; touch();
   renderAll(); fitAll();
+}
+
+/* Ausweichplatz: Campingplätze im Umkreis um den Platz einer Etappe */
+async function loadAlt(i, km){
+  const s = state.stages[i]; if (!s) return;
+  const c = s.to, rad = km * 1000;
+  state.alt = { i, r:km, list:null }; renderAll();
+  setStatus(`Suche Campingplätze im Umkreis von ${km} km …`, 'busy');
+  const dLat = rad / 111000, dLon = rad / (111000 * Math.cos(c.lat * RAD));
+  const camps = await campsInBox([c.lat - dLat, c.lon - dLon, c.lat + dLat, c.lon + dLon], { onStatus: t => setStatus(t, 'busy') });
+  camps.forEach(x => { x.air = hav([c.lat, c.lon], [x.lat, x.lon]); campIndex.set(x.id, x); });
+  if (!state.alt || state.alt.i !== i) return;
+  state.alt.list = camps.filter(x => x.id !== c.id && x.air <= rad).sort((a, b) => a.air - b.air).slice(0, 30);
+  renderAll();
+  const pts = [[c.lat, c.lon], ...state.alt.list.filter(passFilter).map(x => [x.lat, x.lon])];
+  map.fitBounds(L.latLngBounds(pts).pad(0.15), sheetPad());
+}
+// Ausweichplatz übernehmen: diese und die folgende Etappe neu berechnen, spätere bleiben
+async function replaceStop(i, c){
+  const s = state.stages[i]; if (!s) return;
+  const to = campPoint(c);
+  setStatus('Etappe wird neu berechnet …', 'busy');
+  const r = await route(s.from, to);
+  state.stages[i] = { ...s, to, line:r.line, dist:r.dist, dur:r.dur, note:null, memo:undefined };
+  const nx = state.stages[i + 1];
+  if (nx){ const r2 = await route(to, nx.to); state.stages[i + 1] = { ...nx, from:to, line:r2.line, dist:r2.dist, dur:r2.dur }; }
+  state.alt = null; state.openDet.add(i);
+  if (!state.done && i === state.stages.length - 1){ await computeNext(to); }
+  touch(); renderAll(); fitAll();
 }
 
 async function selectCamp(c){
@@ -678,6 +889,8 @@ function campInfo(c, mode){
   const p4n = `https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14`;
   return `<div class="ci"><b>${esc(name)}</b>
     <div><span class="badge ${ok ? 'ok' : 'unk'}">${ok ? 'Wohnwagen erlaubt' : 'Wohnwagen: keine Angabe'}</span></div>
+    ${amenList(c).length ? `<div>${amenList(c).map(a => a.i + ' ' + a.t).join(' · ')}</div>` : ''}
+    ${mode === 'alt' && c.air != null ? `<div>${fkm1(c.air)} vom bisherigen Platz (Luftlinie)</div>` : ''}
     ${c.detour ? `<div>Umweg ${fkm1(c.detour.d)} · ${fdur(c.detour.t)} (einfach)</div>` : ''}
     ${c.stageKm != null && mode === 'cand' ? `<div>Liegt bei Etappen-km ${fkm(c.stageKm)}</div>` : ''}
     ${c.afterPlan && mode === 'cand' ? `<div>${afterText(c)}</div>` : ''}
@@ -686,7 +899,8 @@ function campInfo(c, mode){
     ${t.opening_hours ? `<div class="muted">Öffnungszeiten (OSM): ${esc(t.opening_hours)}</div>` : ''}
     ${web ? `<div><a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">Website</a></div>` : ''}
     ${phone ? `<div><a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
-    <div><a href="${gm}" target="_blank" rel="noopener">Google Maps</a> · <a href="${p4n}" target="_blank" rel="noopener">park4night</a></div>
+    <div><a href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation</a> · <a href="${gm}" target="_blank" rel="noopener">Google Maps</a> · <a href="${p4n}" target="_blank" rel="noopener">park4night</a></div>
+    ${mode === 'alt' && state.alt && !state.busy ? `<button class="btn primary" type="button" data-altpick="${esc(c.id)}">Als Ausweichplatz übernehmen</button>` : ''}
     ${(mode === 'cand' || mode === 'area') && state.pending && !state.busy ? `<button class="btn primary" type="button" data-pick="${esc(c.id)}">Als Etappenziel wählen</button>` : ''}
     ${mode === 'end' && state.done && !state.busy ? `<button class="btn primary" type="button" data-endpick="${esc(c.id)}">Als Ziel wählen</button>` : ''}
   </div>`;
@@ -698,6 +912,10 @@ function afterText(c){
 map.on('popupopen', e => {
   e.popup.getElement().querySelectorAll('[data-pick]').forEach(b => {
     b.onclick = () => { const c = campIndex.get(b.dataset.pick); map.closePopup(); if (c) run(() => selectCamp(c)); };
+  });
+  e.popup.getElement().querySelectorAll('[data-altpick]').forEach(b => {
+    b.onclick = () => { const c = campIndex.get(b.dataset.altpick), i = state.alt?.i; map.closePopup();
+      if (c && i != null) run(() => replaceStop(i, c)); };
   });
   e.popup.getElement().querySelectorAll('[data-endpick]').forEach(b => {
     b.onclick = () => { const c = campIndex.get(b.dataset.endpick); map.closePopup(); if (c) run(() => selectEnd(c)); };
@@ -714,7 +932,7 @@ function renderMap(){
     const end = Math.min(p.cmax * 1000, p.remain);
     if (end > p.cmin * 1000)
       L.polyline(slice(p.line, p.cum, p.cmin * 1000, end), { color:COL.corridor, weight:10, opacity:.45 }).addTo(lyr.corridor);
-    p.cands.forEach(c => {
+    p.cands.filter(passFilter).forEach(c => {
       c._m = L.circleMarker([c.lat, c.lon], { radius:9, color:c.best ? COL.corridor : '#fff', weight:c.best ? 4 : 2, fillColor:isOk(c) ? COL.ok : COL.unk, fillOpacity:1 })
         .bindPopup(() => campInfo(c, 'cand')).addTo(lyr.cands);
     });
@@ -723,9 +941,15 @@ function renderMap(){
         .bindTooltip(`Ideal ~${fkm(p.plan.len)}`, { permanent:true, direction:'top', offset:[0, -6] }).addTo(lyr.corridor);
     }
   }
+  if (state.alt && state.alt.list){
+    state.alt.list.filter(passFilter).forEach(c => {
+      c._m = L.circleMarker([c.lat, c.lon], { radius:8, color:COL.corridor, weight:3, fillColor:isOk(c) ? COL.ok : COL.unk, fillOpacity:1 })
+        .bindPopup(() => campInfo(c, 'alt')).addTo(lyr.cands);
+    });
+  }
   const last = state.stages[state.stages.length - 1];
   const endIsCamp = state.done && last && last.to.kind === 'camp';
-  state.endCands.forEach(c => {
+  if (!endIsCamp || state.showEndList) state.endCands.filter(passFilter).forEach(c => {
     if (endIsCamp && last.to.id === c.id) return;
     c._m = L.circleMarker([c.lat, c.lon], { radius:7, color:isOk(c) ? COL.ok : COL.unk, weight:3, fillColor:'#fff', fillOpacity:1 })
       .bindPopup(() => campInfo(c, 'end')).addTo(lyr.cands);
@@ -740,8 +964,8 @@ function renderMap(){
   });
 }
 function sheetPad(){
-  const mobile = window.innerWidth < 900;
-  return { paddingTopLeft:[30, 30], paddingBottomRight:[30, mobile ? $('#panel').offsetHeight + 20 : 30] };
+  const mobile = window.innerWidth < 900, hidden = $('#panel').classList.contains('hide');
+  return { paddingTopLeft:[mobile ? 70 : 30, 30], paddingBottomRight:[30, mobile && !hidden ? $('#panel').offsetHeight + 20 : 30] };
 }
 function fitCorridor(){
   const p = state.pending; if (!p) return;
@@ -784,6 +1008,52 @@ const loadArea = debounce(async () => {
 map.on('moveend', loadArea);
 
 /* ---------- Panel ---------- */
+function detailsHtml(s, i){
+  const c = s.to, t = c.tags || {}, web = webOf(c), phone = phoneOf(c), last = i === state.stages.length - 1;
+  const am = amenList(c);
+  return `<div class="det">
+    ${rzHtml(c)}
+    <div><span class="k">Wohnwagen</span> ${isOk(c) ? '<span class="badge ok">erlaubt</span>' : '<span class="badge unk">keine Angabe</span>'}${am.length ? ' · ' + am.map(a => a.i + ' ' + a.t).join(', ') : ''}</div>
+    <div><span class="k">Adresse</span> ${c.addr ? esc(c.addr) : '<span class="muted">wird ermittelt …</span>'}</div>
+    ${t.opening_hours ? `<div><span class="k">Geöffnet (OSM)</span> ${esc(t.opening_hours)}</div>` : ''}
+    ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
+    ${web ? `<div><span class="k">Website</span> <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">${esc(shortUrl(web))}</a></div>` : ''}
+    <div><a href="${mapsUrl(c)}" target="_blank" rel="noopener">Google Maps</a> · <a href="https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14" target="_blank" rel="noopener">park4night</a></div>
+    <div class="memo">
+      <input type="text" data-memo="${i}" placeholder="Notiz (z. B. Preis, Ankunft bis …)" value="${esc(s.memo?.text || '')}">
+      <label class="check"><input type="checkbox" data-res="${i}" ${s.memo?.res ? 'checked' : ''}><span>reserviert</span></label>
+      ${last ? '' : `<label class="nights">Nächte <input type="number" min="1" max="30" data-nights="${i}" value="${Math.max(1, +s.nights || 1)}"></label>`}
+    </div>
+    ${state.tourId ? '' : '<div class="muted">Notizen werden mit „Speichern“ in der Tour gesichert.</div>'}
+  </div>`;
+}
+function altHtml(i){
+  const a = state.alt, busy = state.busy;
+  let h = `<div class="alt"><div class="hd"><b>Ausweichplatz</b> im Umkreis von
+    <select id="altR">${[5, 10, 20, 30].map(k => `<option value="${k}"${k === a.r ? ' selected' : ''}>${k} km</option>`).join('')}</select>
+    um ${esc(shortLabel(state.stages[i].to.label))}</div>`;
+  if (!a.list) return h + '<div class="muted" style="margin-top:6px">Suche läuft …</div></div>';
+  if (!a.list.length) return h + '<div class="muted" style="margin-top:6px">Keine anderen Campingplätze in diesem Umkreis – Umkreis vergrößern.</div></div>';
+  h += chipsHtml(a.list) + '<ul class="cands">';
+  a.list.filter(passFilter).forEach(c => {
+    h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
+      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}</div>
+      <div class="muted">${fkm1(c.air)} Luftlinie${phoneOf(c) ? ' · ' + esc(phoneOf(c)) : ''}</div></div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <button class="btn small primary" type="button" data-altpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Übernehmen</button>
+        <a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navi</a></div></li>`;
+  });
+  return h + '</ul></div>';
+}
+// Adresse für eine Etappe nachladen, sobald die Details geöffnet werden
+async function ensureOneAddr(i){
+  const c = state.stages[i]?.to; if (!c || c.kind !== 'camp' || c.addr) return;
+  c.addr = addrFromTags(c.tags);
+  if (!c.addr && settings.key){ try { c.addr = await reverseAddr(c); } catch(e){ console.warn(e); } }
+  if (!c.addr) c.addr = 'unbekannt';
+  touch(); renderPanel();
+}
+
 const askingN = () => !!(state.overview && !state.n && !state.stages.length);
 function nOptions(R){
   const rec = plan(R).n, out = [];
@@ -811,15 +1081,27 @@ function renderAsk(){
 function renderPanel(){
   const el = $('#result'), p = state.pending, busy = state.busy;
   $('#planBtn').disabled = busy;
+  $('#sumBtn').hidden = $('#fabSum').hidden = !state.stages.length;
   let h = askingN() ? renderAsk() : '';
   if (state.stages.length){
+    const ds = stageDates(), cur = currentStage();
+    h += `<div class="daterow"><label for="dateIn">Abfahrt</label><input type="date" id="dateIn" value="${esc(state.date || '')}">
+      ${ds ? `<span class="muted">bis ${fdate(ds[ds.length - 1])}</span>` : '<span class="muted">für Datum je Etappe</span>'}</div>`;
     h += '<h3>Etappen</h3><ol class="stages">';
     state.stages.forEach((s, i) => {
-      h += `<li class="stage"><div class="num">Etappe ${i + 1}</div>
-        <div class="route">${esc(shortLabel(s.from.label))} → ${esc(shortLabel(s.to.label))}</div>
-        <div class="row"><span class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${s.to.detour ? ` · Umweg ${fkm1(s.to.detour.d)}` : ''}</span>
-        ${s.to.kind === 'camp' ? `<button class="btn small" type="button" data-edit="${i}" ${busy ? 'disabled' : ''}>Platz ändern</button>` : ''}</div>
-        ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}</li>`;
+      const camp = s.to.kind === 'camp', open = state.openDet.has(i), altOpen = state.alt && state.alt.i === i;
+      h += `<li class="stage"><div class="num">Etappe ${i + 1}${ds ? ' · ' + fdate(ds[i]) : ''}${i === cur ? ' <span class="badge best">heute/nächste</span>' : ''}</div>
+        <div class="route">${esc(shortLabel(s.from.label))} → ${esc(shortLabel(s.to.label))}${camp ? amenHtml(s.to) : ''}${s.memo?.res ? '<span class="badge res">reserviert ✓</span>' : ''}</div>
+        <div class="row"><span class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${s.to.detour ? ` · Umweg ${fkm1(s.to.detour.d)}` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? ` · ${s.nights} Nächte` : ''}</span>
+        ${camp && !(state.done && i === state.stages.length - 1) ? `<button class="btn small" type="button" data-edit="${i}" ${busy ? 'disabled' : ''} title="Ab hier neu planen (anderen Platz im Korridor wählen)">Platz ändern</button>` : ''}</div>
+        ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
+        <div class="sbtns">
+          <a class="btn" href="${navUrl(s.to)}" target="_blank" rel="noopener">🧭 Navigation</a>
+          ${camp ? `<button class="btn${open ? ' on' : ''}" type="button" data-det="${i}">Details ${open ? '▴' : '▾'}</button>
+          <button class="btn${altOpen ? ' on' : ''}" type="button" data-alt="${i}" ${busy ? 'disabled' : ''}>Ausweichplatz</button>` : ''}
+        </div>
+        ${camp && open ? detailsHtml(s, i) : ''}
+        ${altOpen ? altHtml(i) : ''}</li>`;
     });
     h += '</ol>';
   }
@@ -827,17 +1109,21 @@ function renderPanel(){
     const km = state.stages.reduce((a, s) => a + s.dist, 0), t = state.stages.reduce((a, s) => a + s.dur, 0);
     const n = state.stages.length - 1;
     h += `<div class="summary">Gesamt ${fkm(km)} · ${fdur(t)} Fahrzeit · ${n} ${n === 1 ? 'Übernachtung' : 'Übernachtungen'}</div>`;
-    if (!state.endSearched && !busy)
-      h += `<button class="btn wide" type="button" id="endSearchBtn">Campingplätze am Ziel ${state.stages[state.stages.length - 1].to.kind === 'camp' ? 'anzeigen (Zielplatz ändern)' : 'suchen'}</button>`;
-    if (state.endCands.length){
-      const last = state.stages[state.stages.length - 1];
+    const lastS = state.stages[state.stages.length - 1], endIsCamp = lastS.to.kind === 'camp';
+    if (endIsCamp && !state.showEndList)
+      h += `<div class="endsel"><span>Zielplatz: <b>${esc(lastS.to.label)}</b> ✓</span>
+        <button class="btn small" type="button" id="endListBtn" ${busy ? 'disabled' : ''}>Ändern</button></div>`;
+    else if (!state.endSearched && !busy)
+      h += `<button class="btn wide" type="button" id="endSearchBtn">Campingplätze am Ziel suchen</button>`;
+    if (state.endCands.length && (!endIsCamp || state.showEndList)){
+      const last = lastS;
       h += `<h3>Campingplatz am Ziel</h3>
         <div class="muted">Plätze im Umkreis von ${Math.max(10, +settings.detour)} km um ${esc(shortLabel(state.end.label))} – wähle einen als Endpunkt.</div>
-        <ul class="cands">`;
-      state.endCands.forEach(c => {
+        ${chipsHtml(state.endCands)}<ul class="cands">`;
+      state.endCands.filter(passFilter).forEach(c => {
         const chosen = last.to.kind === 'camp' && last.to.id === c.id;
         h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-          <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}</div>
+          <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}</div>
           <div class="muted">${fkm1(c.air)} vom Zielort</div></div>
           ${chosen ? '<span class="muted">✓ Ziel</span>' : `<button class="btn small primary" type="button" data-endpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Als Ziel</button>`}</li>`;
       });
@@ -851,10 +1137,10 @@ function renderPanel(){
       <div class="muted">Bis zum Ziel noch ${fkm(p.remain)} · Korridor ${p.cmin}–${p.cmax} km · Umweg bis ${p.detour} km${p.info ? '<br>' + esc(p.info) : ''}</div>
       ${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}
       <div class="legend"><span><i style="background:${COL.ok}"></i>Wohnwagen erlaubt</span><span><i style="background:${COL.unk}"></i>keine Angabe</span></div>
-      <ul class="cands">`;
-    p.cands.forEach(c => {
+      ${chipsHtml(p.cands)}<ul class="cands">`;
+    p.cands.filter(passFilter).forEach((c, k) => {
       h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${c.best ? ' <span class="badge best">Empfehlung</span>' : ''}</div>
+        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${k === 0 ? ' <span class="badge best">Empfehlung</span>' : ''}</div>
         <div class="muted">bei km ${fkm(c.stageKm)} · Umweg ${fkm1(c.detour.d)} · ${fdur(c.detour.t)}</div>
         <div class="after">${afterText(c)}</div></div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
@@ -874,9 +1160,45 @@ function renderPanel(){
   el.innerHTML = h;
   el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => {
     const i = +b.dataset.edit, from = state.stages[i].from;
-    state.stages = state.stages.slice(0, i);
+    if (state.stages.length - i > 1 && !confirm(`Ab Etappe ${i + 1} neu planen? Die folgenden Etappen werden dabei neu gewählt.`)) return;
+    state.stages = state.stages.slice(0, i); state.alt = null; state.openDet.clear();
     run(() => computeNext(from));
   });
+  el.querySelectorAll('[data-det]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.det;
+    if (state.openDet.has(i)) state.openDet.delete(i); else { state.openDet.add(i); ensureOneAddr(i); }
+    renderPanel();
+  });
+  el.querySelectorAll('[data-alt]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.alt;
+    if (state.alt && state.alt.i === i){ state.alt = null; renderAll(); return; }
+    run(() => loadAlt(i, +settings.altRadius || 10));
+  });
+  const ar = $('#altR'); if (ar) ar.onchange = () => {
+    settings.altRadius = +ar.value; saveSettings(); run(() => loadAlt(state.alt.i, +ar.value));
+  };
+  el.querySelectorAll('[data-altpick]').forEach(b => b.onclick = () => {
+    const c = campIndex.get(b.dataset.altpick), i = state.alt?.i;
+    if (c && i != null && confirm(`„${c.tags.name || 'Campingplatz'}“ als neues Ziel von Etappe ${i + 1} übernehmen?`)) run(() => replaceStop(i, c));
+  });
+  el.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => {
+    settings.filters = { ...(settings.filters || {}), [b.dataset.filter]: !(settings.filters || {})[b.dataset.filter] };
+    saveSettings(); renderAll();
+  });
+  el.querySelectorAll('[data-res]').forEach(b => b.onchange = () => {
+    const s = state.stages[+b.dataset.res]; s.memo = { ...(s.memo || {}), res: b.checked }; touch(); renderPanel();
+  });
+  el.querySelectorAll('[data-memo]').forEach(b => b.onchange = () => {
+    const s = state.stages[+b.dataset.memo]; s.memo = { ...(s.memo || {}), text: b.value.trim() }; touch();
+  });
+  el.querySelectorAll('[data-nights]').forEach(b => b.onchange = () => {
+    const s = state.stages[+b.dataset.nights]; s.nights = Math.max(1, Math.min(30, Math.round(+b.value) || 1)); touch(); renderPanel();
+  });
+  const di = $('#dateIn'); if (di) di.onchange = () => { state.date = di.value || null; touch(); renderPanel(); };
+  const elb = $('#endListBtn'); if (elb) elb.onclick = () => {
+    state.showEndList = true;
+    if (state.endSearched) renderAll(); else run(loadEndCands);
+  };
   el.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { const c = campIndex.get(b.dataset.pick); if (c) run(() => selectCamp(c)); });
   el.querySelectorAll('[data-endpick]').forEach(b => b.onclick = () => { const c = campIndex.get(b.dataset.endpick); if (c) run(() => selectEnd(c)); });
   el.querySelectorAll('[data-show]').forEach(b => b.onclick = () => {
@@ -905,13 +1227,20 @@ function renderAll(){ renderPanel(); renderMap(); }
 /* Bottom-Sheet am Handy */
 const SHEET = ['min', 'half', 'full'];
 const isMobile = () => window.innerWidth < 900;
+let lastSheet = 'half';
 function setSheet(s){
-  const p = $('#panel'); SHEET.forEach(x => p.classList.toggle(x, x === s));
+  const p = $('#panel'), was = curSheet();
+  if (s === 'hide' && was !== 'hide') lastSheet = was;
+  [...SHEET, 'hide'].forEach(x => p.classList.toggle(x, x === s));
+  $('#fabMenu').title = s === 'hide' ? 'Menü einblenden' : 'Menü ausblenden';
+  $('#fabMenu').classList.toggle('on', s === 'hide');
   setTimeout(popupPad, 300);
 }
+const sheetHidden = () => $('#panel').classList.contains('hide');
 // Popups auf der Karte nicht unter dem Bottom-Sheet öffnen
-function popupPad(){ L.Popup.prototype.options.autoPanPaddingBottomRight = [20, isMobile() ? $('#panel').offsetHeight + 12 : 20]; }
-const curSheet = () => SHEET.find(x => $('#panel').classList.contains(x)) || 'half';
+function popupPad(){ L.Popup.prototype.options.autoPanPaddingBottomRight = [20, isMobile() && !sheetHidden() ? $('#panel').offsetHeight + 12 : 20]; }
+const curSheet = () => [...SHEET, 'hide'].find(x => $('#panel').classList.contains(x)) || 'half';
+$('#fabMenu').onclick = () => setSheet(sheetHidden() ? lastSheet : 'hide');
 let sheetDragged = false;
 $('#handle').onclick = () => { if (sheetDragged) return; setSheet(SHEET[(SHEET.indexOf(curSheet()) + 1) % 3]); };
 // Ziehen am Griff oder an der Kopfzeile: Höhe folgt dem Finger, beim Loslassen auf min/halb/voll einrasten
@@ -939,6 +1268,7 @@ $('#handle').onclick = () => { if (sheetDragged) return; setSheet(SHEET[(SHEET.i
     p.classList.remove('dragging'); p.style.height = '';
     // Ziel: nächstgelegene Stufe; deutliche Bewegung nach oben/unten springt mindestens eine Stufe weiter
     const stops = { min:128, half:vh * 0.42, full:vh * 0.9 };
+    if (h < 100 && v < 0){ setSheet('hide'); return; }        // ganz nach unten gezogen → ausblenden
     let best = SHEET.reduce((a, k) => Math.abs(stops[k] - h) < Math.abs(stops[a] - h) ? k : a, 'half');
     const cur = SHEET.indexOf(curSheet());
     if (best === curSheet() && Math.abs(v) > 40) best = SHEET[Math.max(0, Math.min(2, cur + (v > 0 ? 1 : -1)))];
@@ -990,7 +1320,7 @@ $('#planForm').addEventListener('submit', e => {
    Dateien: einstellungen.json (ohne Token) und touren/<id>.json (Format wie die Tour-Datei).
    gp.sync merkt sich je Tour den zuletzt abgeglichenen Stand { sha, at } und ausstehende Löschungen. */
 const GH = 'https://api.github.com';
-const SYNC_KEYS = ['key', 'speed', 'detour', 'cmin', 'cmax', 'highway', 'noToll'];
+const SYNC_KEYS = ['key', 'speed', 'detour', 'cmin', 'cmax', 'highway', 'noToll', 'altRadius', 'filters'];
 const ghOn = () => !!(settings.ghToken && /^[\w.-]+\/[\w.-]+$/.test(settings.ghRepo || ''));
 function syncMeta(){
   try { return { known:{}, deleted:[], ...JSON.parse(localStorage.getItem('gp.sync') || '{}') }; } catch(e){ return { known:{}, deleted:[] }; }
@@ -1116,8 +1446,22 @@ async function doSync(){
     try { localStorage.setItem('gp.tours', JSON.stringify(arr)); }
     catch(e){ cacheClear(); localStorage.setItem('gp.tours', JSON.stringify(arr)); }
   }
+  // 4) Rezeptionszeiten vom GitHub-Helfer
+  try {
+    const rz = await ghRead('rezeption.json');
+    if (rz && rz.sha !== meta.rz){
+      rzData = rz.data || {}; meta.rz = rz.sha; res.rz = true;
+      try { localStorage.setItem('gp.rezeption', JSON.stringify(rzData)); } catch(e){}
+    }
+  } catch(e){ console.warn(e); }
   meta.last = new Date().toISOString(); saveSyncMeta(meta);
   return res;
+}
+// Nach dem Hochladen einer Tour sucht der Helfer 1–2 Min. lang die Rezeptionszeiten → danach einmal nachladen
+let rzTimer = null;
+function rzRecheck(){
+  clearTimeout(rzTimer);
+  rzTimer = setTimeout(() => syncNow().then(r => { if (r && r.rz){ renderPanel(); if ($('#sumDlg').open) renderSummary(); } }).catch(() => {}), 120000);
 }
 // Abgleich im Hintergrund mit kurzer Rückmeldung
 async function syncAndReport(okMsg, errMsg){
@@ -1125,6 +1469,8 @@ async function syncAndReport(okMsg, errMsg){
   try {
     const r = await syncNow();
     if (r && r.settings && $('#status').classList.contains('error') && settings.key) setStatus('');
+    if (r && r.pushed) rzRecheck();
+    if (r && (r.rz || r.pulled)) renderPanel();
     const parts = !r ? [] : [r.settings && 'Einstellungen übernommen',
       r.pulled && `${r.pulled} ${r.pulled === 1 ? 'Tour' : 'Touren'} geladen`, r.removed && `${r.removed} gelöscht`].filter(Boolean);
     if (okMsg) flash(okMsg + ' ✓' + (parts.length ? ' – ' + parts.join(', ') : ''));
@@ -1138,12 +1484,13 @@ async function syncAndReport(okMsg, errMsg){
 
 /* ---------- Speichern, Laden, GPX ---------- */
 function loadTours(){ try { return JSON.parse(localStorage.getItem('gp.tours') || '[]'); } catch(e){ return []; } }
-function slimPoint(p){ const o = { lat:p.lat, lon:p.lon, label:p.label, kind:p.kind }; if (p.kind === 'camp'){ o.id = p.id; o.tags = p.tags; o.detour = p.detour; } return o; }
+function slimPoint(p){ const o = { lat:p.lat, lon:p.lon, label:p.label, kind:p.kind }; if (p.kind === 'camp'){ o.id = p.id; o.tags = p.tags; o.detour = p.detour; if (p.addr) o.addr = p.addr; } return o; }
 const defaultName = () => `${shortLabel(state.start.label)} → ${shortLabel(state.end.label)}`;
 function buildTour(name, id){
   return { id: id || state.tourId || Date.now(), name: (name || '').trim() || defaultName(), savedAt: new Date().toISOString(),
-    start: slimPoint(state.start), end: slimPoint(state.end), done: state.done, n: state.n,
-    stages: state.stages.map(s => ({ from:slimPoint(s.from), to:slimPoint(s.to), dist:s.dist, dur:s.dur, note:s.note, line:thin(s.line) })),
+    start: slimPoint(state.start), end: slimPoint(state.end), done: state.done, n: state.n, date: state.date || undefined,
+    stages: state.stages.map(s => ({ from:slimPoint(s.from), to:slimPoint(s.to), dist:s.dist, dur:s.dur, note:s.note, line:thin(s.line),
+      memo: s.memo && (s.memo.res || s.memo.text) ? s.memo : undefined, nights: s.nights > 1 ? s.nights : undefined })),
     endCands: state.endSearched ? state.endCands.map(c => ({ id:c.id, lat:c.lat, lon:c.lon, tags:c.tags, air:Math.round(c.air) })) : undefined };
 }
 function storeTour(tour){
@@ -1237,7 +1584,7 @@ function loadTour(id, given){
   const t = given || loadTours().find(x => x.id === id); if (!t || state.busy) return;
   Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id,
     endCands: (t.endCands || []).map(c => ({ ...c })), endSearched: !!t.endCands,
-    n: t.n || (t.done ? t.stages.length : null), overview:null });
+    n: t.n || (t.done ? t.stages.length : null), overview:null, date: t.date || null, alt:null, openDet:new Set(), showEndList:false });
   t.stages.forEach(s => { if (s.to.kind === 'camp') campIndex.set(s.to.id, s.to); });
   state.endCands.forEach(c => campIndex.set(c.id, c));
   $('#startIn').value = t.start.label; $('#endIn').value = t.end.label;
@@ -1249,7 +1596,8 @@ function loadTour(id, given){
 }
 function resetTour(){
   if (state.busy) return;
-  Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null, endCands:[], n:null, overview:null });
+  Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null, endCands:[], n:null, overview:null,
+    date:null, alt:null, openDet:new Set(), showEndList:false });
   $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end;
   setStatus(''); renderAll();
 }
@@ -1278,6 +1626,87 @@ ${pts.map(p => `    <trkpt lat="${p[0].toFixed(6)}" lon="${p[1].toFixed(6)}"/>`)
 `;
   download(xml, fileBase(name) + '.gpx', 'application/gpx+xml');
 }
+
+/* ---------- Übersicht (Harmonika) ---------- */
+function tourTitle(){ return state.start && state.end ? `${shortLabel(state.start.label)} → ${shortLabel(state.end.label)}` : 'Tour'; }
+function totalsText(){
+  const km = state.stages.reduce((a, s) => a + s.dist, 0), t = state.stages.reduce((a, s) => a + s.dur, 0);
+  const ds = stageDates(), n = state.stages.length;
+  return `${n} ${n === 1 ? 'Etappe' : 'Etappen'} · ${fkm(km)} · ${fdur(t)} Fahrzeit${ds ? ` · ${fdate(ds[0])} – ${fdate(ds[ds.length - 1])}` : ''}${state.done ? '' : ' · noch nicht fertig geplant'}`;
+}
+function renderSummary(){
+  const ds = stageDates(), cur = currentStage();
+  let h = `<div class="sumhead"><b>${esc(tourTitle())}</b><div class="muted">${esc(totalsText())}</div>
+    ${cur >= 0 ? '<div class="muted">Tour läuft – die nächste Etappe ist aufgeklappt.</div>' : ''}</div>`;
+  state.stages.forEach((s, i) => {
+    const c = s.to, camp = c.kind === 'camp', web = camp && webOf(c), phone = camp && phoneOf(c);
+    h += `<details ${cur < 0 || cur === i ? 'open' : ''}><summary><span class="sn">${i + 1}</span>
+      <span class="st"><b>${esc(shortLabel(c.label))}${s.memo?.res ? ' ✓' : ''}${i === cur ? '<span class="now">nächstes Ziel</span>' : ''}</b>
+      <span class="muted">${ds ? fdate(ds[i]) + ' · ' : ''}${fkm(s.dist)} · ${fdur(s.dur)}</span></span></summary>
+      <div class="bd">
+        <div><span class="k">Strecke</span> ${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}</div>
+        ${camp ? `<div><span class="k">Campingplatz</span> ${esc(c.label)} ${isOk(c) ? '<span class="badge ok">Wohnwagen ✓</span>' : ''}${amenHtml(c)}</div>
+        <div><span class="k">Adresse</span> ${esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–')}</div>
+        ${rzHtml(c, true) || ''}
+        ${c.tags?.opening_hours ? `<div><span class="k">Geöffnet (OSM)</span> ${esc(c.tags.opening_hours)}</div>` : ''}
+        ${web ? `<div><span class="k">Website</span> <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">${esc(shortUrl(web))}</a></div>` : ''}
+        ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
+        ${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<div><span class="k">Aufenthalt</span> ${s.nights} Nächte</div>` : ''}
+        ${s.memo?.text || s.memo?.res ? `<div><span class="k">Notiz</span> ${s.memo.res ? 'reserviert ✓ ' : ''}${esc(s.memo.text || '')}</div>` : ''}` : ''}
+        <div><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation starten</a></div>
+      </div></details>`;
+  });
+  $('#sumBody').innerHTML = h;
+}
+async function openSummary(){
+  if (!state.stages.length) return;
+  renderSummary(); $('#sumDlg').showModal();
+  if (await ensureAddrs()) renderSummary();
+}
+$('#sumBtn').onclick = $('#fabSum').onclick = openSummary;
+$('#sumX').onclick = $('#sumClose').onclick = () => $('#sumDlg').close();
+
+/* ---------- Druck / PDF: A4 quer, Übersichtskarte + Tabelle ---------- */
+let printMap = null;
+async function printTour(){
+  if (!state.stages.length) return;
+  setStatus('Druckansicht wird vorbereitet …', 'busy');
+  await ensureAddrs();
+  const ds = stageDates(), el = $('#print');
+  let rows = '';
+  state.stages.forEach((s, i) => {
+    const c = s.to, camp = c.kind === 'camp', web = camp && webOf(c), phone = camp && phoneOf(c), r = camp && rzData[c.id];
+    const rz = r && r.status === 'ok' && web && r.website === web
+      ? `${esc(r.hours || 'siehe Website')}<br><a class="sm" href="${esc(safeUrl(r.url))}">Quelle</a>` : '<span class="sm">–</span>';
+    rows += `<tr><td>${i + 1}</td><td>${ds ? fdate(ds[i]) : ''}</td>
+      <td>${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}</td>
+      <td>${fkm(s.dist)}<br><span class="sm">${fdur(s.dur)}</span></td>
+      <td><b>${esc(c.label)}</b>${camp && isOk(c) ? '<br><span class="sm">Wohnwagen ✓</span>' : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
+      <td>${camp ? esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–') : esc(c.label)}</td>
+      <td>${camp ? rz : ''}</td>
+      <td>${web ? `<a href="${esc(safeUrl(web))}">${esc(shortUrl(web))}</a><br>` : ''}${phone ? `<a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a><br>` : ''}<a href="${mapsUrl(c)}">Google Maps</a></td></tr>`;
+  });
+  el.innerHTML = `<h1>${esc(tourTitle())}</h1><div class="sub">${esc(totalsText())}</div><div class="pmap"></div>
+    <table><colgroup><col style="width:9mm"><col style="width:19mm"><col style="width:38mm"><col style="width:18mm"><col style="width:46mm"><col style="width:52mm"><col style="width:36mm"><col></colgroup>
+    <thead><tr><th>Nr.</th><th>Datum</th><th>Von → Nach</th><th>Strecke</th><th>Campingplatz</th><th>Adresse</th><th>Rezeption</th><th>Website / Kontakt</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div class="foot">Kartendaten © OpenStreetMap-Mitwirkende · Routing openrouteservice.org · erstellt mit Gespann-Etappen am ${new Date().toLocaleDateString('de-DE')}. Angaben ohne Gewähr.</div>`;
+  // Übersichtskarte
+  if (printMap){ printMap.remove(); printMap = null; }
+  printMap = L.map(el.querySelector('.pmap'), { zoomControl:false, attributionControl:false, fadeAnimation:false, zoomAnimation:false, inertia:false });
+  const tl = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18 }).addTo(printMap);
+  const pts = [];
+  state.stages.forEach((s, i) => {
+    L.polyline(s.line, { color:COL.brand, weight:4 }).addTo(printMap); pts.push(...s.line);
+    L.marker([s.to.lat, s.to.lon], { icon: pinIcon(i === state.stages.length - 1 ? 'Z' : String(i + 1), i === state.stages.length - 1 ? 'end' : '') }).addTo(printMap);
+  });
+  L.marker([state.start.lat, state.start.lon], { icon: pinIcon('S') }).addTo(printMap);
+  printMap.fitBounds(L.latLngBounds(pts), { padding:[20, 20] });
+  await new Promise(res => { tl.once('load', res); setTimeout(res, 6000); });
+  setStatus('');
+  window.print();
+}
+$('#printBtn').onclick = () => { $('#sumDlg').close(); printTour(); };
 
 /* ---------- Dialoge ---------- */
 function openSettings(){

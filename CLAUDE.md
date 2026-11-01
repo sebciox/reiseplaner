@@ -36,7 +36,14 @@ der höchstens ~10 km von der Route entfernt liegt.
 | Maut meiden | Standard aus; `options.avoid_features: ['tollways']` (gilt nur fürs Routing, nicht für die Umweg-Matrix) |
 | Speichern | localStorage im Browser, GPX-Export, Tour-Datei (`.etappen.json`) Export/Import; optional Online-Speicher (s. u.) |
 | Online-Speicher | privates GitHub-Repo (Standard `sebciox/touren`), Fine-grained Token nur für dieses Repo („Contents: Read and write“), Token bleibt lokal je Gerät. Synchronisiert Touren **und** Einstellungen inkl. ORS-Schlüssel |
-| Layout | Handy: Karte Vollbild + Bottom-Sheet (Stufen klein 128 px / halb 42 % / groß 90 %, ziehen am Griff oder an der Kopfzeile, Antippen des Griffs wechselt; fertige Tour laden → klein); ab 900 px: Seitenleiste links |
+| Layout | Handy: Karte Vollbild + Bottom-Sheet (Stufen klein 128 px / halb 42 % / groß 90 % / ausgeblendet; ziehen am Griff oder an der Kopfzeile, ganz runter = ausblenden; Antippen des Griffs wechselt; fertige Tour laden → klein). Schwebende Knöpfe oben links: ☰ Menü ein/aus, 📋 Übersicht. Ab 900 px: Seitenleiste links, „Übersicht“ im Kopf |
+| Zielplatz-Liste | nach Auswahl eingeklappt („Zielplatz: … ✓ Ändern“) |
+| Etappe | Knöpfe: 🧭 Navigation (Google Maps, `dir/?api=1&destination=`), Details (Rezeption, Wohnwagen, Ausstattung, Adresse, Öffnungszeiten OSM, Telefon, Website, Notiz + „reserviert“ + Nächte), Ausweichplatz, Platz ändern (= ab hier neu planen) |
+| Ausweichplatz | Umkreis 5/10/20/30 km (gemerkt in `settings.altRadius`) um den Platz der Etappe; „Übernehmen“ rechnet diese und die nächste Etappe neu, spätere bleiben |
+| Reisedatum | Abfahrt (`tour.date`) + Nächte je Stopp (`stage.nights`, Standard 1) → Datum je Etappe |
+| Ausstattung/Filter | Symbole aus OSM (Hund, Strom, WLAN, Duschen, Pool); Filter-Chips „Wohnwagen ✓ / Hund / Strom“ (`settings.filters`), filtern nur ausdrückliche Angaben |
+| Übersicht | Harmonika (📋): außerhalb des Reisezeitraums alles offen, während der Tour nur die nächste Etappe; „Drucken / PDF“ = A4 quer (Übersichtskarte + Tabelle: Nr, Datum, Von → Nach, Strecke, Platz, Adresse, Rezeption, Website/Kontakt mit Links) über `window.print()` |
+| Rezeptionszeiten | GitHub Action im Repo `touren` (`tools/rezeption.mjs`) liest nach jedem Tour-Push die Websites der gewählten Plätze (Startseite + passende Unterseiten, mehrsprachig) → `rezeption.json` {status, hours, snippet, url}. App lädt die Datei beim Abgleich (`gp.rezeption`) und zeigt Zeiten + Quellen-Link; ~2 Min. nach dem Hochladen wird einmal nachgeladen |
 
 ## Ideale Etappenlänge (Kernlogik)
 
@@ -62,7 +69,7 @@ Hintergrund: Sebastians erste Testtour Witten → Sant Pere Pescador ergab 3 Üb
   Abfrage). Wiederholung: 4 Versuche über alle Server, Pausen 4/10/20 s mit Countdown; 429 (zu viele gleichzeitige
   Abfragen) bekommt eine eigene Meldung. Zoom-Abfragen: nur 1 Versuch, ältere werden abgebrochen, während einer
   Etappensuche pausiert.
-- **Zwischenspeicher (7 Tage, localStorage):** `gp.cache.op` = Overpass-Ergebnisse je Rechteck (nur nötige Tags,
+- **Zwischenspeicher (7 Tage, localStorage):** `gp.cache.op2` = Overpass-Ergebnisse je Rechteck (nur nötige Tags,
   wiederverwendet, wenn ein gespeichertes Rechteck das neue enthält, max. ~1,5 Mio. Zeichen), `gp.cache.mx` =
   ORS-Matrix je Anfrage (max. ~0,5 Mio. Zeichen). Routen nur im Arbeitsspeicher. Ist der Speicher voll, gehen
   Touren vor (Zwischenspeicher wird geleert).
@@ -74,7 +81,9 @@ Hintergrund: Sebastians erste Testtour Witten → Sant Pere Pescador ergab 3 Üb
   gewinnt; online fehlend + früher abgeglichen → auf anderem Gerät gelöscht; neue Verbindung (Token/Repo geändert)
   → Online-Einstellungen haben Vorrang. Abgleich beim Start, beim Öffnen von „Touren“, nach Speichern/Löschen/
   Import und nach dem Speichern der Einstellungen. 409/422 (sha veraltet) → aktuellen sha holen, überschreiben.
-- localStorage-Schlüssel: `gp.settings`, `gp.tours`, `gp.sync`, `gp.cache.op`, `gp.cache.mx`.
+- **Adressen:** aus OSM `addr:*`, sonst einmalig ORS-Rückwärtssuche (`/geocode/reverse`), gespeichert in `stage.to.addr`.
+  Änderungen an einer gespeicherten Tour (Notiz, Datum, Nächte, Adresse, Ausweichplatz) sichert `touch()` automatisch.
+- localStorage-Schlüssel: `gp.settings`, `gp.tours`, `gp.sync`, `gp.cache.op2`, `gp.cache.mx`, `gp.rezeption`.
 
 ## Datenquellen – rechtlicher Rahmen
 
