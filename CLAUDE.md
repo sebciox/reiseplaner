@@ -36,7 +36,7 @@ der höchstens ~10 km von der Route entfernt liegt.
 | Maut meiden | Standard aus; `options.avoid_features: ['tollways']` (gilt nur fürs Routing, nicht für die Umweg-Matrix) |
 | Speichern | localStorage im Browser, GPX-Export, Tour-Datei (`.etappen.json`) Export/Import; optional Online-Speicher (s. u.) |
 | Online-Speicher | privates GitHub-Repo (Standard `sebciox/touren`), Fine-grained Token nur für dieses Repo („Contents: Read and write“), Token bleibt lokal je Gerät. Synchronisiert Touren **und** Einstellungen inkl. ORS-Schlüssel |
-| Layout | Handy: Karte Vollbild + aufziehbares Bottom-Sheet; ab 900 px: Seitenleiste links |
+| Layout | Handy: Karte Vollbild + Bottom-Sheet (Stufen klein 128 px / halb 42 % / groß 90 %, ziehen am Griff oder an der Kopfzeile, Antippen des Griffs wechselt; fertige Tour laden → klein); ab 900 px: Seitenleiste links |
 
 ## Ideale Etappenlänge (Kernlogik)
 

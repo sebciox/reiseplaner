@@ -30,12 +30,14 @@
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
   font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
 #map{position:fixed;inset:0;background:#dfe3dd}
-#panel{position:fixed;left:0;right:0;bottom:0;height:46vh;background:var(--panel);
+#panel{position:fixed;left:0;right:0;bottom:0;height:42vh;height:42dvh;background:var(--panel);
   border-radius:18px 18px 0 0;box-shadow:var(--shadow);z-index:1000;display:flex;flex-direction:column;
   transition:height .25s ease;padding-bottom:env(safe-area-inset-bottom)}
-#panel.min{height:150px}
-#panel.full{height:90vh}
-#handle{border:0;background:none;padding:10px 0 4px;cursor:pointer;flex:none}
+#panel.min{height:calc(128px + env(safe-area-inset-bottom))}
+#panel.full{height:90vh;height:90dvh}
+#panel.dragging{transition:none}
+/* Griff: großer Bereich zum Ziehen/Antippen; ziehen geht auch an der Kopfzeile */
+#handle{border:0;background:none;padding:12px 0 8px;width:100%;cursor:grab;flex:none;touch-action:none}
 #handle span{display:block;width:44px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
 #scroll{overflow:auto;flex:1;padding:0 16px 20px;-webkit-overflow-scrolling:touch}
 @media (min-width:900px){
@@ -46,8 +48,15 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
   #map{left:410px}
 }
 .top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
-.brand{display:flex;align-items:center;gap:8px}
-h1{font-size:18px;margin:0;letter-spacing:-.01em}
+.top>div:last-child{display:flex;align-items:center;flex:none}
+.brand{display:flex;align-items:center;gap:8px;min-width:0}
+h1{font-size:18px;margin:0;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:899px){
+  .top{touch-action:none}
+  h1{font-size:17px}
+  .brand img{width:24px;height:24px}
+  .leaflet-control-attribution{font-size:10px;line-height:1.3;max-width:70vw}
+}
 h2{font-size:17px;margin:0 0 10px}
 h3{font-size:15px;margin:18px 0 6px}
 .muted{color:var(--muted);font-size:13px}
@@ -895,8 +904,54 @@ function renderAll(){ renderPanel(); renderMap(); }
 
 /* Bottom-Sheet am Handy */
 const SHEET = ['min', 'half', 'full'];
-function setSheet(s){ const p = $('#panel'); SHEET.forEach(x => p.classList.toggle(x, x === s)); }
-$('#handle').onclick = () => { const p = $('#panel'); const cur = SHEET.find(x => p.classList.contains(x)) || 'half'; setSheet(SHEET[(SHEET.indexOf(cur) + 1) % 3]); };
+const isMobile = () => window.innerWidth < 900;
+function setSheet(s){
+  const p = $('#panel'); SHEET.forEach(x => p.classList.toggle(x, x === s));
+  setTimeout(popupPad, 300);
+}
+// Popups auf der Karte nicht unter dem Bottom-Sheet öffnen
+function popupPad(){ L.Popup.prototype.options.autoPanPaddingBottomRight = [20, isMobile() ? $('#panel').offsetHeight + 12 : 20]; }
+const curSheet = () => SHEET.find(x => $('#panel').classList.contains(x)) || 'half';
+let sheetDragged = false;
+$('#handle').onclick = () => { if (sheetDragged) return; setSheet(SHEET[(SHEET.indexOf(curSheet()) + 1) % 3]); };
+// Ziehen am Griff oder an der Kopfzeile: Höhe folgt dem Finger, beim Loslassen auf min/halb/voll einrasten
+(function(){
+  const p = $('#panel'); let d = null;
+  const start = e => {
+    if (!isMobile() || (e.target.closest('button, a, input') && e.target.closest('#handle') !== $('#handle'))) return;
+    d = { y:e.clientY, h:p.offsetHeight, t:Date.now(), moved:false, id:e.pointerId };
+  };
+  const move = e => {
+    if (!d || e.pointerId !== d.id) return;
+    const dy = d.y - e.clientY;
+    if (!d.moved && Math.abs(dy) < 6) return;
+    if (!d.moved){ d.moved = true; p.classList.add('dragging'); try { e.target.setPointerCapture(e.pointerId); } catch(x){} }
+    const vh = window.innerHeight;
+    p.style.height = Math.max(90, Math.min(vh * 0.92, d.h + dy)) + 'px';
+    e.preventDefault();
+  };
+  const end = e => {
+    if (!d || e.pointerId !== d.id) return;
+    const moved = d.moved, h0 = d.h; d = null;
+    if (!moved) return;
+    sheetDragged = true; setTimeout(() => sheetDragged = false, 50);
+    const h = p.offsetHeight, vh = window.innerHeight, v = (h - h0);
+    p.classList.remove('dragging'); p.style.height = '';
+    // Ziel: nächstgelegene Stufe; deutliche Bewegung nach oben/unten springt mindestens eine Stufe weiter
+    const stops = { min:128, half:vh * 0.42, full:vh * 0.9 };
+    let best = SHEET.reduce((a, k) => Math.abs(stops[k] - h) < Math.abs(stops[a] - h) ? k : a, 'half');
+    const cur = SHEET.indexOf(curSheet());
+    if (best === curSheet() && Math.abs(v) > 40) best = SHEET[Math.max(0, Math.min(2, cur + (v > 0 ? 1 : -1)))];
+    setSheet(best);
+  };
+  for (const el of [$('#handle'), $('#panel .top')]){
+    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+  window.addEventListener('resize', popupPad);
+})();
 
 /* ---------- Eingabe Start/Ziel ---------- */
 function setupGeoInput(inp, list, key){
@@ -1190,6 +1245,7 @@ function loadTour(id, given){
   // Unfertige Tour: Planung geht weiter (braucht die Suche). Fertige Tour: keine Abfrage – Plätze am Ziel kommen
   // aus der gespeicherten Tour oder erst auf Knopfdruck.
   if (!t.done){ const last = t.stages.length ? t.stages[t.stages.length - 1].to : t.start; run(() => computeNext(last)); }
+  else if (isMobile()){ setSheet('min'); setTimeout(fitAll, 320); }
 }
 function resetTour(){
   if (state.busy) return;
@@ -1265,7 +1321,7 @@ $('#importIn').addEventListener('change', e => { const f = e.target.files[0]; e.
 
 /* ---------- Start ---------- */
 $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end;
-renderAll();
+renderAll(); popupPad();
 if (!settings.key && !ghOn()) setStatus('Willkommen! Trag zuerst unter ⚙︎ deinen kostenlosen OpenRouteService-Schlüssel ein.');
 syncAndReport();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
