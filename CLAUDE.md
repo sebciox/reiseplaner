@@ -1,6 +1,6 @@
 # Reiseplaner (ehemals Gespann-Etappen) – Projektkontext für Claude
 
-Privater Reiseplaner (PWA) für eine Reise mit **Wohnwagen-Gespann**. Anzeigename **„Reiseplaner“** (Titel, Kopf, Manifest, GPX, PDF); Repo/URL und die Dateikennung `app:'gespann-etappen'` (Tour-Dateien, Online-Speicher) bleiben unverändert. Nutzer: Sebastian (nur für sich selbst,
+Privater Reiseplaner (PWA) für eine Reise mit **Wohnwagen-Gespann**. Anzeigename **„Reiseplaner“** (Titel, Kopf, Manifest, GPX, PDF); Repo `sebciox/reiseplaner` (Nov. 2026 umbenannt, alte Pages-Adresse `/gespann-etappen/` gibt es nicht mehr). Unverändert bleiben bewusst die Dateikennung `app:'gespann-etappen'` (Tour-Dateien, Online-Speicher), die Cache-Namen in `sw.js` und die localStorage-Schlüssel `gp.*` (gleiche Herkunft sebciox.github.io → Daten bleiben erhalten). Nutzer: Sebastian (nur für sich selbst,
 nicht öffentlich vertrieben). Sprache der App und der Kommunikation: **Deutsch**. Sebastian will wenig Rückfragen –
 Absicht erschließen und liefern.
 **Fragen immer als Auswahl stellen:** Wenn Entscheidungen oder Vorschläge zur Wahl stehen, diese über den
