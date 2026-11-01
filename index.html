@@ -337,7 +337,7 @@ a{color:var(--brand)}
 const COL = { brand:'#1f6b52', pending:'#6f7a85', corridor:'#e07b24', ok:'#2e8b57', unk:'#8a8f98' };
 const DEF = { key:'', speed:80, cmin:350, cmax:450, detour:10, highway:true, noToll:false,
               ghRepo:'sebciox/touren', ghToken:'', savedAt:null,
-              altRadius:10, filters:{ caravan:false, dog:false, power:false }, gkey:'', sortBy:'stage' };
+              altRadius:10, filters:{ caravan:false, power:false }, gkey:'', sortBy:'stage' };
 const ORS = 'https://api.openrouteservice.org';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
                   'https://overpass.private.coffee/api/interpreter'];
@@ -597,7 +597,7 @@ async function overpass(q, opts = {}){
    Rechteck es vollständig enthält, sonst eine Overpass-Abfrage */
 const KEEP_TAGS = ['name', 'caravans', 'website', 'contact:website', 'url', 'phone', 'contact:phone', 'opening_hours',
   'addr:street', 'addr:housenumber', 'addr:postcode', 'addr:city', 'addr:place',
-  'dog', 'power_supply', 'internet_access', 'shower', 'swimming_pool'];
+  'power_supply', 'internet_access', 'shower', 'swimming_pool'];
 let opCache = cacheLoad(CK.op);
 const boxIn = (a, b) => a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3];
 function slimEl(e){
@@ -646,7 +646,6 @@ const isOk = c => ['yes','designated'].includes(c.tags?.caravans);
 
 /* Ausstattung aus OSM-Tags (oft lückenhaft – gefiltert wird nur auf ausdrückliche Angaben) */
 const AMEN = [
-  { k:'dog',    i:'🐕', t:'Hunde erlaubt', f: t => /^(yes|leashed|designated|unleashed)$/.test(t.dog || '') },
   { k:'power',  i:'🔌', t:'Strom',         f: t => !!t.power_supply && t.power_supply !== 'no' },
   { k:'wifi',   i:'📶', t:'WLAN',          f: t => !!t.internet_access && t.internet_access !== 'no' },
   { k:'shower', i:'🚿', t:'Duschen',       f: t => !!t.shower && t.shower !== 'no' },
@@ -654,8 +653,7 @@ const AMEN = [
 ];
 const amenList = c => AMEN.filter(a => a.f(c.tags || {}));
 function amenHtml(c){ const a = amenList(c); return a.length ? `<span class="amen" title="${a.map(x => x.t).join(', ')}">${a.map(x => x.i).join('')}</span>` : ''; }
-const FILTERS = [ { k:'caravan', l:'Wohnwagen ✓', f: c => isOk(c) }, { k:'dog', l:'🐕 Hund', f: c => AMEN[0].f(c.tags || {}) },
-                  { k:'power', l:'🔌 Strom', f: c => AMEN[1].f(c.tags || {}) } ];
+const FILTERS = [ { k:'caravan', l:'Wohnwagen ✓', f: c => isOk(c) }, { k:'power', l:'🔌 Strom', f: c => AMEN[0].f(c.tags || {}) } ];
 const passFilter = c => FILTERS.every(x => !(settings.filters || {})[x.k] || x.f(c));
 function chipsHtml(all){
   const hidden = all.filter(c => !passFilter(c)).length;
