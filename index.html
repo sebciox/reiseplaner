@@ -192,6 +192,10 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .vialist li.drop-before{box-shadow:0 -3px 0 var(--brand)}
 .vialist.drop-end li:last-child{box-shadow:0 3px 0 var(--brand)}
 .vialist .pin-on{font-size:13px}
+.viaadd{position:relative;display:flex;gap:6px;align-items:stretch}
+.viaadd input{flex:1;min-width:0}
+.viaadd .btn{flex:none;white-space:nowrap}
+#viaHint{margin-top:4px;font-size:12px}
 .vsights{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;align-items:center}
 .vchip{display:inline-flex;align-items:center;gap:2px;font-size:12px;padding:2px 4px 2px 8px;border-radius:99px;background:var(--warn-soft);color:var(--text)}
 .vchip button{width:22px;height:22px;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:50%}
@@ -329,8 +333,10 @@ a{color:var(--brand-ink)}
       <div class="field">
         <label for="viaIn">Zwischenziele / Sehenswürdigkeiten <span class="muted" style="text-transform:none;font-weight:400">(optional)</span></label>
         <ol class="vialist" id="viaList"></ol>
-        <div style="position:relative"><input id="viaIn" placeholder="z. B. Astrid Lindgrens Värld – Enter fügt hinzu" enterkeyhint="enter">
+        <div class="viaadd"><input id="viaIn" placeholder="z. B. Astrid Lindgrens Värld" enterkeyhint="enter" aria-label="Zwischenziel hinzufügen">
+          <button class="btn small" type="button" id="viaAddBtn">+ Hinzufügen</button>
           <ul class="sugg" id="viaSugg"></ul></div>
+        <div class="muted small" id="viaHint">Beliebig viele Ziele nacheinander eingeben (Enter oder „+ Hinzufügen“), Reihenfolge per Ziehen am ⠿.</div>
         <div class="viatools" id="viaTools" hidden><button class="btn small" type="button" id="viaOpt">Reihenfolge optimieren</button></div>
       </div>
       <div class="field">
@@ -1852,7 +1858,7 @@ function renderVia(){
   $('#viaTools').hidden = state.via.length < 2;
   $('#roundIn').checked = !!state.round;
   $('#retLbl').textContent = state.round ? 'Zurück spätestens' : 'Ankunft spätestens';
-  $('#dateIn').value = state.date || ''; $('#retIn').value = state.ret || '';
+  $('#dateIn').value = state.date || ''; $('#retIn').value = state.ret || ''; $('#retIn').min = state.date || '';
   $('#endIn').disabled = !!state.round;
   if (state.round) $('#endIn').value = state.start ? state.start.label : $('#startIn').value;
   const ch = () => { renderVia(); renderMap(); };
@@ -1921,6 +1927,8 @@ function startViaDrag(e, grip){
 }
 function addVia(g){
   if (!g) return;
+  const dup = state.via.find(v => v.label === g.label && Math.abs(v.lat - g.lat) < 1e-4 && Math.abs(v.lon - g.lon) < 1e-4);
+  if (dup){ flash(`„${shortLabel(g.label)}“ ist schon in der Liste.`); $('#viaIn').value = ''; $('#viaSugg').innerHTML = ''; return; }
   state.via.push({ uid:'v' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon, kind:'stay', nights:1 });
   $('#viaIn').value = ''; $('#viaSugg').innerHTML = '';
   renderVia(); renderMap();
@@ -1957,12 +1965,14 @@ async function optimizeVia(){
   renderVia(); renderMap(); flash('Reihenfolge optimiert (kürzeste Gesamtstrecke, Luftlinie)' + (np ? ` – ${np} festgelegte${np === 1 ? 's Ziel bleibt' : ' Ziele bleiben'} an ${np === 1 ? 'seinem' : 'ihrem'} Platz.` : '.'));
 }
 (function(){
-  const inp = $('#viaIn'), list = $('#viaSugg'); let last = [];
+  // last/lastQ: Vorschläge und der Suchtext, zu dem sie gehören (Enter nimmt den ersten Vorschlag nur, wenn er
+  // zum aktuellen Text passt – sonst würde nach schnellem Tippen der Treffer des vorigen Ziels erneut eingefügt)
+  const inp = $('#viaIn'), list = $('#viaSugg'); let last = [], lastQ = '';
   const search = debounce(async () => {
     const t = inp.value.trim();
     if (t.length < 3 || (!settings.key && !useFallback)){ list.innerHTML = ''; return; }
     try {
-      const r = await geocode(t, 6, true); last = r;
+      const r = await geocode(t, 6, true); last = r; lastQ = t;
       if (inp.value.trim() !== t || document.activeElement !== inp) return;
       list.innerHTML = r.map((g, i) => `<li><button type="button" data-i="${i}">${esc(g.label)}</button></li>`).join('');
       list.querySelectorAll('button').forEach(b => b.onclick = () => addVia(r[+b.dataset.i]));
@@ -1970,17 +1980,34 @@ async function optimizeVia(){
   }, 450);
   inp.addEventListener('input', search);
   inp.addEventListener('blur', () => setTimeout(() => list.innerHTML = '', 200));
-  inp.addEventListener('keydown', async e => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const t = inp.value.trim(); if (!t) return;
-    try { addVia(last[0] && inp.value.trim() === t && last.length ? last[0] : await geocodeFirst(t)); }
+  let adding = false;
+  window.addViaFromInput = async () => {
+    const t = inp.value.trim(); if (!t || adding) return;
+    adding = true;
+    try { addVia(last.length && lastQ === t ? last[0] : await geocodeFirst(t)); last = []; lastQ = ''; }
     catch(err){ setStatus(err.message, 'error'); }
-  });
+    finally { adding = false; }
+    inp.focus();
+  };
+  inp.addEventListener('keydown', e => { if (e.key !== 'Enter') return; e.preventDefault(); addViaFromInput(); });
+  $('#viaAddBtn').onclick = () => addViaFromInput();
   $('#viaOpt').onclick = optimizeVia;
   $('#roundIn').onchange = () => { state.round = $('#roundIn').checked; if (state.round) state.end = null; renderVia(); renderPanel(); };
-  $('#dateIn').onchange = () => { state.date = $('#dateIn').value || null; touch(); renderPanel(); };
-  $('#retIn').onchange = () => { state.ret = $('#retIn').value || null; touch(); renderPanel(); };
+  // Abfahrt verschoben → Rückkehr um dieselben Tage mitverschieben (Reisedauer bleibt); nie vor der Abfahrt
+  const dayMs = 864e5, dd = s => Date.parse(s + 'T12:00:00Z'), iso = t => new Date(t).toISOString().slice(0, 10);
+  $('#dateIn').onchange = () => {
+    const old = state.date, d = $('#dateIn').value || null; state.date = d;
+    if (d && state.ret){
+      if (old) state.ret = iso(dd(state.ret) + Math.round((dd(d) - dd(old)) / dayMs) * dayMs);
+      if (state.ret < d) state.ret = d;
+    }
+    touch(); renderVia(); renderPanel();
+  };
+  $('#retIn').onchange = () => {
+    let r = $('#retIn').value || null;
+    if (r && state.date && r < state.date){ r = state.date; flash('Rückkehr kann nicht vor der Abfahrt liegen – auf den Abfahrtstag gesetzt.'); }
+    state.ret = r; touch(); renderVia(); renderPanel();
+  };
 })();
 
 /* ---------- Eingabe Start/Ziel ---------- */
@@ -2005,6 +2032,9 @@ setupGeoInput($('#endIn'), $('#endSugg'), 'end');
 
 $('#planForm').addEventListener('submit', e => {
   e.preventDefault();
+  const ae = document.activeElement;
+  if (ae && ae.id === 'viaIn'){ if (ae.value.trim()) addViaFromInput(); return; }
+  if (ae && ae.classList.contains('vsin')) return;
   if (!settings.key && !useFallback && !confirm('Kein OpenRouteService-Schlüssel eingetragen.\n\nOK = kostenlosen Ersatzdienst (OSRM/Photon) für diese Sitzung verwenden\nAbbrechen = Schlüssel eintragen')){
     openSettings(); return;
   }
