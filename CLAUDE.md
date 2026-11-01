@@ -112,5 +112,12 @@ Online-Speicher: GitHub-API mit In-Memory-Repo mocken, zwei Browser-Kontexte (La
 
 ## Offene Ideen
 
+- **Geplant (noch nicht umgesetzt, Details mit Sebastian klären):**
+  - **Excel-Export** (.xlsx, **ein** Blatt): Spalte „Typ“ = Campingplatz / Sehenswürdigkeit, Zeilen je Etappe
+    (Platz, darunter seine Sehenswürdigkeiten); Spalten u. a. Etappe, Datum, Name, Adresse, Koordinaten,
+    Entfernung zum Platz, Rezeption/Check-in/out, Website (Link), Telefon, Google-Sterne, Notiz.
+  - **Sehenswürdigkeiten** je Etappe/Platz: in der App suchen und manuell hinzufügen, mit Google-Sternen;
+    Anzeige auf der Karte (eigenes Symbol + Popup) sowie in Übersicht und PDF.
+
 - Start/Ziel sind vorerst zum Testen vorausgefüllt (`DEMO` in `index.html`: Witten → Sant Pere Pescador) – später entfernen.
 - Echte Tests mit realen Diensten stehen noch aus (park4night-Link-Ziel ungeprüft).
