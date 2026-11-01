@@ -1,11 +1,11 @@
 // Service Worker: hält die App-Dateien offline vor. Karten, Routing und Campingplatz-Abfragen brauchen Netz.
-const CACHE = 'gespann-etappen-v3';
+const CACHE = 'gespann-etappen-v4';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'
 ];
-const LIVE = ['openrouteservice.org', 'overpass', 'basemaps.cartocdn.com'];
+const LIVE = ['openrouteservice.org', 'overpass', 'tile.openstreetmap.org'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

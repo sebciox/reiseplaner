@@ -431,8 +431,8 @@ function setStatus(text, kind){
 const map = L.map('map', { zoomControl:false, attributionControl:false }).setView([51.2, 10.4], 6);
 L.control.zoom({ position:'topright' }).addTo(map);
 L.control.attribution({ position:'topright', prefix:false }).addTo(map);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19, subdomains:'abcd',
-  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a> · Routing © openrouteservice.org' }).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19,
+  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Routing © openrouteservice.org' }).addTo(map);
 const lyr = { route:L.layerGroup().addTo(map), corridor:L.layerGroup().addTo(map), area:L.layerGroup().addTo(map),
               cands:L.layerGroup().addTo(map), pins:L.layerGroup().addTo(map) };
 
