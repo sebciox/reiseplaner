@@ -313,14 +313,20 @@ async function route(a, b){
   if (settings.highway){ body.preference = 'fastest'; body.instructions = true; body.instructions_format = 'text'; }
   else { body.instructions = false; body.maximum_speed = vmax; }
   if (settings.noToll) body.options = { avoid_features: ['tollways'] };
+  const ck = hashStr(JSON.stringify(body));
+  if (routeMem.has(ck)) return routeMem.get(ck);
   const j = await orsPost('/v2/directions/driving-car/geojson', body);
   const f = j.features && j.features[0];
   if (!f) throw new Error('Keine Route gefunden.');
   const dist = f.properties.summary.distance || 0;
   let dur = f.properties.summary.duration || 0;
   if (settings.highway) dur = cappedDuration(f.properties.segments, dist, dur, vmax);
-  return { line: f.geometry.coordinates.map(c => [c[1], c[0]]), dist, dur };
+  const res = { line: f.geometry.coordinates.map(c => [c[1], c[0]]), dist, dur };
+  routeMem.set(ck, res);
+  if (routeMem.size > 30) routeMem.delete(routeMem.keys().next().value);
+  return res;
 }
+const routeMem = new Map();   // Routen nur solange die Seite offen ist (groß, ORS-Limit unkritisch)
 // Fahrzeit, wenn nirgends schneller als vmax gefahren wird: je Schritt max(ORS-Dauer, Strecke / vmax)
 function cappedDuration(segments, dist, dur, vmax){
   const v = vmax / 3.6;
@@ -330,26 +336,106 @@ function cappedDuration(segments, dist, dur, vmax){
   return Math.max(t, dist / v);
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- Zwischenspeicher im Browser (7 Tage) ---------- */
+const CACHE_TTL = 7 * 864e5;
+const CK = { op:'gp.cache.op', mx:'gp.cache.mx' };
+function cacheLoad(k){
+  try { const now = Date.now(); return JSON.parse(localStorage.getItem(k) || '[]').filter(e => now - e.t < CACHE_TTL); }
+  catch(e){ return []; }
+}
+// speichert die neuesten Einträge, die in maxChars passen; gibt die behaltene Liste zurück
+function cacheSave(k, list, maxChars){
+  list = list.slice();
+  while (list.length){
+    const str = JSON.stringify(list);
+    if (str.length <= maxChars){ try { localStorage.setItem(k, str); return list; } catch(e){} }
+    list.shift();
+  }
+  try { localStorage.removeItem(k); } catch(e){}
+  return list;
+}
+function cacheClear(){ for (const k of Object.values(CK)) try { localStorage.removeItem(k); } catch(e){} opCache = []; mxCache = []; }
+function hashStr(str){
+  let h1 = 0x811c9dc5, h2 = 7;
+  for (let i = 0; i < str.length; i++){ const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619); h2 = (Math.imul(h2, 31) + c) | 0; }
+  return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36) + str.length.toString(36);
+}
+
+/* ---------- Overpass ---------- */
 let opStart = 0;
-async function overpass(q, onRetry){
-  let err;
-  // Zwei Durchgänge über alle Server, beginnend beim zuletzt erfolgreichen
-  for (let pass = 0; pass < 2; pass++){
-    if (pass) { onRetry && onRetry(); await sleep(4000); }
+const OP_WAITS = [0, 4, 10, 20];   // Sekunden Pause vor Versuch 1..4 (je Versuch alle Server nacheinander)
+// opts: { signal, passes, onStatus(text) }
+async function overpass(q, opts = {}){
+  const passes = opts.passes || OP_WAITS.length, say = opts.onStatus || (() => {});
+  let saw429 = false, sawBusy = false;
+  for (let pass = 0; pass < passes; pass++){
+    if (pass){
+      for (let w = OP_WAITS[pass]; w > 0; w--){
+        if (opts.signal?.aborted) throw new DOMException('abgebrochen', 'AbortError');
+        say(`${saw429 ? 'Zu viele Abfragen' : 'Server ausgelastet'} – Versuch ${pass + 1} von ${passes} in ${w} s …`);
+        await sleep(1000);
+      }
+      say(`Suche Campingplätze … (Versuch ${pass + 1} von ${passes})`);
+    }
     for (let k = 0; k < OVERPASS.length; k++){
       const i = (opStart + k) % OVERPASS.length;
       const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 70000);
+      const onAbort = () => ctl.abort();
+      opts.signal?.addEventListener('abort', onAbort);
       try {
         const r = await fetch(OVERPASS[i], { method:'POST', body:'data=' + encodeURIComponent(q), signal:ctl.signal,
           headers:{ 'Content-Type':'application/x-www-form-urlencoded' } });
         if (r.ok){ const j = await r.json(); opStart = i; return j.elements || []; }
-        err = new Error(`Campingplatz-Server überlastet (${r.status}). Bitte gleich nochmal versuchen.`);
-      } catch(e){ err = new Error('Campingplatz-Server nicht erreichbar. Bitte gleich nochmal versuchen.'); }
-      finally { clearTimeout(timer); }
+        if (r.status === 429) saw429 = true; else sawBusy = true;
+      } catch(e){
+        if (opts.signal?.aborted) throw new DOMException('abgebrochen', 'AbortError');
+      }
+      finally { clearTimeout(timer); opts.signal?.removeEventListener('abort', onAbort); }
     }
   }
-  throw err;
+  if (saw429) throw new Error('Campingplatz-Server: zu viele Abfragen von deinem Anschluss (429). Bitte 1–2 Minuten warten und dann nochmal versuchen.');
+  if (sawBusy) throw new Error('Campingplatz-Server überlastet. Bitte in ein paar Minuten nochmal versuchen.');
+  throw new Error('Campingplatz-Server nicht erreichbar. Bitte gleich nochmal versuchen.');
 }
+
+/* Campingplätze in einem Rechteck [süd, west, nord, ost] – aus dem Zwischenspeicher, wenn ein gespeichertes
+   Rechteck es vollständig enthält, sonst eine Overpass-Abfrage */
+const KEEP_TAGS = ['name', 'caravans', 'website', 'contact:website', 'url', 'phone', 'contact:phone', 'opening_hours'];
+let opCache = cacheLoad(CK.op);
+const boxIn = (a, b) => a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3];
+function slimEl(e){
+  const tags = {}; for (const k of KEEP_TAGS) if (e.tags?.[k] != null) tags[k] = e.tags[k];
+  return { type:e.type, id:e.id, lat:e.lat ?? e.center?.lat, lon:e.lon ?? e.center?.lon, tags };
+}
+async function campsInBox(box, opts = {}){
+  const g = 0.02, r2 = v => +v.toFixed(2);   // nach außen auf ein 0,02°-Raster runden → bessere Wiederverwendung
+  box = [r2(Math.floor(box[0] / g) * g), r2(Math.floor(box[1] / g) * g), r2(Math.ceil(box[2] / g) * g), r2(Math.ceil(box[3] / g) * g)];
+  const inBox = e => e.lat >= box[0] && e.lon >= box[1] && e.lat <= box[2] && e.lon <= box[3];
+  const now = Date.now();
+  const hit = opCache.find(e => now - e.t < CACHE_TTL && boxIn(box, e.box));
+  if (hit) return parseCamps(hit.els.filter(inBox));
+  const q = `[out:json][timeout:60];nwr["tourism"="camp_site"](${box.join(',')});out center tags;`;
+  const els = (await overpass(q, opts)).map(slimEl).filter(e => e.lat != null);
+  opCache = opCache.filter(e => now - e.t < CACHE_TTL && !boxIn(e.box, box));   // ganz enthaltene alte Einträge ersetzen
+  opCache.push({ t:now, box, els });
+  opCache = cacheSave(CK.op, opCache, 1500000);
+  return parseCamps(els);
+}
+
+/* ORS-Matrix mit Zwischenspeicher (gleiche Anfrage → gleiche Antwort) */
+let mxCache = cacheLoad(CK.mx);
+async function matrix(body){
+  const k = hashStr(JSON.stringify(body));
+  const hit = mxCache.find(e => e.k === k);
+  if (hit) return { distances:hit.d, durations:hit.u };
+  const j = await orsPost('/v2/matrix/driving-car', body);
+  const rnd = m => (m || []).map(row => row.map(v => v == null ? null : Math.round(v)));
+  const e = { t:Date.now(), k, d:rnd(j.distances), u:rnd(j.durations) };
+  mxCache = cacheSave(CK.mx, [...mxCache.filter(x => x.k !== k), e], 500000);
+  return { distances:e.d, durations:e.u };
+}
+
 function parseCamps(els){
   const seen = new Set(), out = [];
   for (const e of els){
@@ -372,11 +458,11 @@ async function findCandidates(line, cum, cminKm, cmaxKm, detourKm){
   const poly = sample(line, cum, d0, d1, Math.max(2, Math.ceil((d1 - d0) / 1000)));
   const lats = poly.map(o => o.p[0]), lons = poly.map(o => o.p[1]);
   const midLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-  const pLat = detourKm / 111, pLon = detourKm / (111 * Math.cos(midLat * RAD));
-  const bbox = [Math.min(...lats) - pLat, Math.min(...lons) - pLon, Math.max(...lats) + pLat, Math.max(...lons) + pLon]
-    .map(v => v.toFixed(4)).join(',');
-  const q = `[out:json][timeout:60];nwr["tourism"="camp_site"](${bbox});out center tags;`;
-  let camps = parseCamps(await overpass(q, () => setStatus('Server ausgelastet – neuer Versuch …', 'busy')));
+  // Rand mind. 20 km: deckt auch die Stufe „Umweg 20 km“ ab → dieselbe Abfrage kommt dann aus dem Zwischenspeicher
+  const padKm = Math.max(20, detourKm);
+  const pLat = padKm / 111, pLon = padKm / (111 * Math.cos(midLat * RAD));
+  const box = [Math.min(...lats) - pLat, Math.min(...lons) - pLon, Math.max(...lats) + pLat, Math.max(...lons) + pLon];
+  let camps = await campsInBox(box, { onStatus: t => setStatus(t, 'busy') });
   for (const c of camps){
     let best = Infinity;
     for (const o of poly){ const h = hav(o.p, [c.lat, c.lon]); if (h < best) best = h; }
@@ -388,10 +474,10 @@ async function findCandidates(line, cum, cminKm, cmaxKm, detourKm){
   if (!camps.length) return [];
   // 2) Echter Umweg: Straßenentfernung von Ankerpunkten auf der Route zum Platz (Matrix)
   const nAnch = Math.min(40, Math.max(6, Math.ceil((d1 - d0) / 3000)));
-  const anchors = sample(line, cum, d0, d1, nAnch - 1);
+  const anchors = sample(line, cum, d0, d1, nAnch - 1).map(a => ({ d:Math.round(a.d), p:[+a.p[0].toFixed(5), +a.p[1].toFixed(5)] }));
   for (let i = 0; i < camps.length; i += 30){
     const chunk = camps.slice(i, i + 30);
-    const j = await orsPost('/v2/matrix/driving-car', {
+    const j = await matrix({
       locations: [...anchors.map(a => [a.p[1], a.p[0]]), ...chunk.map(c => [c.lon, c.lat])],
       sources: anchors.map((_, k) => k),
       destinations: chunk.map((_, k) => anchors.length + k),
@@ -496,9 +582,10 @@ async function loadEndCands(){
   const e = state.end, rad = Math.max(10, +settings.detour) * 1000;
   try {
     setStatus('Suche Campingplätze am Ziel …', 'busy');
-    const camps = parseCamps(await overpass(`[out:json][timeout:30];nwr["tourism"="camp_site"](around:${rad},${e.lat},${e.lon});out center tags;`));
+    const dLat = rad / 111000, dLon = rad / (111000 * Math.cos(e.lat * RAD));
+    const camps = await campsInBox([e.lat - dLat, e.lon - dLon, e.lat + dLat, e.lon + dLon], { onStatus: t => setStatus(t, 'busy') });
     camps.forEach(c => { c.air = hav([e.lat, e.lon], [c.lat, c.lon]); campIndex.set(c.id, c); });
-    state.endCands = camps.sort((a, b) => a.air - b.air).slice(0, 20);
+    state.endCands = camps.filter(c => c.air <= rad).sort((a, b) => a.air - b.air).slice(0, 20);
   } catch(err){ console.warn(err); }
   renderAll();
 }
@@ -525,10 +612,10 @@ async function selectCamp(c){
 /* ---------- Ablaufsteuerung ---------- */
 async function run(fn){
   if (state.busy) return;
-  state.busy = true; renderAll();
+  state.busy = true; areaCtl?.abort(); renderAll();
   try { await fn(); setStatus(''); }
   catch(e){ console.error(e); setStatus(e.message || String(e), 'error'); }
-  finally { state.busy = false; renderAll(); }
+  finally { state.busy = false; renderAll(); loadArea(); }
 }
 function setStatus(text, kind){
   const el = $('#status');
@@ -633,15 +720,20 @@ function fitAll(){
 }
 
 /* Q20: alle Campingplätze im Ausschnitt beim Reinzoomen */
-let areaKey = '';
+let areaKey = '', areaCtl = null;
 const loadArea = debounce(async () => {
-  if (map.getZoom() < AREA_ZOOM){ lyr.area.clearLayers(); areaKey = ''; return; }
+  if (map.getZoom() < AREA_ZOOM){ lyr.area.clearLayers(); areaKey = ''; areaCtl?.abort(); return; }
+  // Während einer Etappensuche nicht zusätzlich abfragen (Overpass erlaubt nur wenige gleichzeitige Abfragen)
+  if (state.busy){ areaKey = ''; return; }
   const b = map.getBounds().pad(0.1);
-  const k = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].map(v => v.toFixed(2)).join(',');
+  const box = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()];
+  const k = box.map(v => v.toFixed(2)).join(',');
   if (k === areaKey) return;
   areaKey = k;
+  areaCtl?.abort();                       // ältere Zoom-Abfrage abbrechen
+  const ctl = areaCtl = new AbortController();
   try {
-    const camps = parseCamps(await overpass(`[out:json][timeout:25];nwr["tourism"="camp_site"](${k});out center tags;`));
+    const camps = await campsInBox(box, { signal:ctl.signal, passes:1 });
     if (k !== areaKey) return;
     lyr.area.clearLayers();
     const candIds = new Set((state.pending?.cands || []).map(c => c.id));
@@ -652,7 +744,7 @@ const loadArea = debounce(async () => {
       L.circleMarker([c.lat, c.lon], { radius:6, color:isOk(c) ? COL.ok : COL.unk, weight:2, fillColor:'#fff', fillOpacity:.95 })
         .bindPopup(() => campInfo(cc, 'area')).addTo(lyr.area);
     });
-  } catch(e){ console.warn(e); areaKey = ''; }
+  } catch(e){ if (e.name !== 'AbortError') console.warn(e); if (k === areaKey) areaKey = ''; }
 }, 700);
 map.on('moveend', loadArea);
 
@@ -820,8 +912,9 @@ function buildTour(name, id){
     stages: state.stages.map(s => ({ from:slimPoint(s.from), to:slimPoint(s.to), dist:s.dist, dur:s.dur, note:s.note, line:thin(s.line) })) };
 }
 function storeTour(tour){
-  const rest = loadTours().filter(t => t.id !== tour.id);
-  localStorage.setItem('gp.tours', JSON.stringify([tour, ...rest]));
+  const rest = loadTours().filter(t => t.id !== tour.id), str = JSON.stringify([tour, ...rest]);
+  try { localStorage.setItem('gp.tours', str); }
+  catch(e){ cacheClear(); localStorage.setItem('gp.tours', str); }   // Touren gehen vor Zwischenspeicher
 }
 function flash(msg){
   setStatus(msg);

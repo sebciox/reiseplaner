@@ -57,9 +57,17 @@ Hintergrund: Sebastians erste Testtour Witten → Sant Pere Pescador ergab 3 Üb
 - **Campingplätze:** Overpass-API, mehrere Server mit Fallback und zweitem Durchgang (überlastet → 504).
   Abfrage per **Bounding-Box um den Korridor**, dann lokal nach Luftlinie filtern (die frühere `around`-Polylinie
   führte zu 504). Danach ORS-Matrix von Ankerpunkten auf der Route zu den Plätzen (max. 60 Plätze).
+  Rechteck-Rand mind. 20 km → deckt die Stufe „Umweg 20 km“ mit ab (nur „Korridor ±50 km“ braucht eine zweite
+  Abfrage). Wiederholung: 4 Versuche über alle Server, Pausen 4/10/20 s mit Countdown; 429 (zu viele gleichzeitige
+  Abfragen) bekommt eine eigene Meldung. Zoom-Abfragen: nur 1 Versuch, ältere werden abgebrochen, während einer
+  Etappensuche pausiert.
+- **Zwischenspeicher (7 Tage, localStorage):** `gp.cache.op` = Overpass-Ergebnisse je Rechteck (nur nötige Tags,
+  wiederverwendet, wenn ein gespeichertes Rechteck das neue enthält, max. ~1,5 Mio. Zeichen), `gp.cache.mx` =
+  ORS-Matrix je Anfrage (max. ~0,5 Mio. Zeichen). Routen nur im Arbeitsspeicher. Ist der Speicher voll, gehen
+  Touren vor (Zwischenspeicher wird geleert).
 - **Kartenkacheln:** `tile.openstreetmap.org`. Funktioniert nur über GitHub Pages/Webserver – als lokal geöffnete
   Datei (file://) blockiert OSM die Kacheln (403). CARTO-Basemaps verlangen inzwischen einen API-Key → nicht nutzen.
-- localStorage-Schlüssel: `gp.settings`, `gp.tours`.
+- localStorage-Schlüssel: `gp.settings`, `gp.tours`, `gp.cache.op`, `gp.cache.mx`.
 
 ## Datenquellen – rechtlicher Rahmen
 
