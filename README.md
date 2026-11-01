@@ -1,4 +1,4 @@
-# Gespann-Etappen
+# Reiseplaner (ehemals Gespann-Etappen)
 
 Privater Etappenplaner für Wohnwagen-Gespanne: Start und Ziel eingeben, die App zeigt die Gesamtstrecke und
 fragt, wie viele Etappen es werden sollen. Pro Etappe zeigt sie Campingplätze um die ideale Etappenlänge

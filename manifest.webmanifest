@@ -1,7 +1,7 @@
 {
-  "name": "Gespann-Etappen",
-  "short_name": "Etappen",
-  "description": "Campingplätze für Wohnwagen-Gespanne etwa alle 400 km entlang einer Route",
+  "name": "Reiseplaner",
+  "short_name": "Reiseplaner",
+  "description": "Reiseplaner fürs Wohnwagen-Gespann: Etappen, Campingplätze, Sehenswürdigkeiten",
   "lang": "de",
   "start_url": "./",
   "scope": "./",

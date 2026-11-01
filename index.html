@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Gespann-Etappen</title>
+<title>Reiseplaner</title>
 <meta name="description" content="Campingplätze für Wohnwagen-Gespanne etwa alle 400 km entlang einer Route finden.">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#9cbca2">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Etappen">
+<meta name="apple-mobile-web-app-title" content="Reiseplaner">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 :root{
@@ -86,6 +86,7 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .sugg{position:absolute;left:0;right:0;top:100%;z-index:5;list-style:none;margin:2px 0 0;padding:4px;
   background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15)}
 .sugg:empty{display:none}
+.sugg .sugghead{padding:6px 10px;font-size:13px;color:var(--accent);font-weight:600}
 .sugg button{display:block;width:100%;text-align:left;font:inherit;color:var(--text);background:none;border:0;
   padding:9px 10px;border-radius:8px;cursor:pointer}
 .sugg button:hover,.sugg button:focus{background:var(--brand-soft)}
@@ -315,7 +316,7 @@ a{color:var(--brand-ink)}
   <button id="handle" type="button" aria-label="Bereich vergrößern oder verkleinern"><span></span></button>
   <div id="scroll">
     <header class="top">
-      <div class="brand"><svg class="logo" viewBox="0 0 72 40" width="40" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M37 30 H58 V20 C57 12 51 6 43 6 H14 a6 6 0 0 0 -6 6 V30 H25 A6 6 0 0 1 37 30"/><path d="M8 23 H14 M23 23 H58"/><rect x="14" y="11" width="9" height="16" rx="2.5"/><path d="M16.5 19 v1.5"/><path d="M35 11 H50 C52.5 11 54 13 54.5 18 H35 Z"/><path d="M44 11 V18"/><path d="M58 28 H70"/><circle cx="31" cy="31" r="4"/></svg><h1>Gespann-Etappen</h1></div>
+      <div class="brand"><svg class="logo" viewBox="0 0 72 40" width="40" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M37 30 H58 V20 C57 12 51 6 43 6 H14 a6 6 0 0 0 -6 6 V30 H25 A6 6 0 0 1 37 30"/><path d="M8 23 H14 M23 23 H58"/><rect x="14" y="11" width="9" height="16" rx="2.5"/><path d="M16.5 19 v1.5"/><path d="M35 11 H50 C52.5 11 54 13 54.5 18 H35 Z"/><path d="M44 11 V18"/><path d="M58 28 H70"/><circle cx="31" cy="31" r="4"/></svg><h1>Reiseplaner</h1></div>
       <div>
         <button class="btn ghost" id="sumBtn" type="button" hidden>Übersicht</button>
         <button class="btn ghost" id="toursBtn" type="button">Touren</button>
@@ -538,7 +539,8 @@ const photonLabel = p => [p.name, [p.postcode, p.city || p.town || p.village].fi
   .filter((x, i, a) => x && a.indexOf(x) === i).join(', ');
 async function photonGeocode(text, size){
   const j = await getJson(`${PHOTON}/api/?q=${encodeURIComponent(text)}&limit=${size}&lang=de`, 'Ersatz-Ortssuche (Photon)');
-  return (j.features || []).map(f => ({ lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], label:photonLabel(f.properties) }));
+  return (j.features || []).map(f => ({ lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], label:photonLabel(f.properties),
+    camp: f.properties.osm_value === 'camp_site' || f.properties.osm_value === 'caravan_site' }));
 }
 async function photonReverse(p){
   const j = await getJson(`${PHOTON}/reverse?lon=${p.lon}&lat=${p.lat}&lang=de`, 'Photon');
@@ -576,6 +578,28 @@ function renderFallbackNote(){ const n = $('#fbNote'); if (n) n.hidden = !useFal
 async function geocode(text, size, auto){
   return withFallback(() => orsGeocode(text, size, auto), () => photonGeocode(text, size), auto);
 }
+// Suche für Zwischenziele/Sehenswürdigkeiten: ORS + Photon (Photon kennt jeden benannten OSM-Ort, auch
+// Campingplätze und Sehenswürdigkeiten – ORS liefert dafür oft nur die Ortschaft). Treffer, die alle Suchwörter
+// enthalten, kommen zuerst; `full` markiert sie.
+const qWords = t => t.toLowerCase().split(/[\s,]+/).filter(w => w.length >= 3);
+const fullMatch = (g, t) => { const l = g.label.toLowerCase(); return qWords(t).every(w => l.includes(w)); };
+async function placeSearch(t, auto){
+  let err = null;
+  const [a, b] = await Promise.all([
+    geocode(t, auto ? 6 : 5, auto).catch(e => { err = e; return []; }),
+    useFallback ? Promise.resolve([]) : photonGeocode(t, 6).catch(() => [])
+  ]);
+  const out = [];
+  for (const g of [...a, ...b]){
+    const head = g.label.split(',')[0].trim().toLowerCase();
+    const same = out.find(o => hav([o.lat, o.lon], [g.lat, g.lon]) < 300 && o.label.split(',')[0].trim().toLowerCase() === head);
+    if (same){ if (g.camp) same.camp = true; continue; }
+    out.push({ ...g, full: fullMatch(g, t) });
+  }
+  if (!out.length && err) throw err;
+  return [...out.filter(g => g.full), ...out.filter(g => !g.full)].slice(0, 8);
+}
+const suggHtml = r => r.map((g, i) => `<li><button type="button" data-i="${i}">${g.camp ? '⛺ ' : ''}${esc(g.label)}</button></li>`).join('');
 async function geocodeFirst(text){
   text = text.trim();
   if (!text) throw new Error('Bitte Start und Ziel eingeben.');
@@ -1870,7 +1894,9 @@ function renderVia(){
   ul.querySelectorAll('[data-vsadd]').forEach(inp => inp.onkeydown = async e => {
     if (e.key !== 'Enter') return; e.preventDefault();
     const t = inp.value.trim(), v = state.via[+inp.dataset.vsadd]; if (!t || !v) return;
-    try { const g = await geocodeFirst(t); (v.sights = v.sights || []).push({ uid:'s' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon }); ch();
+    try { const r = await placeSearch(t, false); if (!r.length) throw new Error('Ort nicht gefunden: ' + t);
+      const g = r[0]; if (!g.full) flash(`„${t}“ nicht genau gefunden – „${shortLabel(g.label)}“ übernommen.`);
+      (v.sights = v.sights || []).push({ uid:'s' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon }); ch();
       setTimeout(() => $(`[data-vsadd="${state.via.indexOf(v)}"]`)?.focus(), 0); }
     catch(err){ setStatus(err.message, 'error'); }
   });
@@ -1929,7 +1955,8 @@ function addVia(g){
   if (!g) return;
   const dup = state.via.find(v => v.label === g.label && Math.abs(v.lat - g.lat) < 1e-4 && Math.abs(v.lon - g.lon) < 1e-4);
   if (dup){ flash(`„${shortLabel(g.label)}“ ist schon in der Liste.`); $('#viaIn').value = ''; $('#viaSugg').innerHTML = ''; return; }
-  state.via.push({ uid:'v' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon, kind:'stay', nights:1 });
+  state.via.push({ uid:'v' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon, kind:g.camp ? 'rest' : 'stay', nights:1 });
+  if (g.camp) flash(`⛺ „${shortLabel(g.label)}“ ist ein Campingplatz – als Zwischenstopp „Pause / freie Tage“ eingetragen; er steht bei der Platzwahl ganz oben.`);
   $('#viaIn').value = ''; $('#viaSugg').innerHTML = '';
   renderVia(); renderMap();
 }
@@ -1972,19 +1999,32 @@ async function optimizeVia(){
     const t = inp.value.trim();
     if (t.length < 3 || (!settings.key && !useFallback)){ list.innerHTML = ''; return; }
     try {
-      const r = await geocode(t, 6, true); last = r; lastQ = t;
-      if (inp.value.trim() !== t || document.activeElement !== inp) return;
-      list.innerHTML = r.map((g, i) => `<li><button type="button" data-i="${i}">${esc(g.label)}</button></li>`).join('');
-      list.querySelectorAll('button').forEach(b => b.onclick = () => addVia(r[+b.dataset.i]));
+      if (list.querySelector('.sugghead') && lastQ === t) return;      // Auswahl nach Enter steht schon
+      const r = await placeSearch(t, true);
+      if (inp.value.trim() !== t || document.activeElement !== inp || (list.querySelector('.sugghead') && lastQ === t)) return;
+      last = r; lastQ = t;
+      showSugg(r);
     } catch(e){ list.innerHTML = ''; }
   }, 450);
+  function showSugg(r, head){
+    list.innerHTML = (head ? `<li class="sugghead">${head}</li>` : '') + suggHtml(r);
+    list.querySelectorAll('button').forEach(b => b.onclick = () => { addVia(r[+b.dataset.i]); last = []; lastQ = ''; });
+  }
   inp.addEventListener('input', search);
-  inp.addEventListener('blur', () => setTimeout(() => list.innerHTML = '', 200));
+  inp.addEventListener('blur', () => setTimeout(() => { if (!list.querySelector('.sugghead')) list.innerHTML = ''; }, 200));
+  document.addEventListener('pointerdown', e => { if (list.querySelector('.sugghead') && !e.target.closest('.viaadd')) list.innerHTML = ''; });
   let adding = false;
+  // Enter/„+ Hinzufügen“: nur ein Treffer mit allen Suchwörtern wird direkt übernommen, sonst Auswahl zeigen
+  // (z. B. „Hultsfred Strandcamping“ → nicht still die Ortschaft „Hultsfred“ eintragen)
   window.addViaFromInput = async () => {
     const t = inp.value.trim(); if (!t || adding) return;
     adding = true;
-    try { addVia(last.length && lastQ === t ? last[0] : await geocodeFirst(t)); last = []; lastQ = ''; }
+    try {
+      const r = last.length && lastQ === t ? last : await placeSearch(t, false);
+      if (!r.length) throw new Error('Ort nicht gefunden: ' + t);
+      if (r[0].full){ addVia(r[0]); last = []; lastQ = ''; }
+      else { last = r; lastQ = t; showSugg(r, `„${esc(t)}“ nicht genau gefunden – bitte auswählen:`); }
+    }
     catch(err){ setStatus(err.message, 'error'); }
     finally { adding = false; }
     inp.focus();
@@ -2003,6 +2043,10 @@ async function optimizeVia(){
     }
     touch(); renderVia(); renderPanel();
   };
+  // Leeres Rückkehrfeld: beim Antippen vorübergehend die Abfahrt eintragen, damit der Kalender dort aufgeht
+  const retIn = $('#retIn'), preset = () => { if (!state.ret && state.date && !retIn.value) retIn.value = state.date; };
+  retIn.addEventListener('pointerdown', preset); retIn.addEventListener('focus', preset);
+  retIn.addEventListener('blur', () => { if (!state.ret) retIn.value = ''; });
   $('#retIn').onchange = () => {
     let r = $('#retIn').value || null;
     if (r && state.date && r < state.date){ r = state.date; flash('Rückkehr kann nicht vor der Abfahrt liegen – auf den Abfahrtstag gesetzt.'); }
@@ -2383,7 +2427,7 @@ function exportGpx(){
   const pts = [];
   state.stages.forEach((s, i) => (i ? s.line.slice(1) : s.line).forEach(p => pts.push(p)));
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Gespann-Etappen" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx version="1.1" creator="Reiseplaner" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata><name>${x(name)}</name></metadata>
 ${w}  <trk><name>${x(name)}</name><trkseg>
 ${pts.map(p => `    <trkpt lat="${p[0].toFixed(6)}" lon="${p[1].toFixed(6)}"/>`).join('\n')}
@@ -2558,7 +2602,7 @@ async function printTour(){
     <thead><tr><th>Nr.</th><th>Datum</th><th>Von → Nach</th><th>Strecke</th><th>Campingplatz</th><th>Adresse</th><th>Rezeption</th><th>Website / Kontakt</th></tr></thead>
     <tbody>${rows}</tbody></table>
     ${printDays()}
-    <div class="foot">Kartendaten © OpenStreetMap-Mitwirkende · Routing openrouteservice.org · erstellt mit Gespann-Etappen am ${new Date().toLocaleDateString('de-DE')}. Angaben ohne Gewähr.</div>`;
+    <div class="foot">Kartendaten © OpenStreetMap-Mitwirkende · Routing openrouteservice.org · erstellt mit Reiseplaner am ${new Date().toLocaleDateString('de-DE')}. Angaben ohne Gewähr.</div>`;
   // Übersichtskarte
   if (printMap){ printMap.remove(); printMap = null; }
   printMap = L.map(el.querySelector('.pmap'), { zoomControl:false, attributionControl:false, fadeAnimation:false, zoomAnimation:false, inertia:false });
