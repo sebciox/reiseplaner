@@ -166,6 +166,33 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .icobtn.done{color:var(--ok)}
 .det .sbtns,.det .coord{vertical-align:middle}
 .land > div{margin-top:2px}
+.vialist{list-style:none;margin:0 0 6px;padding:0;display:grid;gap:6px}
+.vialist li{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.vialist li.visit{border-style:dashed;border-color:var(--accent);background:var(--warn-soft)}
+.vialist .vn{font-weight:700;color:var(--brand);min-width:16px;margin-top:2px}
+.vialist li.visit .vn{color:var(--accent)}
+.vialist .vt{flex:1;min-width:0}
+.vialist .vt b{display:block;overflow-wrap:anywhere;font-weight:600}
+.vialist .vopts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:13px;color:var(--muted)}
+.vialist select,.segrow select{font:inherit;font-size:13px;padding:3px 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
+.vialist input[type=number]{width:56px;min-height:30px;padding:3px 6px;font-size:13px}
+.vialist .vbtns{display:flex;gap:2px}
+.vialist .vbtns button{width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;font-size:14px}
+.vialist .vbtns button:hover{background:var(--brand-soft);color:var(--brand)}
+.viatools{display:flex;gap:6px;margin-top:6px}
+.field label.check{display:flex;text-transform:none;font-size:14px;font-weight:400;color:var(--text);letter-spacing:0;margin-bottom:0}
+.vialist label{display:inline-flex;align-items:center;gap:4px;margin:0;text-transform:none;font-size:13px;font-weight:400;letter-spacing:0;color:var(--muted)}
+.segs{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.segrow{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+.segrow .st{flex:1;min-width:0}
+.segrow .st b{overflow-wrap:anywhere}
+.stepper{display:flex;align-items:center;gap:4px;flex:none}
+.stepper button{width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;font-size:16px}
+.stepper span{min-width:22px;text-align:center;font-weight:700}
+.sightinfo{font-size:13px;color:var(--accent);margin-top:2px}
+.pin.sight{background:#e07b24}
+.pin.visit{background:#fdf1e3;border:2px dashed #e07b24}
+.pin.visit span{color:#b8560d}
 .endsel{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-top:8px}
 /* Schwebende Knöpfe am Handy: Menü ein/aus, Übersicht */
 #fabs{position:fixed;left:12px;top:calc(12px + env(safe-area-inset-top));z-index:1001;display:flex;flex-direction:column;gap:8px}
@@ -258,9 +285,17 @@ a{color:var(--brand)}
         <ul class="sugg" id="startSugg"></ul>
       </div>
       <div class="field">
+        <label for="viaIn">Zwischenziele / Sehenswürdigkeiten <span class="muted" style="text-transform:none;font-weight:400">(optional)</span></label>
+        <ol class="vialist" id="viaList"></ol>
+        <div style="position:relative"><input id="viaIn" placeholder="z. B. Astrid Lindgrens Värld – Enter fügt hinzu" enterkeyhint="enter">
+          <ul class="sugg" id="viaSugg"></ul></div>
+        <div class="viatools" id="viaTools" hidden><button class="btn small" type="button" id="viaOpt">Reihenfolge optimieren</button></div>
+      </div>
+      <div class="field">
         <label for="endIn">Ziel</label>
         <input id="endIn" placeholder="z. B. Malmö" enterkeyhint="go">
         <ul class="sugg" id="endSugg"></ul>
+        <label class="check" style="margin-top:6px"><input type="checkbox" id="roundIn"><span>zurück zum Start (Rundreise)</span></label>
       </div>
       <button class="btn primary wide" id="planBtn" type="submit">Strecke berechnen</button>
     </form>
@@ -358,7 +393,10 @@ const state = { start:null, end:null, stages:[], pending:null, done:false, busy:
                 overview:null,   // Gesamtroute Start → Ziel { from, line, dist, dur }
                 date:null,       // Abfahrtsdatum 'JJJJ-MM-TT'
                 alt:null,        // Ausweichplatz-Suche { i, r, list }
-                openDet:new Set(), showEndList:false };
+                openDet:new Set(), showEndList:false,
+                via:[],          // Zwischenziele { uid, label, lat, lon, kind:'stay'|'visit', nights }
+                round:false,     // Rundreise: zurück zum Start
+                segs:null };     // Abschnitte bei Zwischenzielen { to, kind:'sight'|'end'|'home', visits, n, nights, radius, dist, dur }
 const campIndex = new Map();
 const $ = s => document.querySelector(s);
 
@@ -454,8 +492,9 @@ async function photonReverse(p){
   const j = await getJson(`${PHOTON}/reverse?lon=${p.lon}&lat=${p.lat}&lang=de`, 'Photon');
   return j.features?.[0]?.properties || null;
 }
-async function osrmRoute(a, b, vmax){
-  const base = `${OSRM}/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson&steps=true`;
+async function osrmRoute(a, b, vmax, via = []){
+  const pts = [a, ...via, b].map(p => `${p.lon},${p.lat}`).join(';');
+  const base = `${OSRM}/route/v1/driving/${pts}?overview=full&geometries=geojson&steps=true`;
   let j = await getJson(base + (settings.noToll ? '&exclude=toll' : ''), 'Ersatz-Routing (OSRM)');
   if (j.code !== 'Ok' && settings.noToll) j = await getJson(base, 'Ersatz-Routing (OSRM)');
   if (j.code !== 'Ok' || !j.routes?.length) throw new Error('Ersatz-Routing: keine Route gefunden.');
@@ -492,9 +531,10 @@ async function geocodeFirst(text){
   if (!r.length) throw new Error('Ort nicht gefunden: ' + text);
   return r[0];
 }
-async function route(a, b){
+async function route(a, b, via = []){
   const vmax = Math.max(80, +settings.speed || 80);
-  const body = { coordinates: [[a.lon, a.lat], [b.lon, b.lat]], radiuses: [-1, -1], extra_info: ['waycategory', 'tollways'] };
+  const P = [a, ...via, b];
+  const body = { coordinates: P.map(p => [p.lon, p.lat]), radiuses: P.map(() => -1), extra_info: ['waycategory', 'tollways'] };
   // Mit Tempolimit 80 sind Landstraßen für den Router oft genauso schnell wie die Autobahn → er nimmt die kürzere
   // Landstraße. „Autobahn bevorzugen“: Route mit normalen Pkw-Geschwindigkeiten berechnen und die Fahrzeit
   // anschließend je Abschnitt auf vmax deckeln (dafür braucht es die Schritte → instructions an).
@@ -514,7 +554,7 @@ async function route(a, b){
     const sum = (k, test) => (f.properties.extras?.[k]?.summary || []).filter(x => test(x.value)).reduce((a, x) => a + (x.distance || 0), 0);
     const ex = f.properties.extras ? { ferry: sum('waycategory', v => v & 4), toll: sum('tollways', v => v === 1) } : null;
     return { line: f.geometry.coordinates.map(c => [c[1], c[0]]), dist, dur, ex };
-  }, () => osrmRoute(a, b, vmax));
+  }, () => osrmRoute(a, b, vmax, via));
   routeMem.set(ck, res);
   if (routeMem.size > 30) routeMem.delete(routeMem.keys().next().value);
   return res;
@@ -853,6 +893,8 @@ function shareText(i){
   const s = state.stages[i], c = s.to, ds = stageDates(), r = rzData[c.id];
   return [`Etappe ${i + 1}${ds ? ' · ' + fdate(ds[i]) : ''}: ${shortLabel(s.from.label)} → ${c.label}`,
     `${fkm(s.dist)} · ${fdur(s.dur)}`,
+    s.vias && s.vias.length ? 'Unterwegs: ' + visitsOf(s).map(v => v.label).join(', ') : '',
+    c.near ? `Sehenswürdigkeit: ${c.near.label}${c.near.d != null ? ' · ' + fkm1(c.near.d) : ''}` : '',
     c.addr && c.addr !== 'unbekannt' ? 'Adresse: ' + c.addr : '',
     'Koordinaten: ' + fcoord(c),
     r && r.status === 'ok' && r.hours ? 'Rezeption: ' + r.hours : '',
@@ -953,11 +995,42 @@ const halfWidth = () => Math.max(25, (+settings.cmax - +settings.cmin) / 2);
 
 /* Schritt 1: Gesamtstrecke berechnen, danach fragt das Panel nach der Anzahl der Etappen */
 async function computeOverview(){
-  state.stages = []; state.pending = null; state.done = false; state.endCands = []; state.n = null; state.tourId = null;
+  state.stages = []; state.pending = null; state.done = false; state.endCands = []; state.n = null; state.tourId = null; state.segs = null;
   setStatus('Gesamtstrecke wird berechnet …', 'busy'); renderAll();
+  if (state.via.length){ await computeSegs(); renderAll(); fitAll(); return; }
   const r = await route(state.start, state.end);
   state.overview = { from:state.start, ...r };
   renderAll(); fitAll();
+}
+/* Zwischenziele → Abschnitte: jedes Ziel mit Übernachtung beendet einen Abschnitt; „Besuch unterwegs“ sind
+   Durchgangspunkte im Abschnitt. Lange Abschnitte bekommen Transit-Etappen (Anzahl je Abschnitt wählbar). */
+async function computeSegs(){
+  const segs = []; let pend = [];
+  for (const v of state.via){
+    if (v.kind === 'visit'){ pend.push(v); continue; }
+    segs.push({ to:{ lat:v.lat, lon:v.lon, label:v.label, uid:v.uid }, kind:'sight', visits:pend, nights:Math.max(1, +v.nights || 1), radius:+v.radius || 20 });
+    pend = [];
+  }
+  segs.push({ to:{ ...(state.round ? state.start : state.end) }, kind: state.round ? 'home' : 'end', visits:pend });
+  let from = state.start, dist = 0, dur = 0, line = [];
+  for (let k = 0; k < segs.length; k++){
+    const g = segs[k];
+    setStatus(`Abschnitt ${k + 1} von ${segs.length} wird berechnet …`, 'busy');
+    const r = await route(from, g.to, g.visits);
+    g.dist = r.dist; g.dur = r.dur; g.rec = plan(r.dist).n; g.n = g.rec; g._r = { ...r, from };
+    dist += r.dist; dur += r.dur; line = line.concat(r.line); from = g.to;
+  }
+  state.segs = segs;
+  state.overview = { from:state.start, multi:true, line, dist, dur };
+}
+const segDone = k => state.stages.filter(s => s.seg === k).length;
+const viaByUid = uid => state.via.find(v => v.uid === uid);
+const visitsOf = s => (s.vias || []).map(viaByUid).filter(Boolean);
+// Abstand eines Punktes entlang der Linie (nächster Linienpunkt)
+function posOnLine(line, cum, p){
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < line.length; i++){ const d = hav(line[i], [p.lat, p.lon]); if (d < bd){ bd = d; best = i; } }
+  return cum[best];
 }
 function chooseN(n){
   n = Math.round(n);
@@ -965,22 +1038,41 @@ function chooseN(n){
   state.n = Math.min(n, 30); state.stages = []; state.done = false;
   run(() => computeNext(state.start));
 }
+function startSegs(){
+  if (!state.segs || state.busy) return;
+  state.n = state.segs.reduce((a, g) => a + g.n, 0); state.stages = []; state.done = false;
+  run(() => computeNext(state.start));
+}
 
 async function computeNext(from){
-  state.pending = null; state.done = false; state.endCands = [];
+  state.pending = null; state.done = false; state.endCands = []; state.endSearched = false; state.showEndList = false;
   setStatus('Route wird berechnet …', 'busy'); renderAll();
-  const ov = state.overview;
-  const r = ov && ov.from === from ? ov : await route(from, state.end);
-  if (!state.n) state.n = plan(r.dist).n + state.stages.length;
-  const left = state.n - state.stages.length;            // noch zu fahrende Etappen inkl. dieser
+  const segs = state.segs;
+  let k = 0, g = null, target = state.end, visits = [], left, r;
+  if (segs){
+    k = segs.findIndex((x, i) => segDone(i) < x.n);
+    if (k < 0){ state.done = true; renderAll(); return; }
+    g = segs[k]; target = g.to;
+    const passed = new Set(state.stages.flatMap(s => s.vias || []));
+    visits = g.visits.filter(v => !passed.has(v.uid));
+    left = g.n - segDone(k);
+    r = g._r && g._r.from === from && visits.length === g.visits.length ? g._r : await route(from, target, visits);
+  } else {
+    const ov = state.overview;
+    r = ov && ov.from === from ? ov : await route(from, state.end);
+    if (!state.n) state.n = plan(r.dist).n + state.stages.length;
+    left = state.n - state.stages.length;                // noch zu fahrende Etappen inkl. dieser
+  }
   if (left <= 1){
-    state.stages.push({ from, to:{ ...state.end, kind:'end' }, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, note:null });
+    if (g && g.kind === 'sight'){ await loadAnchorCands(from, k, visits, r); return; }   // Platz an der Sehenswürdigkeit wählen
+    state.stages.push({ seg:k, vias:visits.map(v => v.uid), from, to:{ ...target, kind:'end' }, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, note:null });
     state.done = true; state.pending = null;
     renderAll(); fitAll();
-    await loadEndCands();
+    if (!(g && g.kind === 'home')) await loadEndCands();
     return;
   }
   const cum = cumul(r.line);
+  const visitPos = visits.map(v => ({ uid:v.uid, d:posOnLine(r.line, cum, v) }));
   const pl = { n:left, len:r.dist / left }, optKm = pl.len / 1000;   // Reststrecke gleichmäßig auf die übrigen Etappen
   for (let lv = 0; lv < LEVELS.length; lv++){
     const L = LEVELS[lv](optKm);
@@ -995,13 +1087,40 @@ async function computeNext(from){
       });
       cands.sort((a, b) => a.dev - b.dev);
       cands.forEach((c, i) => c.best = i === 0);
-      state.pending = { from, line:r.line, cum, remain:r.dist, remainDur:r.dur, cands, cmin:L.cmin, cmax:L.cmax, detour:L.detour, plan:pl,
+      state.pending = { from, seg:k, visits, visitPos, line:r.line, cum, remain:r.dist, remainDur:r.dur, cands, cmin:L.cmin, cmax:L.cmax, detour:L.detour, plan:pl,
         info: null,
         note: cands.length ? L.note : 'Keine Campingplätze gefunden. Zoom auf der Karte rein und wähle einen Platz manuell.' };
       break;
     }
   }
   renderAll(); fitCorridor();
+}
+
+/* Campingplätze rund um eine Sehenswürdigkeit (Ende eines Abschnitts); Entfernung Platz ↔ Sehenswürdigkeit auf der
+   Straße mit normaler Pkw-Geschwindigkeit (Ausflug ohne Wohnwagen) */
+async function loadAnchorCands(from, k, visits, r, km){
+  const g = state.segs[k], sight = g.to;
+  km = km || g.radius || 20; g.radius = km;
+  const rad = km * 1000, dLat = rad / 111000, dLon = rad / (111000 * Math.cos(sight.lat * RAD));
+  setStatus(`Suche Campingplätze bei ${shortLabel(sight.label)} …`, 'busy');
+  const all = await campsInBox([sight.lat - dLat, sight.lon - dLon, sight.lat + dLat, sight.lon + dLon], { onStatus: t => setStatus(t, 'busy') });
+  let camps = all.map(c => { c.air = hav([sight.lat, sight.lon], [c.lat, c.lon]); campIndex.set(c.id, c); return c; })
+                 .filter(c => c.air <= rad).sort((a, b) => a.air - b.air).slice(0, 25);
+  if (camps.length){
+    setStatus('Entfernungen zur Sehenswürdigkeit …', 'busy');
+    try {
+      const j = await matrix({ locations:[[+sight.lon.toFixed(5), +sight.lat.toFixed(5)], ...camps.map(c => [c.lon, c.lat])],
+        sources:[0], destinations:camps.map((_, i) => i + 1), metrics:['distance', 'duration'] });
+      camps.forEach((c, i) => { const d = j.distances?.[0]?.[i]; c.sight = d != null ? { d, t:j.durations?.[0]?.[i] ?? 0 } : null; });
+    } catch(e){ console.warn(e); }
+    camps.sort((a, b) => (a.sight ? a.sight.d : a.air * 1.4) - (b.sight ? b.sight.d : b.air * 1.4));
+  }
+  camps.forEach((c, i) => c.best = i === 0);
+  state.pending = { mode:'anchor', seg:k, from, visits, line:r.line, cum:cumul(r.line), remain:r.dist, remainDur:r.dur, cands:camps,
+    sight, radius:km, plan:null, cmin:0, cmax:0, detour:0,
+    note: camps.length ? null : `Keine Campingplätze im Umkreis von ${km} km – Umkreis vergrößern oder auf der Karte reinzoomen.` };
+  renderAll();
+  map.fitBounds(L.latLngBounds([[sight.lat, sight.lon], ...camps.map(c => [c.lat, c.lon])]).pad(0.15), sheetPad());
 }
 
 /* Campingplätze rund um den Zielort, um das Ziel auf einen Platz zu legen */
@@ -1023,8 +1142,8 @@ async function selectEnd(c){
   if (!state.done || !s) return;
   setStatus('Letzte Etappe wird neu berechnet …', 'busy');
   const to = campPoint(c); to.air = c.air;
-  const r = await route(s.from, to);
-  state.stages[i] = { from:s.from, to, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, note:null };
+  const r = await route(s.from, to, visitsOf(s));
+  state.stages[i] = { ...s, to, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, countries:undefined, note:null };
   state.showEndList = false; state.alt = null; touch();
   renderAll(); fitAll();
 }
@@ -1049,10 +1168,11 @@ async function replaceStop(i, c){
   const s = state.stages[i]; if (!s) return;
   const to = campPoint(c);
   setStatus('Etappe wird neu berechnet …', 'busy');
-  const r = await route(s.from, to);
+  if (s.to.near) to.near = { label:s.to.near.label, d:null, t:null, air:hav([c.lat, c.lon], [s.to.lat, s.to.lon]) + (s.to.near.air || 0) };
+  const r = await route(s.from, to, visitsOf(s));
   state.stages[i] = { ...s, to, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, countries:undefined, note:null, memo:undefined };
   const nx = state.stages[i + 1];
-  if (nx){ const r2 = await route(to, nx.to); state.stages[i + 1] = { ...nx, from:to, line:r2.line, dist:r2.dist, dur:r2.dur, ex:r2.ex, countries:undefined }; }
+  if (nx){ const r2 = await route(to, nx.to, visitsOf(nx)); state.stages[i + 1] = { ...nx, from:to, line:r2.line, dist:r2.dist, dur:r2.dur, ex:r2.ex, countries:undefined }; }
   state.alt = null; state.openDet.add(i);
   if (!state.done && i === state.stages.length - 1){ await computeNext(to); }
   touch(); renderAll(); fitAll();
@@ -1061,9 +1181,14 @@ async function replaceStop(i, c){
 async function selectCamp(c){
   const p = state.pending; if (!p) return;
   const to = campPoint(c);
+  // Besuche unterwegs, die vor diesem Platz liegen (am Ende eines Abschnitts: alle)
+  const vias = p.mode === 'anchor' ? (p.visits || []) : (p.visitPos || []).filter(v => c.stageKm == null || v.d < c.stageKm).map(v => viaByUid(v.uid)).filter(Boolean);
+  if (p.mode === 'anchor') to.near = { label:p.sight.label, d:c.sight ? c.sight.d : null, t:c.sight ? c.sight.t : null, air:c.air };
   setStatus('Etappe wird berechnet …', 'busy');
-  const r = await route(p.from, to);
-  state.stages.push({ from:p.from, to, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, note:p.note });
+  const r = await route(p.from, to, vias);
+  const st = { seg:p.seg, vias:vias.map(v => v.uid), from:p.from, to, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, note:p.note };
+  if (p.mode === 'anchor') st.nights = state.segs[p.seg].nights;
+  state.stages.push(st);
   state.pending = null;
   await computeNext(to);
 }
@@ -1185,6 +1310,12 @@ function renderMap(){
     c._m = L.circleMarker([c.lat, c.lon], { radius:7, color:isOk(c) ? COL.ok : COL.unk, weight:3, fillColor:'#fff', fillOpacity:1 })
       .bindPopup(() => campInfo(c, 'end')).addTo(lyr.cands);
   });
+  state.via.forEach((v, i) => L.marker([v.lat, v.lon], { icon:pinIcon(v.kind === 'visit' ? '•' : '★', v.kind === 'visit' ? 'visit' : 'sight'), zIndexOffset:-100 })
+    .bindPopup(`<b>${esc(v.label)}</b><br>${v.kind === 'visit' ? 'Besuch unterwegs' : `Zwischenziel ${i + 1} · ${Math.max(1, +v.nights || 1)} Nächte`}`).addTo(lyr.pins));
+  if (state.pending && state.pending.mode === 'anchor'){
+    const q = state.pending.sight;
+    L.circle([q.lat, q.lon], { radius:state.pending.radius * 1000, color:COL.corridor, weight:2, fillOpacity:.05, dashArray:'6 6' }).addTo(lyr.corridor);
+  }
   if (state.start) L.marker([state.start.lat, state.start.lon], { icon:pinIcon('S') }).bindPopup(esc(state.start.label)).addTo(lyr.pins);
   if (state.end && !endIsCamp) L.marker([state.end.lat, state.end.lon], { icon:pinIcon('Z', 'end') }).bindPopup(esc(state.end.label)).addTo(lyr.pins);
   state.stages.forEach((s, i) => {
@@ -1300,7 +1431,27 @@ function nOptions(R){
   for (let n = Math.max(1, rec - 2); n <= rec + 2; n++) if (n === 1 || R / n >= 100000) out.push(n);
   return { rec, list: out };
 }
+function renderSegAsk(){
+  const o = state.overview, segs = state.segs, n = segs.reduce((a, g) => a + g.n, 0);
+  const nights = segs.reduce((a, g) => a + (g.n - 1) + (g.kind === 'sight' ? g.nights : 0), 0);
+  let h = `<div class="total"><div class="muted">${state.round ? 'Rundreise ab' : 'Reise'} ${esc(shortLabel(state.start.label))} · ${segs.length} Abschnitte</div>
+    <div class="big">${fkm(o.dist)}</div><div>ca. ${fdur(o.dur)} reine Fahrzeit · ${n} Etappen · ${nights} Übernachtungen</div></div>
+    <h3>Abschnitte</h3><ol class="segs">`;
+  let from = state.start;
+  segs.forEach((g, k) => {
+    const name = g.kind === 'sight' ? '★ ' + shortLabel(g.to.label) : g.kind === 'home' ? 'zurück nach ' + shortLabel(g.to.label) : shortLabel(g.to.label);
+    h += `<li class="segrow"><div class="st"><b>${esc(shortLabel(from.label))} → ${esc(name)}</b>
+      <div class="muted">${fkm(g.dist)} · ${fdur(g.dur)}${g.visits.length ? ' · unterwegs: ' + g.visits.map(v => esc(shortLabel(v.label))).join(', ') : ''}${g.kind === 'sight' ? ` · ${g.nights} ${g.nights === 1 ? 'Nacht' : 'Nächte'} dort` : ''}</div>
+      <div class="muted">${g.n === 1 ? 'direkt' : `${g.n} Etappen à ~${fkm(g.dist / g.n)}`}${g.n !== g.rec ? ` (Empfehlung ${g.rec})` : ''}</div></div>
+      <div class="stepper"><button type="button" data-segn="${k}" data-d="-1" aria-label="weniger Etappen">−</button><span>${g.n}</span><button type="button" data-segn="${k}" data-d="1" aria-label="mehr Etappen">+</button></div></li>`;
+    from = g.to;
+  });
+  h += `</ol><button class="btn primary wide" type="button" id="segGo" style="margin-top:10px" ${state.busy ? 'disabled' : ''}>Plätze wählen</button>
+    <div class="muted" style="margin-top:8px">Zahl = Etappen je Abschnitt (Empfehlung: höchstens ${+settings.cmax} km je Etappe). Am Ende eines Abschnitts mit ★ wählst du einen Platz nahe der Sehenswürdigkeit.</div>`;
+  return h;
+}
 function renderAsk(){
+  if (state.segs) return renderSegAsk();
   const o = state.overview, { rec, list } = nOptions(o.dist);
   let h = `<div class="total"><div class="muted">Gesamtstrecke ${esc(shortLabel(state.start.label))} → ${esc(shortLabel(state.end.label))}</div>
     <div class="big">${fkm(o.dist)}</div><div>ca. ${fdur(o.dur)} reine Fahrzeit (max. ${Math.max(80, +settings.speed || 80)} km/h)</div></div>
@@ -1334,6 +1485,8 @@ function renderPanel(){
         <div class="route">${esc(shortLabel(s.from.label))} → ${esc(shortLabel(s.to.label))}${camp ? amenHtml(s.to) : ''}${s.memo?.res ? '<span class="badge res">reserviert ✓</span>' : ''}</div>
         <div class="row"><span class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${s.to.detour ? ` · ${fkm1(s.to.detour.d)} / ${fdur(s.to.detour.t)} von der Route bis zum Platz` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? ` · ${s.nights} Nächte` : ''}</span>
         ${camp && !(state.done && i === state.stages.length - 1) ? `<button class="btn small" type="button" data-edit="${i}" ${busy ? 'disabled' : ''} title="Ab hier neu planen (anderen Platz im Korridor wählen)">Platz ändern</button>` : ''}</div>
+        ${s.to.near ? `<div class="sightinfo">★ ${esc(shortLabel(s.to.near.label))} · ${s.to.near.d != null ? `${fkm1(s.to.near.d)} / ${fdur(s.to.near.t)} (ohne Wohnwagen)` : `${fkm1(s.to.near.air || 0)} Luftlinie`}</div>` : ''}
+        ${s.vias && s.vias.length ? `<div class="muted">unterwegs: ${visitsOf(s).map(v => esc(shortLabel(v.label))).join(', ')}</div>` : ''}
         ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
         <div class="sbtns">
           <a class="btn" href="${navUrl(s.to)}" target="_blank" rel="noopener">🧭 Navigation</a>
@@ -1351,7 +1504,9 @@ function renderPanel(){
     const n = state.stages.length - 1;
     h += `<div class="summary">Gesamt ${fkm(km)} · ${fdur(t)} Fahrzeit · ${n} ${n === 1 ? 'Übernachtung' : 'Übernachtungen'}</div>`;
     const lastS = state.stages[state.stages.length - 1], endIsCamp = lastS.to.kind === 'camp';
-    if (endIsCamp && !state.showEndList)
+    const home = state.segs && state.segs[state.segs.length - 1].kind === 'home';   // Rundreise endet zu Hause
+    if (home) h += `<div class="endsel"><span>Zurück in <b>${esc(shortLabel(lastS.to.label))}</b> – Rundreise geschafft.</span></div>`;
+    else if (endIsCamp && !state.showEndList)
       h += `<div class="endsel"><span>Zielplatz: <b>${esc(lastS.to.label)}</b> ✓</span>
         <button class="btn small" type="button" id="endListBtn" ${busy ? 'disabled' : ''}>Ändern</button></div>`;
     else if (!state.endSearched && !busy)
@@ -1371,12 +1526,33 @@ function renderPanel(){
       h += '</ul>';
     }
   }
-  if (p){
-    h += `<h3>Etappe ${state.stages.length + 1} von ${state.n}: Platz wählen</h3>
+  if (p && p.mode === 'anchor'){
+    const g = state.segs[p.seg];
+    h += `<h3>Etappe ${state.stages.length + 1} von ${state.n}: Campingplatz bei ${esc(shortLabel(p.sight.label))}</h3>
+      <div class="ideal">★ <b>${esc(p.sight.label)}</b> · ${g.nights} ${g.nights === 1 ? 'Nacht' : 'Nächte'}
+        ${!busy ? ` · <button class="linkbtn" type="button" id="nChange">Abschnitte ändern</button>` : ''}
+        <div class="sbtns" style="margin-top:4px"><span class="muted">Umkreis</span>
+          <select id="ancR" aria-label="Umkreis um die Sehenswürdigkeit">${[10, 20, 30, 50].map(k => `<option value="${k}"${k === p.radius ? ' selected' : ''}>${k} km</option>`).join('')}</select>
+          ${coordHtml(p.sight)}</div></div>
+      <div class="muted">Anfahrt ${fkm(p.remain)} · ${fdur(p.remainDur)}${p.visits.length ? ' · unterwegs: ' + p.visits.map(v => esc(shortLabel(v.label))).join(', ') : ''}</div>
+      ${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}
+      <div class="legend"><span><i style="background:${COL.ok}"></i>Wohnwagen erlaubt</span><span><i style="background:${COL.unk}"></i>keine Angabe</span></div>
+      ${chipsHtml(p.cands)}${sortHtml(p.cands)}<ul class="cands">`;
+    const best0 = p.cands.filter(passFilter)[0];
+    sortRows(p.cands.filter(passFilter)).forEach(c => {
+      h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
+        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${c === best0 ? ' <span class="badge best">am nächsten</span>' : ''}${rateHtml(c)}</div>
+        <div class="sightinfo">${c.sight ? `${fkm1(c.sight.d)} / ${fdur(c.sight.t)} zur Sehenswürdigkeit (ohne Wohnwagen)` : `${fkm1(c.air)} Luftlinie zur Sehenswürdigkeit`}</div></div>
+        <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
+    });
+    h += `</ul><div class="muted" style="margin-top:8px">Sortiert nach Entfernung zur Sehenswürdigkeit. Weitere Plätze erscheinen auf der Karte beim Reinzoomen.</div>`;
+  }
+  else if (p){
+    h += `<h3>Etappe ${state.stages.length + 1} von ${state.n}: ${state.segs ? 'Transit-Stopp' : 'Platz wählen'}</h3>
       <div class="ideal">Ideal: noch <b>${p.plan.n} Etappen à ~${fkm(p.plan.len)}</b>
-        ${state.overview && !busy ? ` · <button class="linkbtn" type="button" id="nChange">Anzahl ändern</button>` : ''}
+        ${state.overview && !busy ? ` · <button class="linkbtn" type="button" id="nChange">${state.segs ? 'Abschnitte ändern' : 'Anzahl ändern'}</button>` : ''}
         ${(() => { const q = pointAt(p.line, p.cum, p.plan.len); return `<div class="sbtns" style="margin-top:4px"><span class="muted">Idealpunkt:</span> ${coordHtml({ lat:q[0], lon:q[1] })}</div>`; })()}</div>
-      <div class="muted">Bis zum Ziel noch ${fkm(p.remain)} · Korridor ${p.cmin}–${p.cmax} km · Umweg bis ${p.detour} km${p.info ? '<br>' + esc(p.info) : ''}</div>
+      <div class="muted">Bis ${state.segs ? esc(shortLabel(state.segs[p.seg].to.label)) : 'zum Ziel'} noch ${fkm(p.remain)}${p.visits && p.visits.length ? ' (unterwegs: ' + p.visits.map(v => esc(shortLabel(v.label))).join(', ') + ')' : ''} · Korridor ${p.cmin}–${p.cmax} km · Umweg bis ${p.detour} km${p.info ? '<br>' + esc(p.info) : ''}</div>
       ${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}
       <div class="legend"><span><i style="background:${COL.ok}"></i>Wohnwagen erlaubt</span><span><i style="background:${COL.unk}"></i>keine Angabe</span></div>
       ${chipsHtml(p.cands)}${sortHtml(p.cands)}<ul class="cands">`;
@@ -1464,6 +1640,11 @@ function renderPanel(){
     $('#nIn').oninput = () => { const n = Math.round(+$('#nIn').value);
       $('#nHint').textContent = n >= 1 && n <= 30 ? `à ~${fkm(state.overview.dist / n)} · je ca. ${fdur(state.overview.dur / n)}` : ''; };
   }
+  const anr = $('#ancR'); if (anr) anr.onchange = () => { const q = state.pending;
+    if (q && q.mode === 'anchor') run(() => loadAnchorCands(q.from, q.seg, q.visits, { line:q.line, dist:q.remain, dur:q.remainDur }, +anr.value)); };
+  el.querySelectorAll('[data-segn]').forEach(b => b.onclick = () => {
+    const g = state.segs[+b.dataset.segn]; g.n = Math.max(1, Math.min(15, g.n + +b.dataset.d)); renderPanel(); });
+  const sg = $('#segGo'); if (sg) sg.onclick = startSegs;
   const nc = $('#nChange'); if (nc) nc.onclick = () => { if (state.busy) return;
     Object.assign(state, { stages:[], pending:null, done:false, n:null, endCands:[] }); setStatus(''); renderAll(); fitAll(); };
   const esb = $('#endSearchBtn'); if (esb) esb.onclick = () => run(loadEndCands);
@@ -1534,6 +1715,83 @@ $('#handle').onclick = () => { if (sheetDragged) return; setSheet(SHEET[(SHEET.i
   window.addEventListener('resize', popupPad);
 })();
 
+/* ---------- Zwischenziele (Sehenswürdigkeiten) ---------- */
+let viaSeq = Date.now() % 1e6;
+function renderVia(){
+  const ul = $('#viaList');
+  ul.innerHTML = state.via.map((v, i) => `<li class="${v.kind === 'visit' ? 'visit' : ''}"><span class="vn">${i + 1}</span>
+    <div class="vt"><b>${esc(v.label)}</b><div class="vopts">
+      <select data-vkind="${i}" aria-label="Art des Zwischenziels"><option value="stay"${v.kind !== 'visit' ? ' selected' : ''}>★ Übernachten in der Nähe</option><option value="visit"${v.kind === 'visit' ? ' selected' : ''}>Besuch unterwegs</option></select>
+      ${v.kind !== 'visit' ? `<label><input type="number" min="1" max="30" data-vnights="${i}" value="${Math.max(1, +v.nights || 1)}"> Nächte</label>` : ''}</div></div>
+    <div class="vbtns"><button type="button" data-vup="${i}" aria-label="nach oben" ${i === 0 ? 'disabled' : ''}>▲</button><button type="button" data-vdown="${i}" aria-label="nach unten" ${i === state.via.length - 1 ? 'disabled' : ''}>▼</button><button type="button" data-vdel="${i}" aria-label="entfernen">✕</button></div></li>`).join('');
+  $('#viaTools').hidden = state.via.length < 2;
+  $('#roundIn').checked = !!state.round;
+  $('#endIn').disabled = !!state.round;
+  if (state.round) $('#endIn').value = state.start ? state.start.label : $('#startIn').value;
+  const ch = () => { renderVia(); renderMap(); };
+  ul.querySelectorAll('[data-vkind]').forEach(b => b.onchange = () => { state.via[+b.dataset.vkind].kind = b.value; ch(); });
+  ul.querySelectorAll('[data-vnights]').forEach(b => b.onchange = () => { state.via[+b.dataset.vnights].nights = Math.max(1, Math.round(+b.value) || 1); });
+  ul.querySelectorAll('[data-vup]').forEach(b => b.onclick = () => { const i = +b.dataset.vup; [state.via[i - 1], state.via[i]] = [state.via[i], state.via[i - 1]]; ch(); });
+  ul.querySelectorAll('[data-vdown]').forEach(b => b.onclick = () => { const i = +b.dataset.vdown; [state.via[i + 1], state.via[i]] = [state.via[i], state.via[i + 1]]; ch(); });
+  ul.querySelectorAll('[data-vdel]').forEach(b => b.onclick = () => { state.via.splice(+b.dataset.vdel, 1); ch(); });
+}
+function addVia(g){
+  if (!g) return;
+  state.via.push({ uid:'v' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon, kind:'stay', nights:1 });
+  $('#viaIn').value = ''; $('#viaSugg').innerHTML = '';
+  renderVia(); renderMap();
+}
+// Reihenfolge mit der kürzesten Gesamtstrecke (Luftlinie; bis 8 Ziele exakt, sonst Nächster Nachbar + 2-opt)
+async function optimizeVia(){
+  const P = state.via; if (P.length < 2) return;
+  // Start und Ziel werden gebraucht, damit die Reihenfolge zum Anfang und Ende passt
+  try {
+    if (!state.start) state.start = await geocodeFirst($('#startIn').value);
+    if (!state.round && !state.end) state.end = await geocodeFirst($('#endIn').value);
+  } catch(e){ setStatus(e.message, 'error'); return; }
+  const S = state.start, E = state.round ? S : state.end;
+  const d = (a, b) => a && b ? hav([a.lat, a.lon], [b.lat, b.lon]) : 0;
+  const cost = o => { let c = d(S, P[o[0]]); for (let i = 1; i < o.length; i++) c += d(P[o[i - 1]], P[o[i]]); return c + d(P[o[o.length - 1]], E); };
+  let best = P.map((_, i) => i), bc = cost(best);
+  if (P.length <= 8){
+    const perm = (arr, l) => { if (l === arr.length){ const c = cost(arr); if (c < bc){ bc = c; best = arr.slice(); } return; }
+      for (let i = l; i < arr.length; i++){ [arr[l], arr[i]] = [arr[i], arr[l]]; perm(arr, l + 1); [arr[l], arr[i]] = [arr[i], arr[l]]; } };
+    perm(P.map((_, i) => i), 0);
+  } else {
+    let improved = true;
+    while (improved){ improved = false;
+      for (let i = 0; i < best.length - 1; i++) for (let j = i + 1; j < best.length; j++){
+        const o = best.slice(0, i).concat(best.slice(i, j + 1).reverse(), best.slice(j + 1)), c = cost(o);
+        if (c < bc - 1){ best = o; bc = c; improved = true; } } }
+  }
+  state.via = best.map(i => P[i]);
+  renderVia(); renderMap(); flash('Reihenfolge optimiert (kürzeste Gesamtstrecke, Luftlinie).');
+}
+(function(){
+  const inp = $('#viaIn'), list = $('#viaSugg'); let last = [];
+  const search = debounce(async () => {
+    const t = inp.value.trim();
+    if (t.length < 3 || (!settings.key && !useFallback)){ list.innerHTML = ''; return; }
+    try {
+      const r = await geocode(t, 6, true); last = r;
+      if (inp.value.trim() !== t || document.activeElement !== inp) return;
+      list.innerHTML = r.map((g, i) => `<li><button type="button" data-i="${i}">${esc(g.label)}</button></li>`).join('');
+      list.querySelectorAll('button').forEach(b => b.onclick = () => addVia(r[+b.dataset.i]));
+    } catch(e){ list.innerHTML = ''; }
+  }, 450);
+  inp.addEventListener('input', search);
+  inp.addEventListener('blur', () => setTimeout(() => list.innerHTML = '', 200));
+  inp.addEventListener('keydown', async e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const t = inp.value.trim(); if (!t) return;
+    try { addVia(last[0] && inp.value.trim() === t && last.length ? last[0] : await geocodeFirst(t)); }
+    catch(err){ setStatus(err.message, 'error'); }
+  });
+  $('#viaOpt').onclick = optimizeVia;
+  $('#roundIn').onchange = () => { state.round = $('#roundIn').checked; if (state.round) state.end = null; renderVia(); };
+})();
+
 /* ---------- Eingabe Start/Ziel ---------- */
 function setupGeoInput(inp, list, key){
   const search = debounce(async () => {
@@ -1563,7 +1821,8 @@ $('#planForm').addEventListener('submit', e => {
   run(async () => {
     setStatus('Orte werden gesucht …', 'busy');
     if (!state.start) state.start = await geocodeFirst($('#startIn').value);
-    if (!state.end) state.end = await geocodeFirst($('#endIn').value);
+    if (state.round) state.end = { ...state.start };
+    else if (!state.end) state.end = await geocodeFirst($('#endIn').value);
     $('#startIn').value = state.start.label; $('#endIn').value = state.end.label;
     await computeOverview();
     if (window.innerWidth < 900) setSheet('half');
@@ -1738,13 +1997,16 @@ async function syncAndReport(okMsg, errMsg){
 
 /* ---------- Speichern, Laden, GPX ---------- */
 function loadTours(){ try { return JSON.parse(localStorage.getItem('gp.tours') || '[]'); } catch(e){ return []; } }
-function slimPoint(p){ const o = { lat:p.lat, lon:p.lon, label:p.label, kind:p.kind }; if (p.kind === 'camp'){ o.id = p.id; o.tags = p.tags; o.detour = p.detour; if (p.addr) o.addr = p.addr; } return o; }
-const defaultName = () => `${shortLabel(state.start.label)} → ${shortLabel(state.end.label)}`;
+function slimPoint(p){ const o = { lat:p.lat, lon:p.lon, label:p.label, kind:p.kind }; if (p.kind === 'camp'){ o.id = p.id; o.tags = p.tags; o.detour = p.detour; if (p.addr) o.addr = p.addr; if (p.near) o.near = p.near; } return o; }
+const defaultName = () => state.round ? `Rundreise ab ${shortLabel(state.start.label)}`
+  : `${shortLabel(state.start.label)} → ${shortLabel(state.end.label)}`;
 function buildTour(name, id){
   return { id: id || state.tourId || Date.now(), name: (name || '').trim() || defaultName(), savedAt: new Date().toISOString(),
     start: slimPoint(state.start), end: slimPoint(state.end), done: state.done, n: state.n, date: state.date || undefined,
+    via: state.via.length ? state.via : undefined, round: state.round || undefined,
+    segs: state.segs ? state.segs.map(g => ({ to:g.to, kind:g.kind, visits:g.visits, n:g.n, rec:g.rec, nights:g.nights, radius:g.radius, dist:g.dist, dur:g.dur })) : undefined,
     stages: state.stages.map(s => ({ from:slimPoint(s.from), to:slimPoint(s.to), dist:s.dist, dur:s.dur, note:s.note, line:thin(s.line),
-      ex: s.ex || undefined, countries: s.countries || undefined,
+      ex: s.ex || undefined, countries: s.countries || undefined, seg: s.seg || undefined, vias: s.vias && s.vias.length ? s.vias : undefined,
       memo: s.memo && (s.memo.res || s.memo.text) ? s.memo : undefined, nights: s.nights > 1 ? s.nights : undefined })),
     endCands: state.endSearched ? state.endCands.map(c => ({ id:c.id, lat:c.lat, lon:c.lon, tags:c.tags, air:Math.round(c.air) })) : undefined };
 }
@@ -1858,10 +2120,13 @@ function loadTour(id, given){
   const t = given || loadTours().find(x => x.id === id); if (!t || state.busy) return;
   Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id,
     endCands: (t.endCands || []).map(c => ({ ...c })), endSearched: !!t.endCands,
-    n: t.n || (t.done ? t.stages.length : null), overview:null, date: t.date || null, alt:null, openDet:new Set(), showEndList:false });
+    n: t.n || (t.done ? t.stages.length : null), overview:null, date: t.date || null, alt:null, openDet:new Set(), showEndList:false,
+    via: t.via || [], round: !!t.round, segs: t.segs || null });
+  t.stages.forEach(s => { if (s.seg == null) s.seg = 0; });
+  renderVia();
   t.stages.forEach(s => { if (s.to.kind === 'camp') campIndex.set(s.to.id, s.to); });
   state.endCands.forEach(c => campIndex.set(c.id, c));
-  $('#startIn').value = t.start.label; $('#endIn').value = t.end.label;
+  $('#startIn').value = t.start.label; $('#endIn').value = t.end.label; renderVia();
   setStatus(''); renderAll(); fitAll();
   // Unfertige Tour: Planung geht weiter (braucht die Suche). Fertige Tour: keine Abfrage – Plätze am Ziel kommen
   // aus der gespeicherten Tour oder erst auf Knopfdruck.
@@ -1871,8 +2136,8 @@ function loadTour(id, given){
 function resetTour(){
   if (state.busy) return;
   Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null, endCands:[], n:null, overview:null,
-    date:null, alt:null, openDet:new Set(), showEndList:false });
-  $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end;
+    date:null, alt:null, openDet:new Set(), showEndList:false, via:[], round:false, segs:null, endSearched:false });
+  $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end; renderVia();
   setStatus(''); renderAll();
 }
 function exportGpx(){
@@ -1919,6 +2184,8 @@ function renderSummary(){
       <span class="muted">${ds ? fdate(ds[i]) + ' · ' : ''}${fkm(s.dist)} · ${fdur(s.dur)}</span></span></summary>
       <div class="bd">
         <div><span class="k">Strecke</span> ${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}</div>
+        ${s.vias && s.vias.length ? `<div><span class="k">Unterwegs</span> ${visitsOf(s).map(v => esc(v.label)).join(', ')}</div>` : ''}
+        ${c.near ? `<div><span class="k">Sehenswürdigkeit</span> ★ ${esc(c.near.label)} · ${c.near.d != null ? fkm1(c.near.d) + ' / ' + fdur(c.near.t) : fkm1(c.near.air || 0) + ' Luftlinie'}</div>` : ''}
         ${camp ? `<div><span class="k">Campingplatz</span> ${esc(c.label)} ${isOk(c) ? '<span class="badge ok">Wohnwagen ✓</span>' : ''}${amenHtml(c)}</div>
         <div><span class="k">Adresse</span> ${esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–')}</div>
         <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
@@ -1966,7 +2233,7 @@ async function printTour(){
       r.checkout ? 'Check-out ' + esc(r.checkout.text) : '', r.url ? `<a class="sm" href="${esc(safeUrl(r.url))}">Quelle</a>` : ''].filter(Boolean).join('<br>') : '<span class="sm">–</span>';
     const extra = [s.countries && s.countries.length ? s.countries.join(' → ') : '', s.ex?.ferry > 200 ? 'Fähre' : '', s.ex?.toll > 1000 ? 'Maut ~' + fkm(s.ex.toll) : ''].filter(Boolean).join(' · ');
     rows += `<tr><td>${i + 1}</td><td>${ds ? fdate(ds[i]) : ''}</td>
-      <td>${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}</td>
+      <td>${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}${s.vias && s.vias.length ? `<br><span class="sm">unterwegs: ${visitsOf(s).map(v => esc(shortLabel(v.label))).join(', ')}</span>` : ''}${c.near ? `<br><span class="sm">★ ${esc(shortLabel(c.near.label))} ${c.near.d != null ? fkm1(c.near.d) : ''}</span>` : ''}</td>
       <td>${fkm(s.dist)}<br><span class="sm">${fdur(s.dur)}${extra ? '<br>' + esc(extra) : ''}</span></td>
       <td><b>${esc(c.label)}</b>${camp && isOk(c) ? '<br><span class="sm">Wohnwagen ✓</span>' : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
       <td>${camp ? esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–') : esc(c.label)}<br><span class="sm">${fcoord(c)}</span></td>
@@ -2055,7 +2322,7 @@ $('#importIn').addEventListener('change', e => { const f = e.target.files[0]; e.
 
 /* ---------- Start ---------- */
 $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end;
-renderAll(); popupPad();
+renderVia(); renderAll(); popupPad();
 if (!settings.key && !ghOn()) setStatus('Willkommen! Trag zuerst unter ⚙︎ deinen kostenlosen OpenRouteService-Schlüssel ein.');
 syncAndReport();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

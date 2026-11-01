@@ -21,7 +21,8 @@ der höchstens ~10 km von der Route entfernt liegt.
 | Zielgruppe | nur privat |
 | Plattform | PWA, rein clientseitig, Hosting GitHub Pages |
 | Planung | vorab zu Hause (keine Live-Navigation) |
-| Eingabe | nur Start und Ziel (keine Zwischenziele, kein „Fähren meiden“) |
+| Eingabe | Start, optionale **Zwischenziele** (Sehenswürdigkeiten/Orte; je „★ Übernachten in der Nähe“ mit Nächten oder „Besuch unterwegs“; ▲▼ sortieren, „Reihenfolge optimieren“ = kürzeste Luftlinien-Rundfahrt, bis 8 Ziele exakt), Ziel oder Schalter „zurück zum Start (Rundreise)“. Kein „Fähren meiden“ |
+| Rundreise (Phase 1) | Zwischenziele → **Abschnitte** (`state.segs`): jedes ★-Ziel beendet einen Abschnitt, „unterwegs“-Ziele sind Durchgangspunkte (ORS-Route mit mehreren Koordinaten). Übersicht „Abschnitte“ mit Etappen je Abschnitt (Empfehlung ceil(km/max), ± änderbar) → „Plätze wählen“. Transit-Etappen wie bisher im Korridor; letzte Etappe eines ★-Abschnitts = Campingplatz im Umkreis (Standard 20 km, 10/20/30/50) um die Sehenswürdigkeit, sortiert nach Straßenentfernung Platz ↔ Sehenswürdigkeit (ORS-Matrix, Pkw-Tempo = ohne Wohnwagen), `stage.to.near`, Nächte aus dem Ziel. Rundreise endet zu Hause ohne Platzliste. Stage hat `seg` + `vias` (passierte Besuche). Phase 2: Basislager für mehrere Sehenswürdigkeiten + Tagesplan + Besuch unterwegs mit Pause; Phase 3: Vorschläge in der Nähe, Liste einfügen, Excel |
 | Ablauf | 1. „Strecke berechnen“ → Gesamtstrecke + Fahrzeit anzeigen. 2. Frage „Wie viele Etappen?“ (Optionen Empfehlung ±2 mit km/Fahrzeit je Etappe, oder eigene Zahl). 3. Plätze je Etappe wählen. „Anzahl ändern“ führt zurück zu 2. |
 | Etappenlänge | ideale Länge = Reststrecke / übrige Etappen; Suchkorridor ± (max − min)/2 (Standard ±50 km), gemessen in km; Fahrzeit wird angezeigt |
 | Abstand zur Route | **echter Umweg auf der Straße** (einfache Richtung), Standard max. 10 km |
