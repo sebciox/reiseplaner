@@ -3530,6 +3530,8 @@ function renderTrip(){
     if (d.open){ tlOpen.add(i); ensureOneAddr(i); if (settings.gkey){ loadRatings([state.stages[i].to]); loadGName(state.stages[i].to).then(f => f && renderPanel()); } } else tlOpen.delete(i); }));
   // Google-Namen/-Infos aller Plätze des Reiseplans einmal laden (lädt nur, was noch fehlt)
   if (settings.gkey && !gErr && !gBusy) setTimeout(() => loadRatings(state.stages.map(s => s.to).filter(c => c.kind === 'camp')), 0);
+  // Recherche für die Plätze des Reiseplans anstoßen (z. B. OSM-Website tot → Google-Website), nur was noch fehlt
+  setTimeout(() => requestPrices(state.stages.map(s => s.to).filter(c => c.kind === 'camp')), 0);
   el.querySelectorAll('details[data-tls]').forEach(d => d.addEventListener('toggle', () => {
     const k = d.dataset.tls;
     if (!d.open){ tlsOpen.delete(k); return; }
