@@ -161,6 +161,9 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .tl-sightlist .sname{color:var(--accent);font-weight:700}
 .tl-drive .tl-sightlist{margin-left:0}
 .tl-sightlist details.gh{border:0;padding:0;background:none}
+details.gh,.tl-stop details.gh{border:0;padding:0;background:none;font-size:14px}
+details.gh summary{cursor:pointer}
+.price{font-size:13px;color:var(--brand-ink);margin-top:1px}
 .ghours{margin:2px 0 0;padding-left:0;list-style:none;font-size:13px}
 .sweb{display:flex;gap:6px;margin-top:2px}.sweb input{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--text)}
 .tl-body{margin-top:8px;display:grid;gap:4px;font-size:14px;overflow-wrap:anywhere}
@@ -830,7 +833,7 @@ async function overpass(q, opts = {}){
 
 /* Campingplätze in einem Rechteck [süd, west, nord, ost] – aus dem Zwischenspeicher, wenn ein gespeichertes
    Rechteck es vollständig enthält, sonst eine Overpass-Abfrage */
-const KEEP_TAGS = ['name', 'caravans', 'website', 'contact:website', 'url', 'phone', 'contact:phone', 'opening_hours',
+const KEEP_TAGS = ['name', 'caravans', 'charge', 'fee', 'website', 'contact:website', 'url', 'phone', 'contact:phone', 'opening_hours',
   'addr:street', 'addr:housenumber', 'addr:postcode', 'addr:city', 'addr:place',
   'power_supply', 'internet_access', 'shower', 'swimming_pool'];
 let opCache = cacheLoad(CK.op);
@@ -887,10 +890,11 @@ const AMEN = [
   { k:'pool',   i:'🏊', t:'Pool',          f: t => !!t.swimming_pool && t.swimming_pool !== 'no' }
 ];
 const amenList = c => AMEN.filter(a => a.f(c.tags || {}));
-function amenHtml(c){ const a = amenList(c); return a.length ? `<span class="amen" title="${a.map(x => x.t).join(', ')}">${a.map(x => x.i).join('')}</span>` : ''; }
+function amenHtml(){ return ''; }     // Ausstattung wird bewusst nicht mehr angezeigt (Strom/Duschen/WLAN setzt Sebastian voraus)
 const FILTERS = [ { k:'caravan', l:'Wohnwagen ✓', f: c => isOk(c) }, { k:'power', l:'🔌 Strom', f: c => AMEN[0].f(c.tags || {}) } ];
-const passFilter = c => !!c.added || FILTERS.every(x => !(settings.filters || {})[x.k] || x.f(c));
-function chipsHtml(all){
+const passFilter = () => true;        // Filter „Wohnwagen ✓ / Strom“ entfernt (caravans=no wird weiterhin beim Laden aussortiert)
+function chipsHtml(){ return ''; }
+function chipsHtmlOld(all){
   const hidden = all.filter(c => !passFilter(c)).length;
   return `<div class="chips"><span class="muted">Nur:</span>${FILTERS.map(x => `<button type="button" class="chip${(settings.filters || {})[x.k] ? ' on' : ''}" data-filter="${x.k}">${x.l}</button>`).join('')}
     ${hidden ? `<span class="muted">${hidden} ausgeblendet</span>` : ''}</div>`;
@@ -1038,13 +1042,24 @@ function sightSrc(x){
 }
 const normWeb = u => { u = String(u || '').trim(); if (!u) return ''; if (!/^https?:\/\//i.test(u)) u = 'https://' + u; try { const x = new URL(u); x.hash = ''; return x.href; } catch(e){ return ''; } };
 const sightKey = x => x.uid || (x.label + '@' + (+x.lat).toFixed(4));
-const sightBusy = new Set();
+const sightBusy = new Set(), INFO_V = 2;     // INFO_V erhöhen → Infos aller Sehenswürdigkeiten neu holen
 async function enrichSight(x){
-  const s = sightSrc(x); if (!s || s.info || s.lat == null || sightBusy.has(sightKey(s))) return false;
+  const s = sightSrc(x); if (!s || (s.info && s.info.v === INFO_V) || s.lat == null || sightBusy.has(sightKey(s))) return false;
   sightBusy.add(sightKey(s));
   try {
-    const q = `[out:json][timeout:20];nwr(around:800,${(+s.lat).toFixed(5)},${(+s.lon).toFixed(5)})[name][~"^(tourism|leisure|amenity|historic)$"~"."];out tags center 60;`;
-    const els = await overpass(q, { passes:1 });
+    const ll = `${(+s.lat).toFixed(5)},${(+s.lon).toFixed(5)}`;
+    const q = `[out:json][timeout:20];(nwr(around:800,${ll})[name][~"^(tourism|leisure|amenity|historic)$"~"."];node(around:6000,${ll})[place~"^(city|town|village|suburb|borough|quarter|hamlet|municipality|island|islet|locality)$"][name];);out tags center 80;`;
+    const all = await overpass(q, { passes:1 });
+    // Ort statt Attraktion (z. B. Stockholm, Göteborg): Name gleich dem Suchbegriff → keine Öffnungszeiten/Preise
+    const plain = t => (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    const head = plain(shortLabel(s.label));
+    const town = all.find(e => e.tags?.place && (plain(e.tags.name) === head || plain(e.tags['name:de']) === head || plain(e.tags['name:en']) === head));
+    if (town){
+      const old = s.info && s.info.webManual ? { web:s.info.web, webManual:true } : {};
+      s.info = { v:INFO_V, at:new Date().toISOString(), town:true, place:town.tags.place, osm:`${town.type}/${town.id}`, name:town.tags.name, web:'', oh:'', phone:'', fee:'', charge:'', addr:'', ...old };
+      touch(); return true;
+    }
+    const els = all.filter(e => !e.tags?.place);
     const want = nameTokens(shortLabel(s.label)), match = (a, b) => a === b || (a.length >= 5 && b.length >= 5 && a.slice(0, 5) === b.slice(0, 5));
     let best = null;
     for (const e of els){
@@ -1055,9 +1070,10 @@ async function enrichSight(x){
       if (!best || score > best.score) best = { score, e, t };
     }
     const t = best ? best.t : {};
-    s.info = { at:new Date().toISOString(), osm:best ? `${best.e.type}/${best.e.id}` : null, name:t.name || '',
+    const keep = s.info && s.info.webManual ? { web:s.info.web, webManual:true } : {};
+    s.info = { v:INFO_V, at:new Date().toISOString(), osm:best ? `${best.e.type}/${best.e.id}` : null, name:t.name || '',
       web:normWeb(t.website || t['contact:website'] || t.url || ''), oh:t.opening_hours || '', phone:t.phone || t['contact:phone'] || '',
-      fee:t.fee || '', charge:t.charge || '', addr:addrFromTags(t) || '' };
+      fee:t.fee || '', charge:t.charge || '', addr:addrFromTags(t) || '', ...keep };
   } catch(e){ console.warn(e); return false; }
   finally { sightBusy.delete(sightKey(s)); }
   if (!s.info.addr && settings.key){ try { s.info.addr = await reverseAddr(s) || ''; } catch(e){} }
@@ -1069,26 +1085,26 @@ let enrichRun = false;
 async function enrichAll(){
   if (enrichRun) return; enrichRun = true;
   try {
-    const all = state.via.filter(v => v.kind !== 'rest').flatMap(v => [v, ...(v.sights || [])]).filter(v => !v.info);
+    const all = state.via.filter(v => v.kind !== 'rest').flatMap(v => [v, ...(v.sights || [])]).filter(v => !v.info || v.info.v !== INFO_V);
     for (const v of all){ if (await enrichSight(v) && (uiTab === 'trip' || window.__allTabs)) renderTrip(); }
   } finally { enrichRun = false; }
 }
 const gSight = new Map();          // sightKey → { addr, web, oh:[…], open, r, n, uri } | null
 async function loadGSight(x){
   if (!settings.gkey) return false;
-  const s = sightSrc(x), k = sightKey(s); if (gSight.has(k)) return false;
+  const s = sightSrc(x), k = sightKey(s); if (gSight.has(k) || s.info?.town) return false;
   gSight.set(k, null);
   try {
     const res = await fetch('https://places.googleapis.com/v1/places:searchText', { method:'POST',
       headers:{ 'Content-Type':'application/json', 'X-Goog-Api-Key':settings.gkey,
-        'X-Goog-FieldMask':'places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.websiteUri,places.regularOpeningHours.weekdayDescriptions,places.currentOpeningHours.openNow' },
+        'X-Goog-FieldMask':'places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.websiteUri,places.regularOpeningHours.weekdayDescriptions,places.currentOpeningHours.openNow,places.priceRange' },
       body: JSON.stringify({ textQuery:shortLabel(s.label), languageCode:'de', maxResultCount:3,
         locationBias:{ circle:{ center:{ latitude:+s.lat, longitude:+s.lon }, radius:2000 } } }) });
     if (!res.ok) return false;
     const j = await res.json();
     const b = (j.places || []).map(p => ({ p, d:p.location ? hav([s.lat, s.lon], [p.location.latitude, p.location.longitude]) : 1e9 })).filter(q => q.d < 3000).sort((a, c) => a.d - c.d)[0];
     if (b) gSight.set(k, { name:b.p.displayName?.text || '', addr:b.p.formattedAddress || '', web:b.p.websiteUri || '', oh:b.p.regularOpeningHours?.weekdayDescriptions || [],
-      open:b.p.currentOpeningHours?.openNow, r:b.p.rating, n:b.p.userRatingCount || 0, uri:b.p.googleMapsUri });
+      open:b.p.currentOpeningHours?.openNow, r:b.p.rating, n:b.p.userRatingCount || 0, uri:b.p.googleMapsUri, price:gPriceText(b.p.priceRange) });
     return true;
   } catch(e){ console.warn(e); return false; }
 }
@@ -1104,15 +1120,23 @@ function sightBodyHtml(x, from){
   else if (x.air != null) h += `<div><span class="k">Vom Platz</span> ${fkm1(x.air)} Luftlinie</div>`;
   if (x.hours != null) h += `<div><span class="k">Dauer</span> ≈ ${fhours(x.hours)} · <a href="${parkUrl(s)}" target="_blank" rel="noopener">Parken fürs Gespann</a></div>`;
   if (pending) h += '<div class="muted">Infos werden geladen …</div>';
+  if (inf.town){        // Stadt/Ort (Stockholm, Göteborg …): keine Öffnungszeiten, Preise oder Website-Recherche
+    if (inf.web) h += `<div><span class="k">Website</span> <a href="${esc(safeUrl(inf.web))}" target="_blank" rel="noopener">${esc(shortUrl(inf.web))}</a></div>`;
+    h += `<div><span class="k">Koordinaten</span> <span class="coordrow"><span class="coord">${fcoord(s)}</span><button class="icobtn" type="button" data-copy="${fcoord(s)}" title="Koordinaten kopieren" aria-label="Koordinaten kopieren">${ICON_COPY}</button></span></div>`;
+    h += `<div class="sbtns"><a class="btn small" href="${dir}" target="_blank" rel="noopener">🧭 ${from ? 'Vom Platz hin' : 'Navigation'}</a>
+      <a class="btn small" href="${esc(`https://www.google.com/maps/search/${encodeURIComponent(shortLabel(s.label))}/@${(+s.lat).toFixed(5)},${(+s.lon).toFixed(5)},12z`)}" target="_blank" rel="noopener">Google Maps</a></div>`;
+    return `<div class="tl-body">${h}</div>`;
+  }
   h += `<div><span class="k">Adresse</span> ${esc(inf.addr || g?.addr || s.label)}</div>`;
   // Öffnungszeiten: OSM, Website-Recherche, Google (diese Woche)
   if (inf.oh) h += `<div><span class="k">Öffnungszeiten</span> ${esc(inf.oh)} <span class="muted">(OpenStreetMap)</span></div>`;
   if (r && r.hoursS) h += `<div class="rz"><b>Öffnungszeiten (Website)${r.hoursS.text ? ': ' + esc(r.hoursS.text) : ''}</b>${snipLink(r.hoursS)}</div>`;
-  if (g && g.oh.length) h += `<details class="gh"><summary>Öffnungszeiten laut Google${g.open === true ? ' · <b>jetzt geöffnet</b>' : g.open === false ? ' · jetzt geschlossen' : ''}</summary><ul class="ghours">${g.oh.map(l => `<li>${esc(l)}</li>`).join('')}</ul></details>`;
+  if (g) h += gHoursHtml(g.oh, g.open);
   // Preise: Website-Recherche, sonst OSM
   if (r && r.price) h += `<div class="rz"><b>Preise (Website)${r.price.text ? ': ' + esc(r.price.text) : ''}</b>${snipLink(r.price)}</div>`;
   else if (inf.charge) h += `<div><span class="k">Eintritt</span> ${esc(inf.charge)} <span class="muted">(OpenStreetMap)</span></div>`;
   else if (inf.fee === 'no') h += `<div><span class="k">Eintritt</span> frei <span class="muted">(OpenStreetMap)</span></div>`;
+  else if (g && g.price) h += `<div><span class="k">Preise</span> ${esc(g.price)} <span class="muted">(Preisspanne laut Google)</span></div>`;
   // Stand der Website-Recherche
   if (web && !r) h += `<div class="rz none">Öffnungszeiten und Preise von der Website: ${ghOn() ? (state.tourId ? 'werden gesucht (1–2 Min. nach dem Speichern) …' : 'werden nach dem Speichern der Tour gesucht.') : 'Suche braucht den Online-Speicher (⚙︎).'}</div>`;
   else if (r && !r.hoursS && !r.price) h += `<div class="rz none">Öffnungszeiten/Preise: ${r.status === 'error' ? 'Website nicht erreichbar' : 'auf der Website nicht gefunden'} – <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">selbst nachsehen</a>.</div>`;
@@ -1127,20 +1151,67 @@ function sightBodyHtml(x, from){
   return `<div class="tl-body">${h}</div>`;
 }
 
+/* ---------- Preis pro Nacht (Campingplatz): Website-Recherche des GitHub-Helfers, sonst OSM `charge` ----------
+   Für Plätze in Vorschlagslisten fragt die App den Helfer über `anfragen.json` im Online-Speicher an (max. 15 je Liste). */
+function priceOf(c){
+  const r = rzData[c.id], web = webOf(c);
+  if (r && r.price && web && r.website === web) return { ...r.price, src:'web' };
+  if (c.tags?.charge) return { text:c.tags.charge, src:'osm' };
+  const g = gRate.get(c.id);
+  if (g && g.price) return { text:g.price, src:'google', url:g.uri };
+  return null;
+}
+const priceReq = new Map();      // camp id → Zeitpunkt der Anfrage
+function priceHtml(c, compact){
+  const p = priceOf(c);
+  const srcName = { web:'Website', osm:'OSM', google:'Google' };
+  if (p && compact) return `<div class="price">💶 ${esc(p.text || 'Preise')} <span class="muted">· ${p.url ? `<a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener" title="${esc(p.snippet || '')}">${srcName[p.src]}</a>` : srcName[p.src]}</span></div>`;
+  if (p) return `<div class="rz"><b>Preis${p.text ? ': ' + esc(p.text) : ''}</b> <span class="muted">${p.src === 'web' ? '(Website, bitte für Wohnwagen + Personen prüfen)' : p.src === 'google' ? '(Preisspanne laut Google)' : '(OpenStreetMap)'}</span>${p.snippet ? snipLink(p) : ''}</div>`;
+  const r = rzData[c.id], web = webOf(c);
+  if (r && web && r.website === web && r.v >= 3) return compact ? '' : `<div class="rz none">Preis: auf der Website nicht gefunden – <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">selbst nachsehen</a>.</div>`;
+  if (web && priceReq.has(c.id) && Date.now() - priceReq.get(c.id) < 8 * 60000) return `<div class="muted price">💶 Preis wird auf der Website gesucht …</div>`;
+  return '';
+}
+let priceQueue = new Map(), priceTimer = null, pricePoll = [];
+function requestPrices(list){
+  if (!ghOn() || !list || !list.length) return;
+  for (const c of list.slice(0, 15)){
+    const web = webOf(c), r = rzData[c.id];
+    if (!web || priceReq.has(c.id) || (r && r.website === web && r.v >= 3)) continue;
+    priceReq.set(c.id, Date.now()); priceQueue.set(c.id, { id:c.id, name:c.tags?.name || c.label || '', website:web });
+  }
+  if (!priceQueue.size) return;
+  clearTimeout(priceTimer);
+  priceTimer = setTimeout(async () => {
+    const camps = [...priceQueue.values()]; priceQueue.clear();
+    try {
+      const cur = await ghRead('anfragen.json').catch(() => null);
+      const old = (cur?.data?.camps || []).filter(x => Date.now() - Date.parse(x.at || 0) < 864e5 && !camps.some(y => y.id === x.id));
+      const at = new Date().toISOString();
+      await ghWrite('anfragen.json', { camps:[...old, ...camps.map(x => ({ ...x, at }))].slice(-60) }, cur?.sha, `Preise anfragen: ${camps.length} Plätze`);
+    } catch(e){ console.warn(e); camps.forEach(x => priceReq.delete(x.id)); return; }
+    // Ergebnis kommt nach ~2–5 Min. → rezeption.json mehrmals nachladen
+    pricePoll.forEach(clearTimeout);
+    pricePoll = [120, 210, 330].map(sec => setTimeout(() => syncNow().then(r => { if (r && r.rz) renderAll(); }).catch(() => {}), sec * 1000));
+  }, 1500);
+}
+
 /* ---------- Google-Bewertungen (Places API New, Text Search; nur live, nicht dauerhaft gespeichert) ---------- */
 const gRate = new Map();           // camp id → { r, n, uri } | null (nicht gefunden)
 let gErr = null, gBusy = false;
 async function gFetch(c){
   const res = await fetch('https://places.googleapis.com/v1/places:searchText', { method:'POST',
     headers:{ 'Content-Type':'application/json', 'X-Goog-Api-Key':settings.gkey,
-              'X-Goog-FieldMask':'places.id,places.displayName,places.rating,places.userRatingCount,places.googleMapsUri,places.location' },
+              'X-Goog-FieldMask':'places.id,places.displayName,places.rating,places.userRatingCount,places.googleMapsUri,places.location,places.regularOpeningHours.weekdayDescriptions,places.currentOpeningHours.openNow,places.priceRange,places.websiteUri' },
     body: JSON.stringify({ textQuery: c.tags?.name ? c.tags.name : 'Campingplatz', languageCode:'de', maxResultCount:3,
       locationBias:{ circle:{ center:{ latitude:c.lat, longitude:c.lon }, radius:1500 } } }) });
   if (!res.ok){ let m = ''; try { m = (await res.json()).error?.message || ''; } catch(e){} throw new Error(`Google ${res.status}${m ? ': ' + m : ''}`); }
   const j = await res.json();
   const best = (j.places || []).map(p => ({ p, d: p.location ? hav([c.lat, c.lon], [p.location.latitude, p.location.longitude]) : 1e9 }))
     .filter(x => x.d < 2000).sort((a, b) => a.d - b.d)[0];
-  return best && best.p.rating != null ? { r:best.p.rating, n:best.p.userRatingCount || 0, uri:best.p.googleMapsUri } : null;
+  if (!best) return null;
+  const p = best.p;
+  return { r:p.rating ?? null, n:p.userRatingCount || 0, uri:p.googleMapsUri, oh:p.regularOpeningHours?.weekdayDescriptions || [], open:p.currentOpeningHours?.openNow, price:gPriceText(p.priceRange), web:p.websiteUri || '' };
 }
 /* Abgleich mit Google: Campingplatz an derselben Stelle (≤ 400 m) mit anderem Namen → „bei Google: …“
    (OSM-Namen sind manchmal veraltet). Nur live/im Arbeitsspeicher wie die Bewertungen. */
@@ -1185,17 +1256,32 @@ async function loadRatings(list){
     }
   } finally { gBusy = false; renderPanel(); }
 }
+// Preisspanne aus Google (Places priceRange) als Text, z. B. „SEK 300–450“
+function gPriceText(pr){
+  if (!pr) return '';
+  const v = m => m ? (+(m.units || 0) + (m.nanos || 0) / 1e9) : null, a = v(pr.startPrice), b = v(pr.endPrice), cur = pr.startPrice?.currencyCode || pr.endPrice?.currencyCode || '';
+  const f = x => Math.round(x).toLocaleString('de-DE');
+  return a != null ? `${cur} ${f(a)}${b != null && b !== a ? '–' + f(b) : ''}`.trim() : b != null ? `bis ${cur} ${f(b)}` : '';
+}
+// Öffnungszeiten laut Google (live): heute + aufklappbar die Woche
+function gHoursHtml(oh, open, label){
+  if (!oh || !oh.length) return '';
+  const today = oh[(new Date().getDay() + 6) % 7] || '';
+  return `<details class="gh"><summary>${label || 'Öffnungszeiten'} laut Google${today ? ': ' + esc(today.replace(/^[^:]+:\s*/, 'heute ')) : ''}${open === true ? ' · <b>jetzt geöffnet</b>' : open === false ? ' · jetzt geschlossen' : ''}</summary><ul class="ghours">${oh.map(l => `<li>${esc(l)}</li>`).join('')}</ul></details>`;
+}
 function rateHtml(c){
   const g = gRate.get(c.id);
+  if (g && g.r == null) return ' <span class="stars none">★ –</span>';
   if (g) return ` <a class="stars" href="${esc(g.uri)}" target="_blank" rel="noopener" title="${g.n} Google-Bewertungen">★ ${g.r.toLocaleString('de-DE', { minimumFractionDigits:1 })} <span>(${g.n.toLocaleString('de-DE')})</span></a>`;
   if (g === null) return ' <span class="stars none">★ –</span>';
   return '';
 }
 // Sortierung nach Bewertung: gewichtet (wenige Bewertungen zählen weniger), unbewertet ans Ende
-const rateScore = c => { const g = gRate.get(c.id); return g ? (g.r * g.n + 4 * 10) / (g.n + 10) : -1; };
+const rateScore = c => { const g = gRate.get(c.id); return g && g.r != null ? (g.r * g.n + 4 * 10) / (g.n + 10) : -1; };
 function sortRows(list){ return settings.sortBy === 'rating' ? list.slice().sort((a, b) => rateScore(b) - rateScore(a)) : list; }
 function sortHtml(list){
-  const top = list.filter(passFilter).slice(0, 20);    // nur die ersten 20 (Reihenfolge der Etappen-Empfehlung)
+  const top = list.filter(passFilter).slice(0, 20);
+  setTimeout(() => requestPrices(top), 0);    // nur die ersten 20 (Reihenfolge der Etappen-Empfehlung)
   if (settings.gkey && !gErr && !gBusy && top.some(c => !gRate.has(c.id))) setTimeout(() => loadRatings(top), 0);
   return `<div class="chips"><span class="muted">Sortierung:</span>
     <button type="button" class="chip${settings.sortBy !== 'rating' ? ' on' : ''}" data-sort="stage">Entfernung/Etappe</button>
@@ -1850,19 +1936,18 @@ function campInfo(c, mode){
   const ok = isOk(c);
   const p4n = `https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14`;
   return `<div class="ci"><b>${esc(name)}</b>${settings.gkey ? `<div class="gname-slot" data-gn="${esc(String(c.id))}">${gNameHtml(c)}</div>` : ''}${mode === 'cand' || mode === 'split' ? prevBadge(c) : ''}
-    <div><span class="badge ${ok ? 'ok' : 'unk'}">${ok ? 'Wohnwagen erlaubt' : 'Wohnwagen: keine Angabe'}</span></div>
-    ${amenList(c).length ? `<div>${amenList(c).map(a => a.i + ' ' + a.t).join(' · ')}</div>` : ''}
+    ${priceHtml(c, true)}
     ${mode === 'alt' && c.air != null ? `<div>${fkm1(c.air)} vom bisherigen Platz (Luftlinie)</div>` : ''}
     ${c.detour ? `<div>${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div>` : ''}
     ${c.stageKm != null && mode === 'cand' ? `<div>Liegt bei Etappen-km ${fkm(c.stageKm)}</div>` : ''}
     ${c.afterPlan && mode === 'cand' ? `<div>${afterText(c)}</div>` : ''}
     ${mode === 'end' && c.air != null ? `<div>${fkm1(c.air)} vom Zielort (Luftlinie)</div>` : ''}
     ${mode === 'area' ? (state.pending ? '<div class="muted">außerhalb des Suchkorridors</div>' : '') : ''}
-    ${['area', 'cand', 'split'].includes(mode) && !(mode === 'cand' && state.pending && state.pending.mode !== 'anchor' && c.stageKm != null) ? pdHtml(c) : ''}
+    ${pdHtml(c, mode)}
     ${t.opening_hours ? `<div class="muted">Öffnungszeiten (OSM): ${esc(t.opening_hours)}</div>` : ''}
     ${web ? `<div><a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">Website</a></div>` : ''}
     ${phone ? `<div><a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
-    <div><a href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation</a> · <a href="${esc(gEntryUrl(c))}" target="_blank" rel="noopener">Google-Eintrag</a> · <a href="${p4n}" target="_blank" rel="noopener">park4night</a></div>
+    <div><a href="${esc(gEntryUrl(c))}" target="_blank" rel="noopener">Google-Eintrag</a> · <a href="${p4n}" target="_blank" rel="noopener">park4night</a></div>
     ${mode === 'alt' && state.alt && !state.busy ? `<button class="btn primary" type="button" data-altpick="${esc(c.id)}">Als Ausweichplatz übernehmen</button>` : ''}
     ${(mode === 'cand' || mode === 'area') && state.pending && !state.busy ? `<button class="btn primary" type="button" data-pick="${esc(c.id)}">Als Etappenziel wählen</button>` : ''}
     ${(mode === 'split' || mode === 'area') && state.split && !state.pending && !state.busy ? `<button class="btn primary" type="button" data-splitpick="${esc(c.id)}">Als Zwischenstopp in Etappe ${state.split.i + 1} einfügen</button>` : ''}
@@ -1881,15 +1966,32 @@ function targetStage(c){
 }
 // Info-Fenster: echte Straßenentfernung zum geplanten Ziel (wird beim Öffnen berechnet, ORS-Matrix mit Zwischenspeicher)
 const pdMem = new Map();
-const pdHtml = c => `<div class="pdist" data-pd="${esc(String(c.id))}"><span class="muted">Straßenentfernung wird berechnet …</span></div>`;
+const pdHtml = (c, mode) => `<div class="pdist" data-pd="${esc(String(c.id))}" data-pdm="${mode || ''}"><span class="muted">Entfernungen werden berechnet …</span></div>`;
+// Sehenswürdigkeiten der Tour (★-Ziele und ihre weiteren Sehenswürdigkeiten) in der Nähe eines Platzes (≤ 60 km Luftlinie, max. 3)
+function nearSights(c){
+  return state.via.filter(v => v.kind === 'stay').flatMap(v => [v, ...(v.sights || [])])
+    .map(x => ({ x, d:hav([x.lat, x.lon], [c.lat, c.lon]) })).filter(o => o.d <= 60000).sort((a, b) => a.d - b.d).slice(0, 3).map(o => o.x);
+}
+const sightLine = (x, r) => `★ ${esc(shortLabel(x.label))}: <b>${fkm1(r.d)}</b> / ${fdur(r.t)} <span class="muted">(ohne Wohnwagen)</span>`;
+async function sightLines(c){
+  const S = nearSights(c); if (!S.length) return '';
+  const r = await roadPairs(S, c);
+  return S.map((x, i) => r[i] && r[i].d != null ? sightLine(x, r[i]) : '').filter(Boolean).join('<br>');
+}
 const capT = (d, t) => Math.max(t || 0, d / (Math.max(80, +settings.speed || 80) / 3.6));   // Fahrzeit mit Wohnwagen
 async function roadPairs(froms, to){
   const j = await matrix({ locations:[...froms.map(x => [+(+x.lon).toFixed(5), +(+x.lat).toFixed(5)]), [+(+to.lon).toFixed(5), +(+to.lat).toFixed(5)]],
     sources:froms.map((_, i) => i), destinations:[froms.length], metrics:['distance', 'duration'] });
   return froms.map((_, i) => ({ d:j.distances?.[i]?.[0], t:j.durations?.[i]?.[0] }));
 }
-async function popDist(c){
+async function popDist(c, mode){
   const p = state.pending, sp = state.split;
+  // gewählter Platz: Entfernungen zu seinen Sehenswürdigkeiten sind schon bekannt
+  if (mode === 'chosen'){
+    const st = state.stages.find(s => s.to.id === c.id), to = st ? st.to : c;
+    if (to.sights && to.sights.length) return to.sights.map(x => x.d != null ? sightLine(x, x) : '').filter(Boolean).join('<br>');
+    return await sightLines(to);
+  }
   if (p && p.mode === 'anchor'){
     const S = p.sights && p.sights.length ? p.sights : [p.sight];
     const r = c.sightD ? c.sightD.map(x => x && { d:x.d, t:x.t }) : await roadPairs(S, c);
@@ -1899,23 +2001,26 @@ async function popDist(c){
     const [r] = await roadPairs([p.from], c);
     if (r.d == null) return '';
     const left = p.plan ? p.plan.n - 1 : 0, rest = Math.max(0, p.remain - r.d);
-    return `Etappe bis hier: <b>${fkm(r.d)}</b> / ≈ ${fdur(capT(r.d, r.t))} (Straße, ab ${esc(shortLabel(p.from.label))})${left > 0 ? `<br><span class="muted">danach noch ≈ ${fkm(rest)}${left > 1 ? ` (${left} Etappen à ~${fkm(rest / left)})` : ''}</span>` : ''}`;
+    const sl = await sightLines(c);
+    return `${sl ? sl + '<br>' : ''}Etappe bis hier: <b>${fkm(r.d)}</b> / ≈ ${fdur(capT(r.d, r.t))} (Straße, ab ${esc(shortLabel(p.from.label))})${left > 0 ? `<br><span class="muted">danach noch ≈ ${fkm(rest)}${left > 1 ? ` (${left} Etappen à ~${fkm(rest / left)})` : ''}</span>` : ''}`;
   }
   if (sp){
     const st = state.stages[sp.i]; if (!st) return '';
     const [a] = await roadPairs([st.from], c), [b] = await roadPairs([c], st.to);
     if (a.d == null || b.d == null) return '';
-    return `Teilt Etappe ${sp.i + 1}: <b>${fkm(a.d)} + ${fkm(b.d)}</b> (Straße; bisher ${fkm(st.dist)})`;
+    const sl = await sightLines(c);
+    return `${sl ? sl + '<br>' : ''}Teilt Etappe ${sp.i + 1}: <b>${fkm(a.d)} + ${fkm(b.d)}</b> (Straße; bisher ${fkm(st.dist)})`;
   }
-  const i = targetStage(c); if (i < 0) return '';
+  const sl = await sightLines(c);
+  const i = targetStage(c); if (i < 0) return sl;
   const t = state.stages[i].to, [r] = await roadPairs([t], c);
-  return r.d != null ? `<b>${fkm1(r.d)}</b> / ${fdur(r.t)} von ${esc(shortLabel(t.label))} (Ziel Etappe ${i + 1}, Straße)` : '';
+  return (sl ? sl + '<br>' : '') + (r.d != null ? `<span class="muted">${fkm1(r.d)} / ${fdur(r.t)} von ${esc(shortLabel(t.label))} (Ziel Etappe ${i + 1})</span>` : '');
 }
-async function fillPopDist(el, c){
-  const key = [c.id, state.pending ? (state.pending.mode || 't') + ':' + ptKey(state.pending.from) : '', state.split ? 's' + state.split.i : '', state.stages.length].join('|');
+async function fillPopDist(el, c, mode){
+  const key = [c.id, mode || '', state.pending ? (state.pending.mode || 't') + ':' + ptKey(state.pending.from) : '', state.split ? 's' + state.split.i : '', state.stages.length].join('|');
   try {
     let h = pdMem.get(key);
-    if (h == null){ h = await popDist(c); pdMem.set(key, h); }
+    if (h == null){ h = await popDist(c, mode); pdMem.set(key, h); }
     el.innerHTML = h || '';
   } catch(e){
     const ref = state.pending ? (state.pending.sight || state.pending.from) : null;
@@ -1939,7 +2044,9 @@ map.on('popupopen', e => {
   const root = e.popup.getElement();
   root.querySelectorAll('[data-gn]').forEach(el => { const c = campIndex.get(el.dataset.gn) || state.stages.map(s => s.to).find(t => String(t.id) === el.dataset.gn);
     if (c) loadGName(c).then(() => { el.innerHTML = gNameHtml(c); relayoutPopup(e.popup); }); });
-  root.querySelectorAll('[data-pd]').forEach(el => { const c = campIndex.get(el.dataset.pd); if (c) fillPopDist(el, c).then(() => relayoutPopup(e.popup)); });
+  root.querySelectorAll('[data-pd]').forEach(el => { const m = el.dataset.pdm;
+    const c = (m === 'chosen' && state.stages.map(s => s.to).find(t => String(t.id) === el.dataset.pd)) || campIndex.get(el.dataset.pd);
+    if (c) fillPopDist(el, c, m).then(() => relayoutPopup(e.popup)); });
 });
 // Knöpfe im Info-Fenster: ein Klick-Abfänger für alle (Capture-Phase, weil Leaflet Klicks im Fenster nicht weiterreicht)
 $('#map').addEventListener('click', ev => {
@@ -1967,7 +2074,7 @@ function renderMap(){
     if (end > p.cmin * 1000)
       L.polyline(slice(p.line, p.cum, p.cmin * 1000, end), { color:COL.corridor, weight:10, opacity:.45, interactive:false }).addTo(lyr.corridor);
     p.cands.filter(passFilter).forEach(c => {
-      c._m = L.circleMarker([c.lat, c.lon], { radius:9, color:c.best ? COL.corridor : '#fff', weight:c.best ? 4 : 2, fillColor:isOk(c) ? COL.ok : COL.unk, fillOpacity:1 })
+      c._m = L.circleMarker([c.lat, c.lon], { radius:9, color:c.best ? COL.corridor : '#fff', weight:c.best ? 4 : 2, fillColor:COL.ok, fillOpacity:1 })
         .bindPopup(() => campInfo(c, 'cand')).addTo(lyr.cands);
     });
     if (p.plan){
@@ -1982,13 +2089,13 @@ function renderMap(){
       L.circleMarker(pointAt(ss.line, cm, ss.dist / 2), { radius:6, color:'#fff', weight:2, fillColor:COL.corridor, fillOpacity:1 })
         .bindTooltip(`Hälfte ~${fkm(ss.dist / 2)}`, { permanent:true, direction:'top', offset:[0, -6] }).addTo(lyr.corridor); }
     state.split.list.filter(passFilter).forEach(c => {
-      c._m = L.circleMarker([c.lat, c.lon], { radius:9, color:c.best ? COL.corridor : '#fff', weight:c.best ? 4 : 2, fillColor:isOk(c) ? COL.ok : COL.unk, fillOpacity:1 })
+      c._m = L.circleMarker([c.lat, c.lon], { radius:9, color:c.best ? COL.corridor : '#fff', weight:c.best ? 4 : 2, fillColor:COL.ok, fillOpacity:1 })
         .bindPopup(() => campInfo(c, 'split')).addTo(lyr.cands);
     });
   }
   if (state.alt && state.alt.list){
     state.alt.list.filter(passFilter).forEach(c => {
-      c._m = L.circleMarker([c.lat, c.lon], { radius:8, color:COL.corridor, weight:3, fillColor:isOk(c) ? COL.ok : COL.unk, fillOpacity:1 })
+      c._m = L.circleMarker([c.lat, c.lon], { radius:8, color:COL.corridor, weight:3, fillColor:COL.ok, fillOpacity:1 })
         .bindPopup(() => campInfo(c, 'alt')).addTo(lyr.cands);
     });
   }
@@ -1996,13 +2103,13 @@ function renderMap(){
   const endIsCamp = state.done && last && last.to.kind === 'camp';
   if (!endIsCamp || state.showEndList) state.endCands.filter(passFilter).forEach(c => {
     if (endIsCamp && last.to.id === c.id) return;
-    c._m = L.circleMarker([c.lat, c.lon], { radius:7, color:isOk(c) ? COL.ok : COL.unk, weight:3, fillColor:'#fff', fillOpacity:1 })
+    c._m = L.circleMarker([c.lat, c.lon], { radius:7, color:COL.ok, weight:3, fillColor:'#fff', fillOpacity:1 })
       .bindPopup(() => campInfo(c, 'end')).addTo(lyr.cands);
   });
   state.via.forEach(v => (v.sights || []).forEach(x => L.marker([x.lat, x.lon], { icon:pinIcon('★', 'sight'), zIndexOffset:-120 })
-    .bindPopup(`<b>${esc(x.label)}</b><br>Sehenswürdigkeit am Basislager ${esc(shortLabel(v.label))}`).addTo(lyr.pins)));
+    .bindPopup(() => sightPopHtml(x)).addTo(lyr.pins)));
   state.via.forEach((v, i) => L.marker([v.lat, v.lon], { icon:pinIcon(v.kind === 'visit' ? '•' : v.kind === 'rest' ? 'P' : '★', v.kind === 'visit' ? 'visit' : 'sight'), zIndexOffset:-100 })
-    .bindPopup(`<b>${esc(v.label)}</b><br>${v.kind === 'visit' ? 'Besuch unterwegs' : `${v.kind === 'rest' ? 'Pause' : 'Zwischenziel'} ${i + 1} · ${Math.max(1, +v.nights || 1)} Nächte`}`).addTo(lyr.pins));
+    .bindPopup(() => sightPopHtml(v)).addTo(lyr.pins));
   if (state.pending && state.pending.mode === 'anchor'){
     const q = state.pending.sight;
     const circ = L.circle([q.lat, q.lon], { radius:state.pending.radius * 1000, color:COL.corridor, weight:2, fillOpacity:.05, dashArray:'6 6', interactive:false }).addTo(lyr.corridor);
@@ -2046,6 +2153,13 @@ function followCamp(c){
   const ll = L.latLng(c.lat, c.lon), pad = sheetPad();
   if (!map.getBounds().pad(-0.05).contains(ll)) map.panInside(ll, { paddingTopLeft:pad.paddingTopLeft, paddingBottomRight:pad.paddingBottomRight });
 }
+function sightPopHtml(v){
+  const s = sightSrc(v) || v, inf = s.info || {}, g = gSight.get(sightKey(s));
+  const gUrl = g?.uri || `https://www.google.com/maps/search/${encodeURIComponent(shortLabel(s.label))}/@${(+s.lat).toFixed(5)},${(+s.lon).toFixed(5)},15z`;
+  return `<div class="ci"><b>${esc(s.label)}</b>
+    ${inf.web ? `<div><a href="${esc(safeUrl(inf.web))}" target="_blank" rel="noopener">${esc(shortUrl(inf.web))}</a></div>` : ''}
+    <div><a href="${navUrl(s)}" target="_blank" rel="noopener">🧭 Navigation</a> · <a href="${esc(gUrl)}" target="_blank" rel="noopener">Google-Eintrag</a></div></div>`;
+}
 function sheetPad(){
   const mobile = window.innerWidth < 900, hidden = $('#panel').classList.contains('hide');
   return { paddingTopLeft:[mobile ? 70 : 30, 30], paddingBottomRight:[30, mobile && !hidden ? $('#panel').offsetHeight + 20 : 30] };
@@ -2073,7 +2187,7 @@ function drawArea(){
     if (shown.has(c.id)) return;
     if (!campIndex.has(c.id)) campIndex.set(c.id, c);
     const cc = campIndex.get(c.id);
-    L.circleMarker([c.lat, c.lon], { radius:6, color:isOk(c) ? COL.ok : COL.unk, weight:2, fillColor:'#fff', fillOpacity:.95 })
+    L.circleMarker([c.lat, c.lon], { radius:6, color:COL.ok, weight:2, fillColor:'#fff', fillOpacity:.95 })
       .bindPopup(() => campInfo(cc, 'area')).addTo(lyr.area);
   });
 }
@@ -2102,8 +2216,9 @@ function detailsHtml(s, i){
   const am = amenList(c);
   return `<div class="det">
     ${rzHtml(c)}
-    <div><span class="k">Wohnwagen</span> ${isOk(c) ? '<span class="badge ok">erlaubt</span>' : '<span class="badge unk">keine Angabe</span>'}${am.length ? ' · ' + am.map(a => a.i + ' ' + a.t).join(', ') : ''}</div>
+    ${priceHtml(c)}
     ${settings.gkey && gRate.has(c.id) ? `<div><span class="k">Google</span>${rateHtml(c)}</div>` : ''}
+    ${gRate.get(c.id) ? gHoursHtml(gRate.get(c.id).oh, gRate.get(c.id).open) : ''}
     ${gNameHtml(c)}
     <div><span class="k">Adresse</span> ${c.addr ? esc(c.addr) : '<span class="muted">wird ermittelt …</span>'}</div>
     <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
@@ -2129,8 +2244,8 @@ function altHtml(i){
   if (!a.list.length) return h + '<div class="muted" style="margin-top:6px">Keine anderen Campingplätze in diesem Umkreis – Umkreis vergrößern.</div></div>';
   h += chipsHtml(a.list) + sortHtml(a.list) + '<ul class="cands">';
   sortRows(a.list.filter(passFilter)).forEach(c => {
-    h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${rateHtml(c)}</div>
+    h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
+      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${rateHtml(c)}</div>${priceHtml(c, true)}
       <div class="muted">${fkm1(c.air)} Luftlinie${phoneOf(c) ? ' · ' + esc(phoneOf(c)) : ''}</div></div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <button class="btn small primary" type="button" data-altpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Übernehmen</button>
@@ -2147,8 +2262,8 @@ function splitHtml(i){
   if (!a.list.length) return h + '<div class="muted" style="margin-top:6px">Keine Campingplätze nahe der Route gefunden. Zoom auf der Karte rein – jeder Platz lässt sich dort als Zwischenstopp übernehmen.</div></div>';
   h += chipsHtml(a.list) + sortHtml(a.list) + '<ul class="cands">';
   sortRows(a.list.filter(passFilter)).forEach(c => {
-    h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${c.best ? ' <span class="badge best">beste Teilung</span>' : ''}${prevBadge(c)}${amenHtml(c)}${rateHtml(c)}</div>
+    h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
+      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${c.best ? ' <span class="badge best">beste Teilung</span>' : ''}${prevBadge(c)}${amenHtml(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
       <div class="muted">${fkm(c.stageKm)} + ${fkm(c.after)} · ${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div></div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <button class="btn small primary" type="button" data-splitpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Einfügen</button>
@@ -2264,8 +2379,8 @@ function renderPanel(){
         ${chipsHtml(state.endCands)}${sortHtml(state.endCands)}<ul class="cands">`;
       sortRows(state.endCands.filter(passFilter)).forEach(c => {
         const chosen = last.to.kind === 'camp' && last.to.id === c.id;
-        h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-          <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${rateHtml(c)}</div>
+        h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
+          <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${rateHtml(c)}</div>${priceHtml(c, true)}
           <div class="muted">${fkm1(c.air)} vom Zielort</div></div>
           ${chosen ? '<span class="muted">✓ Ziel</span>' : `<button class="btn small primary" type="button" data-endpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Als Ziel</button>`}</li>`;
       });
@@ -2282,12 +2397,11 @@ function renderPanel(){
           ${coordHtml(p.sight)}</div><div class="muted" style="font-size:13px">oder auf der Karte den Griff ↔ am Kreisrand ziehen</div></div>
       <div class="muted">Anfahrt ${fkm(p.remain)} · ${fdur(p.remainDur)}${p.visits.length ? ' · unterwegs: ' + p.visits.map(v => esc(shortLabel(v.label))).join(', ') : ''}</div>
       ${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}
-      <div class="legend"><span><i style="background:${COL.ok}"></i>Wohnwagen erlaubt</span><span><i style="background:${COL.unk}"></i>keine Angabe</span></div>
       ${chipsHtml(p.cands)}${sortHtml(p.cands)}<ul class="cands">`;
     const best0 = p.cands.filter(passFilter)[0];
     sortRows(p.cands.filter(passFilter)).forEach(c => {
-      h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${c === best0 ? ' <span class="badge best">am nächsten</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>
+      h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
+        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${c === best0 ? ' <span class="badge best">am nächsten</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
         ${c.sightD && c.sightD.length > 1
           ? `<div class="sightinfo">${c.sightD.map(x => x ? `★ ${esc(shortLabel(x.label))} ${fkm1(x.d)} / ${fdur(x.t)}` : '').filter(Boolean).join('<br>')}</div><div class="muted">ohne Wohnwagen · Ø ${fkm1(c.sight.d)}</div>`
           : `<div class="sightinfo">${c.sight ? `${fkm1(c.sight.d)} / ${fdur(c.sight.t)} ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit (ohne Wohnwagen)'}` : `${fkm1(c.air)} Luftlinie ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit'}`}</div>`}</div>
@@ -2302,13 +2416,12 @@ function renderPanel(){
         ${(() => { const q = pointAt(p.line, p.cum, p.plan.len); return `<div class="sbtns" style="margin-top:4px"><span class="muted">Idealpunkt:</span> ${coordHtml({ lat:q[0], lon:q[1] })}</div>`; })()}</div>
       <div class="muted">Bis ${state.segs ? esc(shortLabel(state.segs[p.seg].to.label)) : 'zum Ziel'} noch ${fkm(p.remain)}${p.visits && p.visits.length ? ' (unterwegs: ' + p.visits.map(v => esc(shortLabel(v.label))).join(', ') + ')' : ''} · Korridor ${p.cmin}–${p.cmax} km · Umweg bis ${p.detour} km${p.info ? '<br>' + esc(p.info) : ''}</div>
       ${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}
-      <div class="legend"><span><i style="background:${COL.ok}"></i>Wohnwagen erlaubt</span><span><i style="background:${COL.unk}"></i>keine Angabe</span></div>
       ${chipsHtml(p.cands)}${sortHtml(p.cands)}<ul class="cands">`;
     const best0 = p.cands.filter(passFilter)[0];
     sortRows(p.cands.filter(passFilter)).forEach(c => {
       const k = c === best0 ? 0 : 1;
-      h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${k === 0 ? ' <span class="badge best">Empfehlung</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>
+      h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
+        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${k === 0 ? ' <span class="badge best">Empfehlung</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
         <div class="muted">bei km ${fkm(c.stageKm)} · ${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div>
         <div class="after">${afterText(c)}</div></div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
@@ -3148,7 +3261,7 @@ async function loadXlsx(){
 /* Ein Blatt: je Etappe Fahrt-Besuche, Campingplatz/Ziel, darunter seine Sehenswürdigkeiten (Spalte „Typ“) */
 function xlsxRows(){
   const ds = stageDates(), st = state.stages, last = st.length - 1, home = state.segs && state.segs[state.segs.length - 1].kind === 'home';
-  const H = ['Etappe', 'Typ', 'Datum', 'Bis', 'Nächte', 'Name', 'Adresse', 'Koordinaten', 'Entfernung', 'Fahrt km', 'Fahrzeit', 'Rezeption', 'Check-in', 'Check-out', 'Website', 'Telefon', 'Navigation', 'Notiz', 'Reserviert'];
+  const H = ['Etappe', 'Typ', 'Datum', 'Bis', 'Nächte', 'Name', 'Adresse', 'Koordinaten', 'Entfernung', 'Fahrt km', 'Fahrzeit', 'Rezeption', 'Check-in', 'Check-out', 'Website', 'Telefon', 'Navigation', 'Notiz', 'Reserviert', 'Preis'];
   const rows = [H], links = [];
   const day = d => d ? new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) : '';
   st.forEach((s, i) => {
@@ -3158,12 +3271,12 @@ function xlsxRows(){
     const row = [i + 1, camp ? 'Campingplatz' : (i === last && home ? 'Zuhause' : 'Ziel'), day(ds && ds[i]), ds && i < last ? day(addDays(ds[i], n)) : '',
       i < last ? n : '', c.label, c.addr && c.addr !== 'unbekannt' ? c.addr : '', fcoord(c), c.detour ? `${fkm1(c.detour.d)} von der Route` : '',
       Math.round(s.dist / 1000), fdur(s.dur), okR ? (r.hours || '') : '', okR ? (r.checkin?.text || '') : '', okR ? (r.checkout?.text || '') : '',
-      web || '', camp ? (phoneOf(c) || '') : '', 'Route', s.memo?.text || '', s.memo?.res ? 'ja' : ''];
+      web || '', camp ? (phoneOf(c) || '') : '', 'Route', s.memo?.text || '', s.memo?.res ? 'ja' : '', camp && priceOf(c) ? priceOf(c).text || '' : ''];
     rows.push(row);
     if (web) links.push({ r:rows.length - 1, c:14, url:safeUrl(web) });
     links.push({ r:rows.length - 1, c:16, url:navUrl(c) });
     stopSights(c).forEach(x => { const src = sightSrc(x) || x, inf = src.info || {}, rr = inf.web ? rzData['web:' + inf.web] : null;
-      const oh = [inf.oh, rr?.hoursS?.text].filter(Boolean).join(' / '), pr = rr?.price?.text || inf.charge || '';
+      const oh = inf.town ? '' : [inf.oh, rr?.hoursS?.text].filter(Boolean).join(' / '), pr = inf.town ? '' : rr?.price?.text || inf.charge || '';
       rows.push([i + 1, 'Sehenswürdigkeit', '', '', '', x.label, inf.addr || '', x.lat != null ? fcoord(x) : '',
         x.d != null ? `${x.est ? '≈ ' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} vom Platz (ohne Wohnwagen)` : x.air != null ? `${fkm1(x.air)} Luftlinie` : '', '', '',
         oh ? 'Geöffnet: ' + oh : '', '', '', inf.web || '', inf.phone || '', '', pr ? 'Preise: ' + pr : '', '']);
@@ -3232,7 +3345,7 @@ function stopBodyHtml(s, i){
   // nur Pausen-Ziel (Campingplatz statt Sehenswürdigkeit): Entfernung zum Ort; Sehenswürdigkeiten stehen als eigene Einträge darunter
   const near = !(c.sights && c.sights.length) && c.near;
   return `${near ? `<div><span class="k">Zum Ort</span> ${esc(shortLabel(near.label))}${near.d != null ? ` · ${fkm1(near.d)}${near.t ? ' / ' + fdur(near.t) : ''}` : near.air != null ? ` · ${fkm1(near.air)} Luftlinie` : ''}</div>` : ''}
-    ${camp ? `<div><span class="k">Wohnwagen</span> ${isOk(c) ? '<span class="badge ok">erlaubt</span>' : '<span class="badge unk">keine Angabe</span>'}${amenHtml(c)}${rateHtml(c)}</div>
+    ${camp ? `${priceHtml(c)}${settings.gkey && gRate.has(c.id) ? `<div><span class="k">Google</span>${rateHtml(c)}</div>${gHoursHtml(gRate.get(c.id)?.oh, gRate.get(c.id)?.open)}` : ''}
     ${gNameHtml(c)}
     <div><span class="k">Adresse</span> ${esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–')}</div>
     <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
@@ -3314,10 +3427,10 @@ function renderTrip(){
     const k = f.dataset.sweb, w = normWeb(f.w.value);
     const x = [...state.via, ...state.via.flatMap(v => v.sights || []), ...state.stages.flatMap(s => s.to.sights || [])].find(v => sightKey(v) === k);
     if (!x || !w){ flash('Bitte eine gültige Website eintragen.'); return; }
-    x.info = { ...(x.info || {}), web:w }; touch(); renderTrip();
+    x.info = { ...(x.info || {}), web:w, webManual:true }; touch(); renderTrip();
     flash(state.tourId ? 'Website gemerkt – Öffnungszeiten und Preise werden in 1–2 Min. gesucht.' : 'Website gemerkt – Öffnungszeiten und Preise werden nach dem Speichern der Tour gesucht.');
   });
-  if (state.via.some(v => v.kind !== 'rest' && (!v.info || (v.sights || []).some(y => !y.info)))) setTimeout(enrichAll, 0);
+  if (state.via.some(v => v.kind !== 'rest' && [v, ...(v.sights || [])].some(y => !y.info || y.info.v !== INFO_V))) setTimeout(enrichAll, 0);
   el.querySelectorAll('[data-tlall]').forEach(b => b.onclick = () => { tlOpen.clear(); tlOpen.add(-1);
     if (b.dataset.tlall === '1') state.stages.forEach((_, i) => tlOpen.add(i)); renderTrip(); if (b.dataset.tlall === '1') ensureAddrs().then(ch => ch && renderTrip()); });
   el.querySelectorAll('[data-tlnight]').forEach(b => b.onclick = () => {
@@ -3350,7 +3463,7 @@ function renderSummary(){
         <div><span class="k">Strecke</span> ${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}</div>
         ${s.vias && s.vias.length ? `<div><span class="k">Unterwegs</span> ${visitsOf(s).map(v => esc(v.label)).join(', ')}</div>` : ''}
         ${c.near ? `<div><span class="k">Sehenswürdigkeit</span> ★ ${esc(c.near.label)} · ${c.near.d != null ? fkm1(c.near.d) + ' / ' + fdur(c.near.t) : fkm1(c.near.air || 0) + ' Luftlinie'}</div>` : ''}
-        ${camp ? `<div><span class="k">Campingplatz</span> ${esc(c.label)} ${isOk(c) ? '<span class="badge ok">Wohnwagen ✓</span>' : ''}${amenHtml(c)}</div>
+        ${camp ? `<div><span class="k">Campingplatz</span> ${esc(c.label)}</div>${priceHtml(c, true)}
         <div><span class="k">Adresse</span> ${esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–')}</div>
         <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
         ${rzHtml(c, true) || ''}
@@ -3422,7 +3535,7 @@ async function printTour(){
     rows += `<tr><td>${i + 1}</td><td>${ds ? fdate(ds[i]) : ''}</td>
       <td>${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}${s.vias && s.vias.length ? `<br><span class="sm">unterwegs: ${visitsOf(s).map(v => esc(shortLabel(v.label))).join(', ')}</span>` : ''}${c.near ? `<br><span class="sm">★ ${esc(shortLabel(c.near.label))} ${c.near.d != null ? fkm1(c.near.d) : ''}</span>` : ''}</td>
       <td>${fkm(s.dist)}<br><span class="sm">${fdur(s.dur)}${extra ? '<br>' + esc(extra) : ''}</span></td>
-      <td><b>${esc(c.label)}</b>${camp && isOk(c) ? '<br><span class="sm">Wohnwagen ✓</span>' : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
+      <td><b>${esc(c.label)}</b>${camp && priceOf(c) ? `<br><span class="sm">${esc(priceOf(c).text || '')}</span>` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
       <td>${camp ? esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–') : esc(c.label)}<br><span class="sm">${fcoord(c)}</span></td>
       <td>${camp ? rz : ''}</td>
       <td>${web ? `<a href="${esc(safeUrl(web))}">${esc(shortUrl(web))}</a><br>` : ''}${phone ? `<a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a><br>` : ''}<a href="${esc(gEntryUrl(c))}">Google-Eintrag</a></td></tr>`;
