@@ -60,7 +60,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 .brand .logo{flex:none;color:#6a9a74}
 h1{font-size:18px;margin:0;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:899px){
-  .top{touch-action:none}
+  .top{display:none}
+  #panelHead{touch-action:none}
   h1{font-size:17px}
   .brand .logo{width:36px;height:20px}
   .leaflet-control-attribution{font-size:10px;line-height:1.3;max-width:70vw}
@@ -97,14 +98,38 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .sugg button:hover,.sugg button:focus{background:var(--brand-soft)}
 #status:empty{display:none}
 /* Karteireiter: aktiver Reiter weiß mit Salbei-Oberkante, geht nahtlos in den Inhalt über */
-.tabs{display:flex;gap:4px;margin:0 -16px;padding:0 12px;border-bottom:1px solid var(--line)}
+.tabrow{display:flex;align-items:flex-end;gap:4px;margin:0 -16px;padding:0 12px;border-bottom:1px solid var(--line)}
+.tabs{display:flex;gap:4px;flex:1;min-width:0}
+.mbtns{display:none;flex:none;align-items:center;padding-bottom:3px}
+.mbtns .btn{padding:6px 7px;min-width:0}
+.tabs .ok{color:var(--brand-ink);font-weight:700}
+@media (max-width:899px){ .mbtns{display:flex} .tabs button{font-size:13px;padding-left:2px;padding-right:2px} }
 .tabs button{flex:1;font:inherit;font-size:14px;padding:8px 4px 7px;margin-bottom:-1px;border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0;
   background:var(--brand-soft);color:var(--muted);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}
 .tabs button:hover{color:var(--text)}
 .tabs button.on{background:var(--panel);color:var(--text);font-weight:700;box-shadow:inset 0 3px 0 var(--brand-ink);padding-bottom:8px;z-index:1}
 .tabs button .cnt{font-weight:400;font-size:12px;opacity:.8}
 #tripBar:empty{display:none}
-#tripBar{padding:8px 0 10px;border-bottom:1px solid var(--line);margin:0 -16px;padding-left:16px;padding-right:16px}
+#tripBar{padding:7px 16px 8px;border-bottom:1px solid var(--line);margin:0 -16px}
+/* Reisezeile als Kurzinfo: Chips, antippen = Details */
+.tripchips{display:flex;flex-wrap:wrap;align-items:center;gap:5px;width:100%;border:0;background:none;padding:0;font:inherit;text-align:left;cursor:pointer;color:var(--text)}
+.tripchips .chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;background:var(--brand-soft);font-size:13px;white-space:nowrap}
+.tripchips .chip.good{background:#e3f1e6;color:#2f6b3d;font-weight:600}
+.tripchips .chip.bad{background:#fbe3df;color:#a3301f;font-weight:700}
+.tripchips .est{font-size:11px;color:var(--muted)}
+.tripchips .caret{margin-left:auto;color:var(--muted);font-size:12px;padding:0 2px}
+.tripdet{margin-top:6px}
+/* Aktionen unten fest (Reiter 1–3); im Testmodus __allTabs normal im Fluss */
+#scroll{scroll-padding-bottom:84px}
+.actions.foot{position:sticky;bottom:-20px;z-index:3;background:var(--panel);margin:14px -16px -20px;padding:10px 16px 12px;border-top:1px solid var(--line);box-shadow:0 -6px 8px -6px rgba(0,0,0,.12);align-items:center}
+.actions.foot.static{position:static;box-shadow:none;border-top:0;margin:14px 0 0;padding:0}
+.foot-extra{display:none;flex-basis:100%;gap:8px;flex-wrap:wrap}
+.foot.open .foot-extra{display:flex}
+.foot-main{display:flex;flex-wrap:wrap;gap:8px;flex:1;min-width:0}
+.actions.foot:not(.static) .btn{padding-left:12px;padding-right:12px}
+.foot .more{flex:none;font-size:18px;line-height:1;padding:8px 10px !important;align-self:flex-start}
+#goalsFoot{margin-top:16px}
+#goalsFoot #planBtn{flex:1}
 #tripBar:empty{display:none}
 #tripBar .trip{margin:0;padding:6px 10px;font-size:13px}
 [hidden]{display:none !important}
@@ -391,11 +416,14 @@ a{color:var(--brand-ink)}
       </div>
     </header>
     <div id="stickyHead">
+      <div class="tabrow">
       <nav class="tabs" id="tabs" role="tablist" aria-label="Planungsschritte">
         <button type="button" role="tab" data-tabbtn="goals">1 Ziele</button>
         <button type="button" role="tab" data-tabbtn="plan">2 Plätze</button>
         <button type="button" role="tab" data-tabbtn="trip">3 Reiseplan</button>
       </nav>
+      <span class="mbtns"><button class="btn ghost icon" id="toursBtnM" type="button" aria-label="Touren" title="Touren"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.2h8.5A1.5 1.5 0 0 1 21 8.7V18a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18Z"/></svg></button><button class="btn ghost icon" id="settingsBtnM" type="button" aria-label="Einstellungen" title="Einstellungen">⚙︎</button></span>
+      </div>
       <div id="tripBar"></div>
     </div>
   </div>
@@ -427,7 +455,8 @@ a{color:var(--brand-ink)}
         <div class="field"><label for="dateIn">Abfahrt</label><input type="date" id="dateIn"></div>
         <div class="field"><label for="retIn" id="retLbl">Ankunft spätestens</label><input type="date" id="retIn"></div>
       </div>
-      <button class="btn primary wide" id="planBtn" type="submit">Strecke berechnen</button>
+      <div class="actions foot" id="goalsFoot"><div class="foot-main"><button class="btn primary" id="planBtn" type="submit">Strecke berechnen</button>
+        <button class="btn" id="toPlan" type="button" data-goto="plan" hidden>Weiter: 2 Plätze →</button></div></div>
     </form>
     <section id="result"></section>
     <section id="tripView" hidden></section>
@@ -895,6 +924,23 @@ function tripHtml(nOverride){
     h += ` · ${-over === 0 ? 'genau passend' : `${-over} ${-over === 1 ? 'Tag' : 'Tage'} Puffer`} bis ${fdate(r)}`;
   }
   return `<div class="trip">${h}</div>`;
+}
+// Reisezeile oben als Kurzinfo (Chips); antippen klappt den vollständigen Text (tripHtml) auf
+let tripOpen = false;
+function tripChips(){
+  if (!state.stages.length && !state.overview) return '';
+  const e = tripEnd(), dm = d => `${d.getDate()}.${d.getMonth() + 1}.`;
+  if (!e) return `<button type="button" class="tripchips" data-tripdate><span class="chip">📅 Abfahrtsdatum eintragen</span></button><div class="tripdet" hidden>${tripHtml()}</div>`;
+  const d0 = new Date(state.date + 'T12:00:00'), days = dayDiff(e, d0) + 1;
+  let st = '';
+  if (state.ret){
+    const over = dayDiff(e, new Date(state.ret + 'T12:00:00'));
+    st = over > 0 ? `<span class="chip bad">⚠ ${over} ${over === 1 ? 'Tag' : 'Tage'} zu lang</span>`
+      : `<span class="chip good">✓ ${over === 0 ? 'passt genau' : `${-over} ${-over === 1 ? 'Tag' : 'Tage'} Puffer`}</span>`;
+  }
+  return `<button type="button" class="tripchips" data-tripx aria-expanded="${tripOpen}" title="${tripOpen ? 'Details ausblenden' : 'Details anzeigen'}">
+    <span class="chip">📅 ${dm(d0)} – ${dm(e)}${!state.done ? ' <span class="est">geschätzt</span>' : ''}</span><span class="chip">${days} ${days === 1 ? 'Tag' : 'Tage'}</span>${st}<span class="caret">${tripOpen ? '▴' : '▾'}</span></button>
+    <div class="tripdet"${tripOpen ? '' : ' hidden'}>${tripHtml()}</div>`;
 }
 const dayKey = d => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
 // Während der Tour: Index der nächsten anstehenden Etappe, sonst -1
@@ -2159,15 +2205,14 @@ function renderPanel(){
   if (state.n && !state.done && !p && !busy){
     h += `<button class="btn primary wide" type="button" id="contBtn" style="margin-top:6px">Erneut versuchen – Etappe ${state.stages.length + 1} planen</button>`;
   }
-  if (state.stages.length){
-    h += `<div class="actions">
-      <button class="btn" type="button" id="saveBtn" ${busy ? 'disabled' : ''}>Speichern</button>
-      <button class="btn" type="button" id="expBtn">Tour-Datei</button>
-      <button class="btn" type="button" id="gpxBtn">GPX</button>
-      <button class="btn ghost" type="button" id="newBtn" ${busy ? 'disabled' : ''}>Neue Tour</button></div>`;
-  }
   if (!h) h = `<div class="muted" style="margin:10px 0">Noch keine Strecke berechnet. Unter <button class="linkbtn" type="button" data-goto="goals">1 Ziele</button> Start, Zwischenziele und Ziel eingeben und „Strecke berechnen“ drücken.</div>`;
-  else if (state.done) h += `<button class="btn primary wide" type="button" data-goto="trip" style="margin-top:10px">Zum Reiseplan →</button>`;
+  else if (state.stages.length){
+    h += footHtml(`${state.done ? '<button class="btn primary" type="button" data-goto="trip">Weiter: Reiseplan →</button>' : ''}
+      <button class="btn" type="button" id="saveBtn" ${busy ? 'disabled' : ''}>Speichern</button>`,
+      `<button class="btn" type="button" id="expBtn">Tour-Datei</button>
+      <button class="btn" type="button" id="gpxBtn">GPX</button>
+      <button class="btn ghost" type="button" id="newBtn" ${busy ? 'disabled' : ''}>Neue Tour</button>`);
+  }
   el.innerHTML = h;
   const fin = planFinished();
   if (fin && !prevDone) uiTab = 'trip';     // alle Plätze inkl. Zielplatz gewählt → Reiseplan zeigen
@@ -2289,13 +2334,26 @@ function applyTab(){
   const total = state.segs ? state.segs.reduce((a, g) => a + g.n, 0) : state.n;
   const cnt = { goals: state.via.length ? ` <span class="cnt">(${state.via.length})</span>` : '',
     plan: state.stages.length ? ` <span class="cnt">(${state.stages.length}${total && !state.done ? '/' + total : ''})</span>` : '', trip:'' };
-  const lab = { goals:'1 Ziele', plan:'2 Plätze', trip:'3 Reiseplan' };
+  // erledigte Schritte bekommen ✓ statt der Nummer
+  const done = { goals:!!(state.overview || state.segs || state.stages.length), plan:planFinished(), trip:false };
+  const lab = { goals:'Ziele', plan:'Plätze', trip:'Reiseplan' }, num = { goals:1, plan:2, trip:3 };
   document.querySelectorAll('[data-tabbtn]').forEach(b => { const t = b.dataset.tabbtn, on = t === uiTab;
-    b.classList.toggle('on', on); b.setAttribute('aria-selected', on); b.innerHTML = lab[t] + cnt[t]; });
-  $('#tripBar').innerHTML = state.stages.length || state.overview ? tripHtml() : '';
+    b.classList.toggle('on', on); b.setAttribute('aria-selected', on);
+    b.innerHTML = (done[t] ? '<span class="ok" aria-label="erledigt">✓</span> ' : num[t] + ' ') + lab[t] + cnt[t]; });
+  $('#tripBar').innerHTML = tripChips();
+  $('#toPlan').hidden = all || !done.goals;
+  document.querySelectorAll('.actions.foot').forEach(f => f.classList.toggle('static', all));
   if (uiTab === 'trip' || all) renderTrip();
 }
 document.querySelectorAll('[data-tabbtn]').forEach(b => b.onclick = () => setTab(b.dataset.tabbtn));
+$('#toPlan').onclick = () => setTab('plan');
+$('#tripBar').addEventListener('click', e => {
+  if (e.target.closest('[data-tripx]')){ tripOpen = !tripOpen; applyTab(); }
+  else if (e.target.closest('[data-tripdate]')){ setTab('goals'); if (isMobile()) setSheet('full'); setTimeout(() => { $('#dateIn').scrollIntoView({ block:'center' }); $('#dateIn').focus(); }, 60); }
+});
+// „⋯“ in der festen Aktionsleiste: weitere Aktionen ein-/ausklappen
+$('#scroll').addEventListener('click', e => { const b = e.target.closest('[data-more]'); if (!b) return;
+  const f = b.closest('.foot'); f.classList.toggle('open'); b.setAttribute('aria-expanded', f.classList.contains('open')); });
 $('#scroll').addEventListener('scroll', () => $('#panelHead').classList.toggle('shadow', $('#scroll').scrollTop > 2), { passive:true });
 
 /* Bottom-Sheet am Handy */
@@ -2342,7 +2400,8 @@ $('#handle').onclick = () => { if (sheetDragged) return; setSheet(SHEET[(SHEET.i
 (function(){
   const p = $('#panel'); let d = null;
   const start = e => {
-    if (!isMobile() || (e.target.closest('button, a, input') && e.target.closest('#handle') !== $('#handle'))) return;
+    // ziehen geht auch auf Reitern/Knöpfen im Kopf – der Klick danach wird verschluckt (siehe end)
+    if (!isMobile() || e.target.closest('a, input, select')) return;
     d = { y:e.clientY, h:p.offsetHeight, t:Date.now(), moved:false, id:e.pointerId };
   };
   const move = e => {
@@ -2359,6 +2418,8 @@ $('#handle').onclick = () => { if (sheetDragged) return; setSheet(SHEET[(SHEET.i
     const moved = d.moved, h0 = d.h; d = null;
     if (!moved) return;
     sheetDragged = true; setTimeout(() => sheetDragged = false, 50);
+    const eat = ev => { ev.stopPropagation(); ev.preventDefault(); };   // kein Reiterwechsel/Knopfdruck nach dem Ziehen
+    window.addEventListener('click', eat, { capture:true, once:true }); setTimeout(() => window.removeEventListener('click', eat, true), 120);
     const h = p.offsetHeight, vh = window.innerHeight, v = (h - h0);
     p.classList.remove('dragging'); p.style.height = '';
     // Ziel: nächstgelegene Stufe; deutliche Bewegung nach oben/unten springt mindestens eine Stufe weiter
@@ -2369,7 +2430,7 @@ $('#handle').onclick = () => { if (sheetDragged) return; setSheet(SHEET[(SHEET.i
     if (best === curSheet() && Math.abs(v) > 40) best = SHEET[Math.max(0, Math.min(2, cur + (v > 0 ? 1 : -1)))];
     setSheet(best);
   };
-  for (const el of [$('#handle'), $('#panel .top')]){
+  for (const el of [$('#handle'), $('#panelHead')]){
     el.addEventListener('pointerdown', start);
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', end);
@@ -3078,6 +3139,8 @@ function timelineHtml(ia){
   });
   return h + '</ol>';
 }
+// feste Aktionsleiste unten: Hauptaktionen sichtbar, weitere hinter „⋯“ (im Testmodus alles offen und nicht fest)
+const footHtml = (main, extra) => `<div class="actions foot${window.__allTabs ? ' open static' : ''}"><div class="foot-main">${main}</div>${extra ? `<button class="btn ghost more" type="button" data-more aria-expanded="${!!window.__allTabs}" aria-label="Weitere Aktionen" title="Weitere Aktionen">⋯</button><div class="foot-extra">${extra}</div>` : ''}</div>`;
 function renderTrip(){
   const el = $('#tripView'); if (!el) return;
   if (!state.stages.length){
@@ -3085,14 +3148,13 @@ function renderTrip(){
   } else {
     const saved = state.tourId && loadTours().some(t => t.id === state.tourId);
     el.innerHTML = timelineHtml(true) + (!state.done ? `<div class="note" style="margin-top:8px">Noch nicht alle Plätze gewählt – weiter unter <button class="linkbtn" type="button" data-goto="plan">2 Plätze</button>.</div>` : '')
-      + `<div class="actions tl-actions">
-        <button class="btn primary" type="button" data-act="print">Drucken / PDF</button>
+      + `<div class="muted" style="margin-top:10px">${saved ? 'Änderungen (Nächte, Notizen …) werden automatisch gespeichert. ' : ''}<button class="linkbtn" type="button" data-act="offline">Etappenziele für unterwegs laden</button> (Karte offline)</div>`
+      + footHtml(`<button class="btn primary" type="button" data-act="print">Drucken / PDF</button>
         <button class="btn" type="button" data-act="xlsx">Excel</button>
-        <button class="btn" type="button" data-act="gpx">GPX</button>
+        <button class="btn" type="button" data-act="save" ${state.busy ? 'disabled' : ''}>Speichern</button>`,
+        `<button class="btn" type="button" data-act="gpx">GPX</button>
         <button class="btn" type="button" data-act="file">Tour-Datei</button>
-        <button class="btn" type="button" data-act="save" ${state.busy ? 'disabled' : ''}>${saved ? 'Speichern' : 'Tour speichern'}</button>
-        ${saved ? '<button class="btn" type="button" data-act="copy">Kopie speichern</button>' : ''}</div>
-      <div class="muted" style="margin-top:6px">${saved ? 'Änderungen (Nächte, Notizen …) werden automatisch gespeichert. ' : ''}<button class="linkbtn" type="button" data-act="offline">Etappenziele für unterwegs laden</button> (Karte offline)</div>`;
+        ${saved ? '<button class="btn" type="button" data-act="copy">Kopie speichern</button>' : ''}`);
   }
   el.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => setTab(b.dataset.goto));
   el.querySelectorAll('details[data-tl]').forEach(d => d.addEventListener('toggle', () => {
@@ -3275,8 +3337,8 @@ $('#settingsDlg').addEventListener('close', () => {
     if (newConn) syncAndReport('Online-Speicher verbunden', 'Verbindung zum Online-Speicher fehlgeschlagen: ');
     else syncAndReport('Einstellungen gespeichert · online gesichert', 'Einstellungen gespeichert – aber nur in diesem Browser. '); }
 });
-$('#settingsBtn').onclick = openSettings;
-$('#toursBtn').onclick = () => openTours();
+$('#settingsBtn').onclick = $('#settingsBtnM').onclick = openSettings;
+$('#toursBtn').onclick = $('#toursBtnM').onclick = () => openTours();
 $('#syncBtn').onclick = () => { const p = syncAndReport(); openTours(true); p.then(() => openTours(true)); };
 $('#toursClose').onclick = $('#toursX').onclick = () => $('#toursDlg').close();
 // Tippen neben den Dialog (auf den abgedunkelten Hintergrund) schließt ihn ohne zu speichern
