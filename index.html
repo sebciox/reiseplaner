@@ -213,6 +213,8 @@ const ORS = 'https://api.openrouteservice.org';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
                   'https://overpass.private.coffee/api/interpreter'];
 const AREA_ZOOM = 10;
+// Vorerst zum Testen: Start/Ziel vorausgefüllt (bei Bedarf hier leeren)
+const DEMO = { start:'Witten', end:'Sant Pere Pescador, CT, Spanien' };
 
 let settings = loadSettings();
 function loadSettings(){ try { return { ...DEF, ...JSON.parse(localStorage.getItem('gp.settings') || '{}') }; } catch(e){ return { ...DEF }; } }
@@ -905,7 +907,7 @@ function loadTour(id, given){
 function resetTour(){
   if (state.busy) return;
   Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null, endCands:[], n:null, overview:null });
-  $('#startIn').value = ''; $('#endIn').value = '';
+  $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end;
   setStatus(''); renderAll();
 }
 function exportGpx(){
@@ -959,6 +961,7 @@ $('#importBtn').onclick = () => $('#importIn').click();
 $('#importIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importTour(f); });
 
 /* ---------- Start ---------- */
+$('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end;
 renderAll();
 if (!settings.key) setStatus('Willkommen! Trag zuerst unter ⚙︎ deinen kostenlosen OpenRouteService-Schlüssel ein.');
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

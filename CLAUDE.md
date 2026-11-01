@@ -78,4 +78,5 @@ Ablauf: planen → Plätze wählen → Zielplatz → Tour-Datei exportieren → 
 
 - Synchronisation der Touren über ein **privates** GitHub-Repository (das App-Repo ist öffentlich → Touren dort
   wären sichtbar). Bräuchte einen Fine-grained Token, den die App speichert.
+- Start/Ziel sind vorerst zum Testen vorausgefüllt (`DEMO` in `index.html`: Witten → Sant Pere Pescador) – später entfernen.
 - Echte Tests mit realen Diensten stehen noch aus (park4night-Link-Ziel ungeprüft).
