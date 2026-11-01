@@ -6,7 +6,7 @@
 <title>Gespann-Etappen</title>
 <meta name="description" content="Campingplätze für Wohnwagen-Gespanne etwa alle 400 km entlang einer Route finden.">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#1f6b52">
+<meta name="theme-color" content="#9cbca2">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,15 +14,15 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 :root{
-  --bg:#f4f3ee; --panel:#ffffff; --text:#1c2420; --muted:#66716b; --line:#e4e2da;
-  --brand:#1f6b52; --brand-soft:#e3f0ea; --accent:#e07b24; --ok:#2e8b57; --unk:#8a8f98;
+  --bg:#ffffff; --panel:#ffffff; --text:#1c2420; --muted:#66716b; --line:#e3e7e3; --field:#f6f8f6;
+  --brand:#9cbca2; --brand-ink:#476b50; --brand-soft:#eef4ef; --accent:#e07b24; --ok:#2e8b57; --unk:#8a8f98;
   --danger:#b3412e; --danger-soft:#fbe9e5; --warn-soft:#fdf1e3;
   --shadow:0 -6px 24px rgba(0,0,0,.14);
 }
 @media (prefers-color-scheme: dark){
   :root{
     --bg:#121614; --panel:#1b201e; --text:#e7ece9; --muted:#9aa49f; --line:#2d3431;
-    --brand:#5cbf98; --brand-soft:#1f3229; --danger:#f08c77; --danger-soft:#3a2420; --warn-soft:#3a2d1d;
+    --brand:#9cbca2; --brand-ink:#a9c9af; --brand-soft:#26302a; --field:#1b201e; --danger:#f08c77; --danger-soft:#3a2420; --warn-soft:#3a2d1d;
     --shadow:0 -6px 24px rgba(0,0,0,.5);
   }
 }
@@ -63,7 +63,7 @@ h3{font-size:15px;margin:18px 0 6px}
 .btn{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--text);
   border-radius:10px;padding:8px 12px;cursor:pointer;min-height:40px}
 .btn:disabled{opacity:.5;cursor:default}
-.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#1c2420;font-weight:600}
 @media (prefers-color-scheme: dark){.btn.primary{color:#0e1512}}
 .btn.ghost{border-color:transparent;background:transparent}
 .btn.small{min-height:32px;padding:4px 10px;font-size:13px}
@@ -72,7 +72,7 @@ h3{font-size:15px;margin:18px 0 6px}
 .field{position:relative;margin-bottom:10px}
 .field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
 input{font:inherit;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
-  background:var(--bg);color:var(--text);min-height:44px}
+  background:var(--field);color:var(--text);min-height:44px}
 input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .check{display:flex;align-items:flex-start;gap:10px;margin:10px 0 2px;cursor:pointer}
 .check input{width:20px;height:20px;min-height:0;margin:2px 0 0;padding:0;flex:none;accent-color:var(--brand)}
@@ -93,7 +93,7 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .stages{list-style:none;margin:0;padding:0}
 .stage{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
-.stage .num{font-weight:700;color:var(--brand);font-size:13px}
+.stage .num{font-weight:700;color:var(--brand-ink);font-size:13px}
 .stage .route{font-weight:600}
 .stage .row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px}
 .note{margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--warn-soft);font-size:13px}
@@ -125,10 +125,10 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .opts .d{flex:1}
 .custom{display:flex;gap:8px;align-items:center;margin-top:10px}
 .custom input{width:90px;flex:none}
-.linkbtn{font:inherit;font-size:13px;background:none;border:0;padding:0;color:var(--brand);text-decoration:underline;cursor:pointer}
+.linkbtn{font:inherit;font-size:13px;background:none;border:0;padding:0;color:var(--brand-ink);text-decoration:underline;cursor:pointer}
 .cand .after{font-size:13px;color:var(--ok);margin-top:2px}
 .cand .after.worse{color:var(--danger)}
-.pin{width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#1f6b52;
+.pin{width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#6a9a74;
   border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
 .pin span{transform:rotate(45deg);color:#fff;font:700 12px system-ui,sans-serif}
 .pin.end{background:#b3412e}
@@ -146,14 +146,14 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .memo .nights{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
 .memo .nights input{width:64px;min-height:34px;padding:4px 8px}
 .memo .check{margin:0}
-.badge.res{background:var(--brand);margin-left:6px;vertical-align:2px}
+.badge.res{background:var(--brand);color:#1c2420;margin-left:6px;vertical-align:2px}
 .amen{font-size:13px;margin-left:4px;letter-spacing:1px}
 .alt{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
 .alt .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
 .alt select{font:inherit;padding:4px 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 2px;align-items:center}
 .chip{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:99px;padding:3px 10px;cursor:pointer}
-.chip.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.chip.on{background:var(--brand);border-color:var(--brand);color:#1c2420}
 .trip{margin:10px 0 2px;padding:8px 10px;border-radius:10px;background:var(--brand-soft);font-size:14px}
 .trip.warn{background:var(--danger-soft);color:var(--danger)}
 .nstep{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)}
@@ -165,24 +165,26 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .coordrow{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
 .icobtn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:8px;
   background:transparent;color:var(--muted);cursor:pointer;vertical-align:middle}
-.icobtn:hover,.icobtn:focus-visible{background:var(--brand-soft);color:var(--brand)}
+.icobtn:hover,.icobtn:focus-visible{background:var(--brand-soft);color:var(--brand-ink)}
 .icobtn.done{color:var(--ok)}
 .det .sbtns,.det .coord{vertical-align:middle}
 .land > div{margin-top:2px}
 .vialist{list-style:none;margin:0 0 6px;padding:0;display:grid;gap:6px}
 .vialist li{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
 .vialist li.visit{border-style:dashed;border-color:var(--accent);background:var(--warn-soft)}
-.vialist .vn{font-weight:700;color:var(--brand);min-width:16px;margin-top:2px}
+.vialist .vn{font-weight:700;color:var(--brand-ink);min-width:16px;margin-top:2px}
 .vialist li.visit .vn{color:var(--accent)}
 .vialist .vt{flex:1;min-width:0}
 .vialist .vt b{display:block;overflow-wrap:anywhere;font-weight:600}
 .vialist .vopts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:13px;color:var(--muted)}
-.vialist select{max-width:100%;min-width:0}
+.vialist select{width:100%;max-width:260px;min-width:0}
+.vialist .vbtns{flex:none}
+.vialist .vopts{min-width:0}
 .vialist select,.segrow select{font:inherit;font-size:13px;padding:3px 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
 .vialist input[type=number]{width:56px;min-height:30px;padding:3px 6px;font-size:13px}
 .vialist .vbtns{display:flex;gap:2px}
 .vialist .vbtns button{width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;font-size:14px}
-.vialist .vbtns button:hover{background:var(--brand-soft);color:var(--brand)}
+.vialist .vbtns button:hover{background:var(--brand-soft);color:var(--brand-ink)}
 .viatools{display:flex;gap:6px;margin-top:6px}
 .field label.check{display:flex;text-transform:none;font-size:14px;font-weight:400;color:var(--text);letter-spacing:0;margin-bottom:0}
 .vialist label{display:inline-flex;align-items:center;gap:4px;margin:0;text-transform:none;font-size:13px;font-weight:400;letter-spacing:0;color:var(--muted)}
@@ -216,7 +218,7 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .acc summary::-webkit-details-marker{display:none}
 .acc summary::after{content:'▾';margin-left:auto;color:var(--muted);transition:transform .2s}
 .acc details[open] summary::after{transform:rotate(180deg)}
-.acc .sn{font-weight:700;color:var(--brand);min-width:22px}
+.acc .sn{font-weight:700;color:var(--brand-ink);min-width:22px}
 .acc .st{flex:1;min-width:0}
 .acc .st b{display:block;overflow-wrap:anywhere}
 .acc .now{background:var(--accent);color:#fff;border-radius:99px;font-size:11px;padding:1px 8px;margin-left:6px}
@@ -229,9 +231,9 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 #print .pmap{width:100%;height:78mm;border:1px solid #bbb;margin-bottom:4mm}
 #print table{width:100%;border-collapse:collapse;table-layout:fixed}
 #print th,#print td{border:1px solid #bbb;padding:1.5mm 2mm;vertical-align:top;text-align:left;overflow-wrap:anywhere}
-#print th{background:#e3f0ea;font-size:9pt}
+#print th{background:#eef4ef;font-size:9pt}
 #print tr{break-inside:avoid}
-#print a{color:#1f6b52}
+#print a{color:#476b50}
 #print .sm{font-size:8.5pt;color:#444}
 #print .foot{margin-top:3mm;font-size:8pt;color:#666}
 @media print{
@@ -257,7 +259,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .tours{list-style:none;margin:0;padding:0}
 .tours li{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
 .tours li .t{flex:1;min-width:0}
-a{color:var(--brand)}
+a{color:var(--brand-ink)}
 .leaflet-popup-content{margin:12px 14px}
 .leaflet-container a.btn{color:#fff}
 </style>
@@ -377,7 +379,7 @@ a{color:var(--brand)}
 <script>
 'use strict';
 /* ---------- Konstanten & Einstellungen ---------- */
-const COL = { brand:'#1f6b52', pending:'#6f7a85', corridor:'#e07b24', ok:'#2e8b57', unk:'#8a8f98' };
+const COL = { brand:'#6a9a74', pending:'#6f7a85', corridor:'#e07b24', ok:'#2e8b57', unk:'#8a8f98' };
 const DEF = { key:'', speed:80, cmin:350, cmax:450, detour:10, highway:true, noToll:false,
               ghRepo:'sebciox/touren', ghToken:'', savedAt:null,
               altRadius:10, filters:{ caravan:false, power:false }, gkey:'', sortBy:'stage' };
