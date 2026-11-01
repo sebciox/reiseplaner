@@ -511,6 +511,8 @@ a{color:var(--brand-ink)}
     <div class="field"><label for="sToken">GitHub-Token</label>
       <input id="sToken" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="github_pat_…">
       <div class="muted">Fine-grained Token, nur für dieses Repo, Recht „Contents: Read and write“. Leer lassen = nur lokal speichern.</div></div>
+    <div class="field" id="setupLinkBox" hidden><button class="btn small" type="button" id="setupLinkBtn">Link für anderen Browser kopieren</button>
+      <div class="muted">Öffnet die App z. B. in Firefox oder am Handy gleich verbunden – mit allen Schlüsseln, Einstellungen und Touren. Der Link enthält deinen Token: nur an dich selbst schicken, nicht weitergeben.</div></div>
     </div>
     <div class="dlg-actions">
       <button class="btn" value="cancel" type="submit">Abbrechen</button>
@@ -3714,6 +3716,7 @@ function openSettings(){
   $('#sMin').value = settings.cmin; $('#sMax').value = settings.cmax;
   $('#sHighway').checked = !!settings.highway; $('#sToll').checked = !!settings.noToll;
   $('#sRepo').value = settings.ghRepo || ''; $('#sToken').value = settings.ghToken || ''; $('#sGkey').value = settings.gkey || '';
+  $('#setupLinkBox').hidden = !ghOn();
   $('#settingsDlg').returnValue = '';   // sonst würde Esc/Zurück nach einem früheren „Speichern“ erneut speichern
   $('#settingsDlg').showModal();
 }
@@ -3736,6 +3739,26 @@ $('#settingsDlg').addEventListener('close', () => {
     else syncAndReport('Einstellungen gespeichert · online gesichert', 'Einstellungen gespeichert – aber nur in diesem Browser. '); }
 });
 $('#settingsBtn').onclick = $('#settingsBtnM').onclick = openSettings;
+/* Einrichtungs-Link: Repo + Token im Fragment (#einrichten=…, wird nie an einen Server geschickt) → anderer Browser ist sofort verbunden */
+const b64u = str => btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64u = str => decodeURIComponent(escape(atob(str.replace(/-/g, '+').replace(/_/g, '/'))));
+$('#setupLinkBtn').onclick = async () => {
+  if (!ghOn()) return;
+  const link = `${location.origin}${location.pathname}#einrichten=${b64u(JSON.stringify({ r:settings.ghRepo, t:settings.ghToken }))}`;
+  try { await navigator.clipboard.writeText(link); flash('Einrichtungs-Link kopiert – im anderen Browser öffnen (nur für dich, enthält deinen Token).'); }
+  catch(e){ prompt('Einrichtungs-Link (kopieren):', link); }
+};
+function setupFromLink(){
+  const m = location.hash.match(/^#einrichten=([\w-]+)/); if (!m) return false;
+  history.replaceState(null, '', location.pathname + location.search);       // Token sofort aus der Adresszeile entfernen
+  let d = null; try { d = JSON.parse(unb64u(m[1])); } catch(e){}
+  if (!d || !d.t || !/^[\w.-]+\/[\w.-]+$/.test(d.r || '')){ flash('Der Einrichtungs-Link ist ungültig oder unvollständig.'); return false; }
+  if (settings.ghToken === d.t && settings.ghRepo === d.r){ flash('Dieser Browser ist schon mit dem Online-Speicher verbunden.'); return false; }
+  if (!confirm(`Online-Speicher „${d.r}“ in diesem Browser einrichten?\nDanach werden Schlüssel, Einstellungen und Touren von dort übernommen.`)) return false;
+  settings = { ...settings, ghRepo:d.r, ghToken:d.t }; try { localStorage.removeItem('gp.sync'); } catch(e){}   // neue Verbindung: Online-Einstellungen haben Vorrang
+  saveSettings(); setStatus('Verbinde mit dem Online-Speicher …', 'busy');
+  return true;
+}
 $('#toursBtn').onclick = $('#toursBtnM').onclick = () => openTours();
 $('#syncBtn').onclick = () => { const p = syncAndReport(); openTours(true); p.then(() => openTours(true)); };
 $('#toursClose').onclick = $('#toursX').onclick = () => $('#toursDlg').close();
@@ -3751,8 +3774,10 @@ $('#importIn').addEventListener('change', e => { const f = e.target.files[0]; e.
 /* ---------- Start ---------- */
 $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end;
 renderVia(); renderAll(); popupPad(); loadFx().then(() => renderAll());
+const viaLink = setupFromLink();
 if (!settings.key && !ghOn()) setStatus('Willkommen! Trag zuerst unter ⚙︎ deinen kostenlosen OpenRouteService-Schlüssel ein.');
-syncAndReport();
+if (viaLink) syncAndReport('Online-Speicher eingerichtet', 'Verbindung zum Online-Speicher fehlgeschlagen: ');
+else syncAndReport();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
