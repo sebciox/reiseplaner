@@ -269,8 +269,12 @@ const srv = require('./lib/server')(ROOT, 8136);
   await page.waitForFunction(() => state.pending && state.pending.radius === 10 && !state.busy);
   ok(true, 'Umkreis auf 10 km geändert');
   await page.click('[data-pick]');
-  // Abschnitt 2: Transit mit Lyon unterwegs
-  await page.waitForFunction(() => document.querySelector('[data-pick]') || document.querySelector('[data-endpick]'), null, { timeout: 20000 });
+  // Abschnitt 2: Transit mit Lyon unterwegs – erst warten, bis die Etappe wirklich berechnet ist (die alten Knöpfe sind kurz noch da)
+  await page.waitForFunction(
+    () => !state.busy && state.stages.some(x => x.to.near) && (document.querySelector('[data-pick]') || document.querySelector('[data-endpick]')),
+    null,
+    { timeout: 20000 }
+  );
   const st0 = await page.evaluate(() => {
     const s = state.stages.find(x => x.to.near);
     return { near: s.to.near, nights: s.nights, seg: s.seg, i: state.stages.indexOf(s) };
