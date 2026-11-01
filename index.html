@@ -93,6 +93,12 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
   padding:9px 10px;border-radius:8px;cursor:pointer}
 .sugg button:hover,.sugg button:focus{background:var(--brand-soft)}
 #status:empty{display:none}
+#mapBusy{position:fixed;z-index:1100;top:14px;left:50%;transform:translateX(-50%);max-width:min(86vw,520px);display:flex;align-items:center;gap:10px;
+  padding:10px 16px;border-radius:99px;background:var(--panel);color:var(--text);box-shadow:0 4px 18px rgba(0,0,0,.22);font-size:14px;font-weight:600}
+#mapBusy[hidden]{display:none}
+#mapBusy .spin{color:var(--brand-ink);flex:none}
+@media (max-width:899px){ #mapBusy{top:70px} }
+@media (min-width:900px){ #mapBusy{left:calc(var(--pw,410px) + (100vw - var(--pw,410px)) / 2)} }
 #status{margin:6px 0 12px;padding:10px 12px;border-radius:10px;background:var(--brand-soft);font-size:14px;
   display:flex;gap:10px;align-items:center}
 #status.error{background:var(--danger-soft);color:var(--danger)}
@@ -220,6 +226,15 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .segrow .st{flex:1;min-width:0}
 .segrow .st b{overflow-wrap:anywhere}
 .stepper{display:flex;align-items:center;gap:4px;flex:none}
+.addcamp{display:flex;gap:6px;margin-top:10px}
+.addcamp input{flex:1;min-width:0;min-height:36px !important;font-size:14px !important;padding:6px 10px !important}
+.addres{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:2px}
+.addres:empty{display:none}
+.addres button{display:block;width:100%;text-align:left;font:inherit;font-size:14px;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:7px 10px;cursor:pointer;color:var(--text);overflow-wrap:anywhere}
+.addres li.muted{padding:4px 2px}
+.pdist{margin:2px 0;color:var(--brand-ink)}
+li.flashrow{animation:flashrow 2.4s ease-out}
+@keyframes flashrow{0%,40%{background:var(--brand-soft)}100%{background:transparent}}
 .keepinfo{font-size:13px;color:var(--brand-ink);background:var(--brand-soft);border-radius:8px;padding:3px 8px;margin:4px 0;overflow-wrap:anywhere}
 .badge.prev{background:var(--brand-soft);color:var(--brand-ink);border:1px solid var(--brand);margin-left:4px;vertical-align:1px}
 .segn{display:flex;flex-direction:column;align-items:center;gap:2px;flex:none;font-size:12px}
@@ -311,6 +326,7 @@ a{color:var(--brand-ink)}
 </head>
 <body>
 <div id="map" aria-label="Karte"></div>
+<div id="mapBusy" role="status" aria-live="polite" hidden></div>
 <div id="fabs">
   <button class="fab" id="fabMenu" type="button" aria-label="Menü ein- oder ausblenden" title="Menü ein-/ausblenden">☰</button>
   <button class="fab" id="fabSum" type="button" aria-label="Tourübersicht" title="Tourübersicht" hidden>📋</button>
@@ -775,7 +791,7 @@ const AMEN = [
 const amenList = c => AMEN.filter(a => a.f(c.tags || {}));
 function amenHtml(c){ const a = amenList(c); return a.length ? `<span class="amen" title="${a.map(x => x.t).join(', ')}">${a.map(x => x.i).join('')}</span>` : ''; }
 const FILTERS = [ { k:'caravan', l:'Wohnwagen ✓', f: c => isOk(c) }, { k:'power', l:'🔌 Strom', f: c => AMEN[0].f(c.tags || {}) } ];
-const passFilter = c => FILTERS.every(x => !(settings.filters || {})[x.k] || x.f(c));
+const passFilter = c => !!c.added || FILTERS.every(x => !(settings.filters || {})[x.k] || x.f(c));
 function chipsHtml(all){
   const hidden = all.filter(c => !passFilter(c)).length;
   return `<div class="chips"><span class="muted">Nur:</span>${FILTERS.map(x => `<button type="button" class="chip${(settings.filters || {})[x.k] ? ' on' : ''}" data-filter="${x.k}">${x.l}</button>`).join('')}
@@ -1172,7 +1188,102 @@ function applyKeep(kp){
   state.segs.forEach(g => { const ss = kp.secs.get(segKey(from, g)); if (ss){ g.keep = ss; g.n = ss.length; n++; } from = g.to; });
   return n;
 }
-const prevBadge = c => state.prevPicks && state.prevPicks.has(String(c.id)) ? ' <span class="badge prev">bisher gewählt</span>' : '';
+const prevBadge = c => (c.added ? ' <span class="badge prev">von dir ergänzt</span>' : '')
+  + (state.prevPicks && state.prevPicks.has(String(c.id)) ? ' <span class="badge prev">bisher gewählt</span>' : '');
+/* Platz fehlt in der Liste? Name suchen (Photon = alle benannten OSM-Orte) oder Google-Maps-Link / Koordinaten einfügen.
+   Google-Inhalte selbst werden nicht übernommen (Google-Regeln) – nur die Koordinaten, die der Nutzer einfügt. */
+const addCampHtml = ctx => `<form class="addcamp" data-ctx="${ctx}"><input name="q" placeholder="Platz fehlt? Name, Google-Maps-Link oder Koordinaten" enterkeyhint="search" aria-label="Fehlenden Campingplatz suchen" autocomplete="off">
+  <button class="btn small" type="submit">Suchen</button></form><ul class="addres"></ul>`;
+function parseCoords(t){
+  const pats = [/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/, /[?&](?:q|query|ll|destination|center)=(-?\d+\.\d+)(?:,|%2C)\s*(-?\d+\.\d+)/i,
+                /@(-?\d+\.\d+),\s*(-?\d+\.\d+)/, /^\s*(-?\d{1,2}\.\d+)\s*[,; ]\s*(-?\d{1,3}\.\d+)\s*$/];
+  for (const re of pats){ const m = t.match(re); if (m){ const lat = +m[1], lon = +m[2]; if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) return { lat, lon }; } }
+  return null;
+}
+const nameFromUrl = t => { const m = t.match(/\/place\/([^/@?]+)/); try { return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : ''; } catch(e){ return ''; } };
+function addCtxCenter(ctx){
+  const p = state.pending;
+  if (ctx === 'split' && state.split){ const st = state.stages[state.split.i]; const q = pointAt(st.line, cumul(st.line), st.dist / 2); return { lat:q[0], lon:q[1] }; }
+  if (p && p.mode === 'anchor') return p.sight;
+  if (p){ const q = pointAt(p.line, p.cum, p.plan ? p.plan.len : p.remain / 2); return { lat:q[0], lon:q[1] }; }
+  return null;
+}
+// Kennzahlen wie bei gefundenen Plätzen berechnen (Umweg/Etappen-km bzw. Entfernung zur Sehenswürdigkeit)
+async function enrichAdded(ctx, c){
+  const p = state.pending;
+  const along = async (line, cum, total) => {
+    const anchors = sample(line, cum, 0, total, 40).map(a => ({ d:Math.round(a.d), p:[+a.p[0].toFixed(5), +a.p[1].toFixed(5)] }));
+    const j = await matrix({ locations:[...anchors.map(a => [a.p[1], a.p[0]]), [c.lon, c.lat]], sources:anchors.map((_, k) => k), destinations:[anchors.length], metrics:['distance', 'duration'] });
+    let best = null;
+    anchors.forEach((a, k) => { const d = j.distances?.[k]?.[0]; if (d != null && (!best || d < best.d)) best = { d, t:j.durations?.[k]?.[0] ?? 0, km:a.d }; });
+    if (best){ c.detour = { d:best.d, t:best.t }; c.stageKm = best.km; }
+  };
+  if (ctx === 'split'){
+    const st = state.stages[state.split.i]; await along(st.line, cumul(st.line), st.dist);
+    if (c.detour){ c.after = Math.max(0, st.dist - c.stageKm + c.detour.d); c.dev = Math.abs(c.stageKm - st.dist / 2); }
+    return;
+  }
+  if (p && p.mode === 'anchor'){
+    const S = p.sights && p.sights.length ? p.sights : [p.sight];
+    c.air = hav([p.sight.lat, p.sight.lon], [c.lat, c.lon]);
+    const r = await roadPairs(S, c);
+    c.sightD = S.map((x, q) => r[q].d != null ? { uid:x.uid, label:x.label, d:r[q].d, t:r[q].t } : null);
+    const ok = c.sightD.filter(Boolean);
+    c.sight = ok.length ? { d:ok.reduce((a, x) => a + x.d, 0) / ok.length, t:ok.reduce((a, x) => a + x.t, 0) / ok.length } : null;
+    return;
+  }
+  if (p){
+    await along(p.line, p.cum, p.remain);
+    if (c.detour){ c.after = Math.max(0, p.remain - c.stageKm + c.detour.d); const n = Math.max(1, p.plan.n - 1);
+      c.afterPlan = { n, len:c.after / n }; c.dev = Math.abs(c.stageKm - p.plan.len); }
+  }
+}
+async function addCustomCamp(ctx, o){
+  const id = o.id || `eigen/${o.lat.toFixed(5)},${o.lon.toFixed(5)}`;
+  const c = campIndex.get(id) || { id, lat:o.lat, lon:o.lon, tags:{ tourism:'camp_site', name:o.name || 'Eigener Platz', ...(o.tags || {}) } };
+  c.added = true; campIndex.set(id, c);
+  setStatus(`Entfernungen für „${c.tags.name}“ …`, 'busy');
+  await enrichAdded(ctx, c);
+  const list = ctx === 'split' ? state.split?.list : state.pending?.cands;
+  if (!list) return;
+  if (!list.includes(c)) list.push(c);
+  if (ctx === 'split' || (state.pending && state.pending.mode !== 'anchor')) list.sort((a, b) => (a.dev ?? 1e12) - (b.dev ?? 1e12));
+  else list.sort((a, b) => (a.sight ? a.sight.d : a.air * 1.4) - (b.sight ? b.sight.d : b.air * 1.4));
+  renderAll();
+  map.setView([c.lat, c.lon], Math.max(map.getZoom(), 11));
+  setTimeout(() => { c._m?.openPopup(); const row = document.querySelector(`#result [data-show="${CSS.escape(String(id))}"]`);
+    row?.closest('li')?.classList.add('flashrow'); row?.scrollIntoView({ block:'center', behavior:'smooth' }); }, 50);
+  flash(`„${c.tags.name}“ ist jetzt in der Liste und auf der Karte – mit „Wählen“ übernehmen.`);
+}
+async function searchAddCamp(form){
+  const ctx = form.dataset.ctx, t = form.q.value.trim(), out = form.nextElementSibling;
+  if (!t) return;
+  if (/goo\.gl|maps\.app/i.test(t)){
+    out.innerHTML = '<li class="muted">Kurzlinks kann die App nicht öffnen. In Google Maps lange auf den Platz drücken (bzw. rechts klicken), die angezeigten Koordinaten kopieren und hier einfügen – oder den langen Link aus der Adresszeile des Browsers.</li>';
+    return;
+  }
+  const co = parseCoords(t);
+  if (co){
+    const name = nameFromUrl(t) || prompt('Name des Campingplatzes:', 'Eigener Platz');
+    if (name === null) return;
+    out.innerHTML = ''; return run(() => addCustomCamp(ctx, { ...co, name:name.trim() || 'Eigener Platz' }));
+  }
+  const ctr = addCtxCenter(ctx);
+  out.innerHTML = '<li class="muted">Suche …</li>';
+  try {
+    const j = await getJson(`${PHOTON}/api/?q=${encodeURIComponent(t)}&limit=12&lang=de${ctr ? `&lat=${ctr.lat.toFixed(4)}&lon=${ctr.lon.toFixed(4)}` : ''}`, 'Suche (Photon)');
+    const T = { N:'node', W:'way', R:'relation' };
+    let r = (j.features || []).map(f => { const pr = f.properties, lat = f.geometry.coordinates[1], lon = f.geometry.coordinates[0];
+      return { lat, lon, name:pr.name || t, label:photonLabel(pr), camp:['camp_site', 'caravan_site'].includes(pr.osm_value),
+        id:pr.osm_type && pr.osm_id ? `${T[pr.osm_type] || pr.osm_type}/${pr.osm_id}` : null, dist:ctr ? hav([ctr.lat, ctr.lon], [lat, lon]) : 0 }; })
+      .filter(x => !ctr || x.dist <= 150000);
+    r.sort((a, b) => (b.camp - a.camp) || a.dist - b.dist); r = r.slice(0, 8);
+    if (!r.length){ out.innerHTML = '<li class="muted">Nichts in der Nähe gefunden. In Google Maps den Platz antippen, Koordinaten oder Link kopieren und hier einfügen.</li>'; return; }
+    out.innerHTML = r.map((x, i) => `<li><button type="button" data-ar="${i}">${x.camp ? '⛺ ' : ''}${esc(x.label)}${ctr ? ` <span class="muted">· ${fkm(x.dist)} entfernt</span>` : ''}</button></li>`).join('');
+    out.querySelectorAll('[data-ar]').forEach(b => b.onclick = () => { const x = r[+b.dataset.ar]; out.innerHTML = '';
+      run(() => addCustomCamp(ctx, { lat:x.lat, lon:x.lon, name:x.name, id:x.camp ? x.id : null })); });
+  } catch(e){ out.innerHTML = `<li class="muted">${esc(e.message)} – alternativ Koordinaten oder Google-Maps-Link einfügen.</li>`; }
+}
 const viaByUid = uid => state.via.find(v => v.uid === uid);
 const visitsOf = s => (s.vias || []).map(viaByUid).filter(Boolean);
 // Abstand eines Punktes entlang der Linie (nächster Linienpunkt)
@@ -1274,7 +1385,7 @@ async function loadAnchorCands(from, k, visits, r, km){
   setStatus(`Suche Campingplätze bei ${shortLabel(sight.label)} …`, 'busy');
   const all = await campsInBox([sight.lat - dLat, sight.lon - dLon, sight.lat + dLat, sight.lon + dLon], { onStatus: t => setStatus(t, 'busy') });
   let camps = all.map(c => { c.air = hav([sight.lat, sight.lon], [c.lat, c.lon]); campIndex.set(c.id, c); return c; })
-                 .filter(c => c.air <= rad).sort((a, b) => a.air - b.air).slice(0, 25);
+                 .filter(c => c.air <= rad).sort((a, b) => a.air - b.air).slice(0, 40);
   if (camps.length){
     setStatus(S.length > 1 ? 'Entfernungen zu den Sehenswürdigkeiten …' : 'Entfernungen zur Sehenswürdigkeit …', 'busy');
     try {
@@ -1421,6 +1532,9 @@ function setStatus(text, kind){
   const el = $('#status');
   el.className = kind === 'error' ? 'error' : '';
   el.innerHTML = text ? (kind === 'busy' ? '<span class="spin"></span>' : '') + `<span>${esc(text)}</span>` : '';
+  // gut sichtbar auch über der Karte, solange etwas läuft (Menü kann weggescrollt/eingeklappt sein)
+  const mb = $('#mapBusy');
+  if (mb){ mb.hidden = !(text && kind === 'busy'); if (!mb.hidden) mb.innerHTML = `<span class="spin"></span><span>${esc(text)}</span>`; }
 }
 
 /* ---------- Karte ---------- */
@@ -1484,7 +1598,8 @@ function campInfo(c, mode){
     ${c.stageKm != null && mode === 'cand' ? `<div>Liegt bei Etappen-km ${fkm(c.stageKm)}</div>` : ''}
     ${c.afterPlan && mode === 'cand' ? `<div>${afterText(c)}</div>` : ''}
     ${mode === 'end' && c.air != null ? `<div>${fkm1(c.air)} vom Zielort (Luftlinie)</div>` : ''}
-    ${mode === 'area' ? (state.pending ? '<div class="muted">außerhalb des Suchkorridors</div>' : nearStopHtml(c)) : ''}
+    ${mode === 'area' ? (state.pending ? '<div class="muted">außerhalb des Suchkorridors</div>' : '') : ''}
+    ${['area', 'cand', 'split'].includes(mode) && !(mode === 'cand' && state.pending && state.pending.mode !== 'anchor' && c.stageKm != null) ? pdHtml(c) : ''}
     ${t.opening_hours ? `<div class="muted">Öffnungszeiten (OSM): ${esc(t.opening_hours)}</div>` : ''}
     ${web ? `<div><a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">Website</a></div>` : ''}
     ${phone ? `<div><a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
@@ -1505,6 +1620,49 @@ function targetStage(c){
   state.stages.forEach((s, i) => { const d = hav([s.to.lat, s.to.lon], [c.lat, c.lon]); if (d < bd){ bd = d; best = i; } });
   return best;
 }
+// Info-Fenster: echte Straßenentfernung zum geplanten Ziel (wird beim Öffnen berechnet, ORS-Matrix mit Zwischenspeicher)
+const pdMem = new Map();
+const pdHtml = c => `<div class="pdist" data-pd="${esc(String(c.id))}"><span class="muted">Straßenentfernung wird berechnet …</span></div>`;
+const capT = (d, t) => Math.max(t || 0, d / (Math.max(80, +settings.speed || 80) / 3.6));   // Fahrzeit mit Wohnwagen
+async function roadPairs(froms, to){
+  const j = await matrix({ locations:[...froms.map(x => [+(+x.lon).toFixed(5), +(+x.lat).toFixed(5)]), [+(+to.lon).toFixed(5), +(+to.lat).toFixed(5)]],
+    sources:froms.map((_, i) => i), destinations:[froms.length], metrics:['distance', 'duration'] });
+  return froms.map((_, i) => ({ d:j.distances?.[i]?.[0], t:j.durations?.[i]?.[0] }));
+}
+async function popDist(c){
+  const p = state.pending, sp = state.split;
+  if (p && p.mode === 'anchor'){
+    const S = p.sights && p.sights.length ? p.sights : [p.sight];
+    const r = c.sightD ? c.sightD.map(x => x && { d:x.d, t:x.t }) : await roadPairs(S, c);
+    return S.map((x, i) => r[i] && r[i].d != null ? `★ ${esc(shortLabel(x.label))}: <b>${fkm1(r[i].d)}</b> / ${fdur(r[i].t)} (Straße, ohne Wohnwagen)` : '').filter(Boolean).join('<br>');
+  }
+  if (p){
+    const [r] = await roadPairs([p.from], c);
+    if (r.d == null) return '';
+    const left = p.plan ? p.plan.n - 1 : 0, rest = Math.max(0, p.remain - r.d);
+    return `Etappe bis hier: <b>${fkm(r.d)}</b> / ≈ ${fdur(capT(r.d, r.t))} (Straße, ab ${esc(shortLabel(p.from.label))})${left > 0 ? `<br><span class="muted">danach noch ≈ ${fkm(rest)}${left > 1 ? ` (${left} Etappen à ~${fkm(rest / left)})` : ''}</span>` : ''}`;
+  }
+  if (sp){
+    const st = state.stages[sp.i]; if (!st) return '';
+    const [a] = await roadPairs([st.from], c), [b] = await roadPairs([c], st.to);
+    if (a.d == null || b.d == null) return '';
+    return `Teilt Etappe ${sp.i + 1}: <b>${fkm(a.d)} + ${fkm(b.d)}</b> (Straße; bisher ${fkm(st.dist)})`;
+  }
+  const i = targetStage(c); if (i < 0) return '';
+  const t = state.stages[i].to, [r] = await roadPairs([t], c);
+  return r.d != null ? `<b>${fkm1(r.d)}</b> / ${fdur(r.t)} von ${esc(shortLabel(t.label))} (Ziel Etappe ${i + 1}, Straße)` : '';
+}
+async function fillPopDist(el, c){
+  const key = [c.id, state.pending ? (state.pending.mode || 't') + ':' + ptKey(state.pending.from) : '', state.split ? 's' + state.split.i : '', state.stages.length].join('|');
+  try {
+    let h = pdMem.get(key);
+    if (h == null){ h = await popDist(c); pdMem.set(key, h); }
+    el.innerHTML = h || '';
+  } catch(e){
+    const ref = state.pending ? (state.pending.sight || state.pending.from) : null;
+    el.innerHTML = ref ? `<span class="muted">${fkm1(hav([ref.lat, ref.lon], [c.lat, c.lon]))} Luftlinie zu ${esc(shortLabel(ref.label))} (Straße gerade nicht abrufbar)</span>` : '';
+  }
+}
 function nearStopHtml(c){
   const i = targetStage(c); if (i < 0) return '';
   const t = state.stages[i].to;
@@ -1516,6 +1674,7 @@ function afterText(c){
 }
 map.on('popupclose', e => { lastClosed = { src:e.popup._source, t:Date.now() }; });
 map.on('popupopen', e => {
+  e.popup.getElement().querySelectorAll('[data-pd]').forEach(el => { const c = campIndex.get(el.dataset.pd); if (c) fillPopDist(el, c); });
   e.popup.getElement().querySelectorAll('[data-pick]').forEach(b => {
     b.onclick = () => { const c = campIndex.get(b.dataset.pick); map.closePopup(); if (c) run(() => selectCamp(c)); };
   });
@@ -1704,7 +1863,7 @@ function splitHtml(i){
         <button class="btn small primary" type="button" data-splitpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Einfügen</button>
         <a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navi</a></div></li>`;
   });
-  return h + '</ul><div class="muted" style="margin-top:6px">Ein anderer Platz? Auf der Karte reinzoomen und dort „Als Zwischenstopp einfügen“ wählen.</div></div>';
+  return h + `</ul>${addCampHtml('split')}<div class="muted" style="margin-top:6px">Ein anderer Platz? Auf der Karte reinzoomen und dort „Als Zwischenstopp einfügen“ wählen.</div></div>`;
 }
 // Adresse für eine Etappe nachladen, sobald die Details geöffnet werden
 async function ensureOneAddr(i){
@@ -1843,7 +2002,7 @@ function renderPanel(){
           : `<div class="sightinfo">${c.sight ? `${fkm1(c.sight.d)} / ${fdur(c.sight.t)} ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit (ohne Wohnwagen)'}` : `${fkm1(c.air)} Luftlinie ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit'}`}</div>`}</div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
     });
-    h += `</ul><div class="muted" style="margin-top:8px">Sortiert nach ${p.sights && p.sights.length > 1 ? 'mittlerer Entfernung zu allen Sehenswürdigkeiten' : 'Entfernung ' + (g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit')}. Weitere Plätze erscheinen auf der Karte beim Reinzoomen.</div>`;
+    h += `</ul>${addCampHtml('pending')}<div class="muted" style="margin-top:8px">Sortiert nach ${p.sights && p.sights.length > 1 ? 'mittlerer Entfernung zu allen Sehenswürdigkeiten' : 'Entfernung ' + (g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit')}. Weitere Plätze erscheinen auf der Karte beim Reinzoomen.</div>`;
   }
   else if (p){
     h += `<h3>Etappe ${state.stages.length + 1} von ${state.n}: ${state.segs ? 'Transit-Stopp' : 'Platz wählen'}</h3>
@@ -1863,7 +2022,7 @@ function renderPanel(){
         <div class="after">${afterText(c)}</div></div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
     });
-    h += `</ul><div class="muted" style="margin-top:8px">Sortiert nach Nähe zur idealen Etappenlänge. Weitere Campingplätze erscheinen auf der Karte beim Reinzoomen.</div>`;
+    h += `</ul>${addCampHtml('pending')}<div class="muted" style="margin-top:8px">Sortiert nach Nähe zur idealen Etappenlänge. Weitere Campingplätze erscheinen auf der Karte beim Reinzoomen.</div>`;
   }
   if (state.n && !state.done && !p && !busy){
     h += `<button class="btn primary wide" type="button" id="contBtn" style="margin-top:6px">Erneut versuchen – Etappe ${state.stages.length + 1} planen</button>`;
@@ -1888,6 +2047,7 @@ function renderPanel(){
     else { state.openDet.add(i); ensureOneAddr(i); ensureCountries([i]); if (settings.gkey) loadRatings([state.stages[i].to]); }
     renderPanel();
   });
+  el.querySelectorAll('form.addcamp').forEach(f => f.onsubmit = e => { e.preventDefault(); if (!state.busy) searchAddCamp(f); });
   el.querySelectorAll('[data-split]').forEach(b => b.onclick = () => {
     const i = +b.dataset.split;
     if (state.split && state.split.i === i){ state.split = null; renderAll(); return; }
