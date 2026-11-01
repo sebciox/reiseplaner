@@ -1009,7 +1009,7 @@ function rzFor(c){
 const linkA = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(text)}</a>`;
 function campLinks(c){
   const w = campWeb(c);
-  return [w && linkA(safeUrl(w), hostOf(w)), linkA(gEntryUrl(c), 'Google-Eintrag'), linkA(p4nUrl(c), 'park4night')].filter(Boolean).join(' · ');
+  return [w && linkA(safeUrl(w), hostOf(w)), linkA(gEntryUrl(c), 'Google-Eintrag'), linkA(p4nUrl(c), 'park4night'), linkA(navUrl(c), 'Navigation')].filter(Boolean).join(' · ');
 }
 function sightGUrl(s){
   const g = gSight.get(sightKey(s));
@@ -1147,16 +1147,21 @@ async function loadGSight(x){
   } catch(e){ console.warn(e); return false; }
 }
 function sightFacts(s, compact){
-  const inf = s.info || {}, g = gSight.get(sightKey(s)), web = inf.web || '', r = web ? rzData['web:' + web] : null;
+  const inf = s.info || {}, g = gSight.get(sightKey(s)), web = inf.web || '', r0 = web ? rzData['web:' + web] : null;
+  const r = r0 && (r0.v || 0) >= 2 ? r0 : null;      // ältere Recherche (v1) verwechselte z. B. Parkgebühren mit Eintritt
   if (inf.town) return '';
   let h = '';
   if (g && g.oh && g.oh.length) h += gHoursHtml(g.oh, g.open);
-  if (r && r.hoursS) h += compact ? `<div>Öffnungszeiten laut Website${r.hoursS.text ? ': ' + esc(r.hoursS.text) : ''}</div>` : `<div class="rz"><b>Öffnungszeiten laut Website${r.hoursS.text ? ': ' + esc(r.hoursS.text) : ''}</b>${snipLink(r.hoursS)}</div>`;
+  if (r && r.hoursS && r.hoursS.text) h += compact ? `<div>Öffnungszeiten laut Website: ${linkA(safeUrl(r.hoursS.url), r.hoursS.text)}</div>` : `<div class="rz"><b>Öffnungszeiten laut Website: ${esc(r.hoursS.text)}</b>${snipLink(r.hoursS)}</div>`;
+  else if (r && r.hoursUrl) h += `<div>${linkA(safeUrl(r.hoursUrl), 'Öffnungszeiten auf der Website')}</div>`;
   if (inf.oh && !(g && g.oh && g.oh.length)) h += `<div>Öffnungszeiten (OSM): ${esc(inf.oh)}</div>`;
-  if (r && r.price) h += compact ? `<div class="price">Preis ${euroText(r.price, s)}</div>` : `<div class="rz"><b>Preis: ${euroText(r.price, s)}</b> <span class="muted">(Website)</span>${snipLink(r.price)}</div>`;
+  const ageP = p => p && (p.adult || p.child) ? [p.adult && 'Erwachsene ' + euroAb(p.adult, s), p.child && 'Kinder ' + euroAb(p.child, s)].filter(Boolean).join(' · ') : '';
+  if (r && r.price && ageP(r.price)) h += compact ? `<div class="price">${ageP(r.price)}</div>` : `<div class="rz"><b>${ageP(r.price)}</b> <span class="muted">(Website)</span>${snipLink(r.price)}</div>`;
+  else if (r && r.price) h += compact ? `<div class="price">Preis ${euroText(r.price, s)}</div>` : `<div class="rz"><b>Preis: ${euroText(r.price, s)}</b> <span class="muted">(Website)</span>${snipLink(r.price)}</div>`;
   else if (inf.charge) h += `<div class="price">Preis ${euroText({ text:inf.charge }, s)} <span class="muted">(OSM)</span></div>`;
   else if (inf.fee === 'no') h += `<div class="price">Eintritt frei <span class="muted">(OSM)</span></div>`;
   else if (g && g.price) h += `<div class="price">Preis ${euroText({ text:g.price }, s)} <span class="muted">(Google)</span></div>`;
+  else if (r && r.priceUrl) h += `<div>${linkA(safeUrl(r.priceUrl), 'Preise auf der Website')}</div>`;
   return h;
 }
 const snipLink = o => `<div class="snip">„${esc(o.snippet)}“${o.url ? ` – <a href="${esc(safeUrl(o.url))}" target="_blank" rel="noopener">Quelle</a>` : ''}</div>`;
@@ -1177,9 +1182,9 @@ function sightBodyHtml(x, from){
   }
   h += sightFacts(s, false);
   // Stand der Website-Recherche
-  const r = web ? rzData['web:' + web] : null;
+  const r = web && (rzData['web:' + web]?.v || 0) >= 2 ? rzData['web:' + web] : null;
   if (web && !r) h += `<div class="rz none">Öffnungszeiten und Preise von der Website: ${ghOn() ? (state.tourId ? 'werden gesucht (1–2 Min. nach dem Speichern) …' : 'werden nach dem Speichern der Tour gesucht.') : 'Suche braucht den Online-Speicher (⚙︎).'}</div>`;
-  else if (r && !r.hoursS && !r.price) h += `<div class="rz none">Öffnungszeiten/Preise: ${r.status === 'error' ? 'Website nicht erreichbar' : 'auf der Website nicht gefunden'} – ${linkA(safeUrl(web), 'selbst nachsehen')}.</div>`;
+  else if (r && !r.hoursS?.text && !r.price && !r.hoursUrl && !r.priceUrl) h += `<div class="rz none">Öffnungszeiten/Preise: ${r.status === 'error' ? 'Website nicht erreichbar' : 'auf der Website nicht gefunden'} – ${linkA(safeUrl(web), 'selbst nachsehen')}.</div>`;
   h += `<div><span class="k">Adresse</span> ${esc(g?.addr || inf.addr || cleanLabel(s.label))}</div>`;
   if (!web && (s.info || g)) h += `<form class="sweb" data-sweb="${k}"><input name="w" type="text" inputmode="url" autocomplete="url" placeholder="Website eintragen – dann werden Öffnungszeiten/Preise gesucht" aria-label="Website der Sehenswürdigkeit" value="${g && g.web ? esc(g.web) : ''}"><button class="btn small" type="submit">Merken</button></form>`;
   if (inf.phone) h += `<div><span class="k">Telefon</span> <a href="tel:${esc(inf.phone.replace(/[^+\d]/g, ''))}">${esc(inf.phone)}</a></div>`;
@@ -1227,6 +1232,8 @@ function euroText(p, c){
   const e = toEuro(p.text, c, p.url); if (!e) return esc(p.text);
   return e.orig ? `≈ ${Math.round(e.eur)} € <span class="muted">(${esc(e.orig)})</span>` : `${e.eur.toLocaleString('de-DE', e.eur % 1 ? { minimumFractionDigits:2, maximumFractionDigits:2 } : {})} €`;
 }
+// „ab 465 kr“ → „ab ≈ 41 € (465 SEK)“
+const euroAb = (t, c) => { const ab = /^ab\s/i.test(t); return (ab ? 'ab ' : '') + euroText({ text:String(t).replace(/^ab\s+/i, '') }, c); };
 const euroPlain = (p, c) => euroText(p, c).replace(/<[^>]+>/g, '');
 function priceOf(c){
   const r = rzFor(c);
@@ -3377,8 +3384,8 @@ function xlsxRows(){
     rows.push(row);
     if (web) links.push({ r:rows.length - 1, c:14, url:safeUrl(web) });
     links.push({ r:rows.length - 1, c:16, url:navUrl(c) });
-    stopSights(c).forEach(x => { const src = sightSrc(x) || x, inf = src.info || {}, rr = inf.web ? rzData['web:' + inf.web] : null;
-      const oh = inf.town ? '' : [inf.oh, rr?.hoursS?.text].filter(Boolean).join(' / '), pr = inf.town ? '' : rr?.price?.text || inf.charge || '';
+    stopSights(c).forEach(x => { const src = sightSrc(x) || x, inf = src.info || {}, rr = inf.web && (rzData['web:' + inf.web]?.v || 0) >= 2 ? rzData['web:' + inf.web] : null;
+      const oh = inf.town ? '' : [inf.oh, rr?.hoursS?.text].filter(Boolean).join(' / '), pr = inf.town ? '' : rr?.price ? (rr.price.adult || rr.price.child ? [rr.price.adult && 'Erwachsene ' + euroAb(rr.price.adult, src), rr.price.child && 'Kinder ' + euroAb(rr.price.child, src)].filter(Boolean).join(' · ') : euroText(rr.price, src)).replace(/<[^>]+>/g, '') : inf.charge ? euroPlain({ text:inf.charge }, src) : '';
       rows.push([i + 1, 'Sehenswürdigkeit', '', '', '', x.label, inf.addr || '', x.lat != null ? fcoord(x) : '',
         x.d != null ? `${x.est ? '≈ ' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} vom Platz` : x.air != null ? `${fkm1(x.air)} Luftlinie` : '', '', '',
         oh ? 'Geöffnet: ' + oh : '', '', '', inf.web || '', inf.phone || '', '', pr ? 'Preise: ' + pr : '', '']);
@@ -3485,7 +3492,7 @@ function timelineHtml(ia){
       x.d != null ? ` <span class="muted">· ${x.est ? '≈' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''}</span>` : '')).join('')}</div>` : '';
     const body = `<div class="tl-body">${stopBodyHtml(s, i)}
       ${ia && !isLast ? `<div class="nstep">Nächte hier <button type="button" data-tlnight="${i}" data-d="-1" aria-label="eine Nacht weniger" ${n <= 1 ? 'disabled' : ''}>−</button><b>${n}</b><button type="button" data-tlnight="${i}" data-d="1" aria-label="eine Nacht mehr">+</button></div>` : ''}
-      ${ia ? `<div class="sbtns"><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">Navigation</a>
+      ${ia ? `<div class="sbtns">
         <button class="btn small" type="button" data-share="${i}">Teilen</button>
         <button class="btn small" type="button" data-tledit="${i}">Bearbeiten</button></div>` : ''}</div>`;
     h += `<li class="tl-stop${i === cur ? ' cur' : ''}">${ia ? `<details data-tl="${i}"${open ? ' open' : ''}><summary>${sum}</summary>${body}</details>${sights}` : `<details open><summary>${sum}</summary>${body}</details>`}</li>`;
