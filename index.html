@@ -65,6 +65,10 @@ h3{font-size:15px;margin:18px 0 6px}
 input{font:inherit;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
   background:var(--bg);color:var(--text);min-height:44px}
 input:focus{outline:2px solid var(--brand);outline-offset:-1px}
+.check{display:flex;align-items:flex-start;gap:10px;margin:10px 0 2px;cursor:pointer}
+.check input{width:20px;height:20px;min-height:0;margin:2px 0 0;padding:0;flex:none;accent-color:var(--brand)}
+.check span{flex:1}
+.check small{display:block;color:var(--muted);font-size:13px}
 .sugg{position:absolute;left:0;right:0;top:100%;z-index:5;list-style:none;margin:2px 0 0;padding:4px;
   background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15)}
 .sugg:empty{display:none}
@@ -165,7 +169,11 @@ a{color:var(--brand)}
       <div class="field"><label for="sMin">Etappe min. km</label><input id="sMin" type="number" min="50" max="1500" step="10" inputmode="numeric"></div>
       <div class="field"><label for="sMax">Etappe max. km</label><input id="sMax" type="number" min="60" max="1500" step="10" inputmode="numeric"></div>
     </div>
-    <div class="muted">Umweg = Strecke auf der Straße von der Route zum Platz, einfache Richtung. OpenRouteService rechnet mit mindestens 80 km/h.</div>
+    <label class="check"><input id="sHighway" type="checkbox"><span>Autobahn bevorzugen
+      <small>Route wird ohne Tempolimit berechnet (wählt Autobahnen), die Fahrzeit trotzdem mit max. km/h.</small></span></label>
+    <label class="check"><input id="sToll" type="checkbox"><span>Maut meiden
+      <small>Mautstraßen umfahren (z.&nbsp;B. Autobahnen in Frankreich, Italien, Spanien).</small></span></label>
+    <div class="muted" style="margin-top:10px">Umweg = Strecke auf der Straße von der Route zum Platz, einfache Richtung. OpenRouteService rechnet mit mindestens 80 km/h.</div>
     <div class="dlg-actions">
       <button class="btn" value="cancel" type="submit" formnovalidate>Abbrechen</button>
       <button class="btn primary" value="save" type="submit">Speichern</button>
@@ -188,7 +196,7 @@ a{color:var(--brand)}
 'use strict';
 /* ---------- Konstanten & Einstellungen ---------- */
 const COL = { brand:'#1f6b52', pending:'#6f7a85', corridor:'#e07b24', ok:'#2e8b57', unk:'#8a8f98' };
-const DEF = { key:'', speed:80, cmin:350, cmax:450, detour:10 };
+const DEF = { key:'', speed:80, cmin:350, cmax:450, detour:10, highway:true, noToll:false };
 const ORS = 'https://api.openrouteservice.org';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
                   'https://overpass.private.coffee/api/interpreter'];
@@ -281,16 +289,29 @@ async function geocodeFirst(text){
   return r[0];
 }
 async function route(a, b){
-  const j = await orsPost('/v2/directions/driving-car/geojson', {
-    coordinates: [[a.lon, a.lat], [b.lon, b.lat]],
-    maximum_speed: Math.max(80, +settings.speed || 80),
-    instructions: false,
-    radiuses: [-1, -1]
-  });
+  const vmax = Math.max(80, +settings.speed || 80);
+  const body = { coordinates: [[a.lon, a.lat], [b.lon, b.lat]], radiuses: [-1, -1] };
+  // Mit Tempolimit 80 sind Landstraßen für den Router oft genauso schnell wie die Autobahn → er nimmt die kürzere
+  // Landstraße. „Autobahn bevorzugen“: Route mit normalen Pkw-Geschwindigkeiten berechnen und die Fahrzeit
+  // anschließend je Abschnitt auf vmax deckeln (dafür braucht es die Schritte → instructions an).
+  if (settings.highway){ body.preference = 'fastest'; body.instructions = true; body.instructions_format = 'text'; }
+  else { body.instructions = false; body.maximum_speed = vmax; }
+  if (settings.noToll) body.options = { avoid_features: ['tollways'] };
+  const j = await orsPost('/v2/directions/driving-car/geojson', body);
   const f = j.features && j.features[0];
   if (!f) throw new Error('Keine Route gefunden.');
-  return { line: f.geometry.coordinates.map(c => [c[1], c[0]]),
-           dist: f.properties.summary.distance || 0, dur: f.properties.summary.duration || 0 };
+  const dist = f.properties.summary.distance || 0;
+  let dur = f.properties.summary.duration || 0;
+  if (settings.highway) dur = cappedDuration(f.properties.segments, dist, dur, vmax);
+  return { line: f.geometry.coordinates.map(c => [c[1], c[0]]), dist, dur };
+}
+// Fahrzeit, wenn nirgends schneller als vmax gefahren wird: je Schritt max(ORS-Dauer, Strecke / vmax)
+function cappedDuration(segments, dist, dur, vmax){
+  const v = vmax / 3.6;
+  const steps = (segments || []).flatMap(s => s.steps || []);
+  if (!steps.length) return Math.max(dur, dist / v);
+  const t = steps.reduce((acc, st) => acc + Math.max(st.duration || 0, (st.distance || 0) / v), 0);
+  return Math.max(t, dist / v);
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let opStart = 0;
@@ -848,6 +869,7 @@ ${pts.map(p => `    <trkpt lat="${p[0].toFixed(6)}" lon="${p[1].toFixed(6)}"/>`)
 function openSettings(){
   $('#sKey').value = settings.key; $('#sSpeed').value = settings.speed; $('#sDetour').value = settings.detour;
   $('#sMin').value = settings.cmin; $('#sMax').value = settings.cmax;
+  $('#sHighway').checked = !!settings.highway; $('#sToll').checked = !!settings.noToll;
   $('#settingsDlg').showModal();
 }
 $('#settingsDlg').addEventListener('close', () => {
@@ -856,7 +878,8 @@ $('#settingsDlg').addEventListener('close', () => {
   let cmin = n($('#sMin').value, DEF.cmin), cmax = n($('#sMax').value, DEF.cmax);
   if (cmax <= cmin) cmax = cmin + 50;
   settings = { key: $('#sKey').value.trim(), speed: Math.max(80, n($('#sSpeed').value, DEF.speed)),
-    detour: Math.max(1, n($('#sDetour').value, DEF.detour)), cmin, cmax };
+    detour: Math.max(1, n($('#sDetour').value, DEF.detour)), cmin, cmax,
+    highway: $('#sHighway').checked, noToll: $('#sToll').checked };
   saveSettings();
   if ($('#status').classList.contains('error') && settings.key) setStatus('');
 });
