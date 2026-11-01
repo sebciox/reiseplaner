@@ -163,6 +163,7 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .tl-sightlist details.gh{border:0;padding:0;background:none}
 details.gh,.tl-stop details.gh{border:0;padding:0;background:none;font-size:14px}
 details.gh summary{cursor:pointer}
+.osmname{font-size:12px;font-weight:400;color:var(--muted)}
 .price{font-size:13px;color:var(--brand-ink);margin-top:1px}
 .ghours{margin:2px 0 0;padding-left:0;list-style:none;font-size:13px}
 .sweb{display:flex;gap:6px;margin-top:2px}.sweb input{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--text)}
@@ -1202,7 +1203,7 @@ let gErr = null, gBusy = false;
 async function gFetch(c){
   const res = await fetch('https://places.googleapis.com/v1/places:searchText', { method:'POST',
     headers:{ 'Content-Type':'application/json', 'X-Goog-Api-Key':settings.gkey,
-              'X-Goog-FieldMask':'places.id,places.displayName,places.rating,places.userRatingCount,places.googleMapsUri,places.location,places.regularOpeningHours.weekdayDescriptions,places.currentOpeningHours.openNow,places.priceRange,places.websiteUri' },
+              'X-Goog-FieldMask':'places.id,places.displayName,places.rating,places.userRatingCount,places.googleMapsUri,places.location,places.regularOpeningHours.weekdayDescriptions,places.currentOpeningHours.openNow,places.priceRange,places.websiteUri,places.types' },
     body: JSON.stringify({ textQuery: c.tags?.name ? c.tags.name : 'Campingplatz', languageCode:'de', maxResultCount:3,
       locationBias:{ circle:{ center:{ latitude:c.lat, longitude:c.lon }, radius:1500 } } }) });
   if (!res.ok){ let m = ''; try { m = (await res.json()).error?.message || ''; } catch(e){} throw new Error(`Google ${res.status}${m ? ': ' + m : ''}`); }
@@ -1211,7 +1212,8 @@ async function gFetch(c){
     .filter(x => x.d < 2000).sort((a, b) => a.d - b.d)[0];
   if (!best) return null;
   const p = best.p;
-  return { r:p.rating ?? null, n:p.userRatingCount || 0, uri:p.googleMapsUri, oh:p.regularOpeningHours?.weekdayDescriptions || [], open:p.currentOpeningHours?.openNow, price:gPriceText(p.priceRange), web:p.websiteUri || '' };
+  const near = best.d <= 500 && (p.types || []).some(t => t === 'campground' || t === 'rv_park');
+  return { name:p.displayName?.text || '', near, r:p.rating ?? null, n:p.userRatingCount || 0, uri:p.googleMapsUri, oh:p.regularOpeningHours?.weekdayDescriptions || [], open:p.currentOpeningHours?.openNow, price:gPriceText(p.priceRange), web:p.websiteUri || '' };
 }
 /* Abgleich mit Google: Campingplatz an derselben Stelle (≤ 400 m) mit anderem Namen → „bei Google: …“
    (OSM-Namen sind manchmal veraltet). Nur live/im Arbeitsspeicher wie die Bewertungen. */
@@ -1226,7 +1228,7 @@ function namesDiffer(a, b){
   return !A.some(x => B.some(y => x === y || (x.length >= 5 && y.length >= 5 && x.slice(0, 5) === y.slice(0, 5))));
 }
 async function loadGName(c){
-  if (!settings.gkey || !c || c.id == null || gNames.has(c.id)) return;
+  if (!settings.gkey || !c || c.id == null || gNames.has(c.id)) return false;
   gNames.set(c.id, null);
   try {
     const res = await fetch('https://places.googleapis.com/v1/places:searchNearby', { method:'POST',
@@ -1239,8 +1241,22 @@ async function loadGName(c){
     const gn = near && near.p.displayName?.text;
     if (gn && near.d <= 400 && namesDiffer(osm, gn)) gNames.set(c.id, { name:gn, uri:near.p.googleMapsUri, d:near.d });
   } catch(e){ console.warn(e); }
+  return true;
 }
-function gNameHtml(c){
+// Aktueller Name laut Google (live, nicht gespeichert): aus der Bewertungs-Abfrage (nur echter Campingplatz ≤ 500 m) oder dem Namensabgleich
+function gBetterName(c){
+  if (!c || c.kind && c.kind !== 'camp') return '';
+  const osm = c.tags?.name || c.label || '', g = gRate.get(c.id);
+  if (g && g.name && g.near && namesDiffer(osm, g.name)) return g.name;
+  const n = gNames.get(c.id); return n ? n.name : '';
+}
+function nameHtml(c){
+  const osm = c.tags?.name || c.label || 'Campingplatz ohne Namen', gn = gBetterName(c);
+  return gn ? `${esc(gn)} <span class="osmname" title="Name in OpenStreetMap – evtl. veraltet">(OSM: ${esc(osm)})</span>` : esc(osm);
+}
+const nameText = c => gBetterName(c) || c.label || c.tags?.name || '';
+function gNameHtml(){ return ''; }   // früher „bei Google: …“ – jetzt steht der Google-Name direkt als Überschrift (nameHtml)
+function gNameHtmlOld(c){
   const g = gNames.get(c.id);
   return g ? `<div class="gname">bei Google: <a href="${esc(g.uri)}" target="_blank" rel="noopener"><b>${esc(g.name)}</b></a> <span class="muted">– Name in OpenStreetMap evtl. veraltet</span></div>` : '';
 }
@@ -1935,7 +1951,7 @@ function campInfo(c, mode){
   const web = t.website || t['contact:website'] || t.url, phone = t.phone || t['contact:phone'];
   const ok = isOk(c);
   const p4n = `https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14`;
-  return `<div class="ci"><b>${esc(name)}</b>${settings.gkey ? `<div class="gname-slot" data-gn="${esc(String(c.id))}">${gNameHtml(c)}</div>` : ''}${mode === 'cand' || mode === 'split' ? prevBadge(c) : ''}
+  return `<div class="ci"><b data-cn="${esc(String(c.id))}">${nameHtml(c)}</b>${settings.gkey ? `<span class="gname-slot" data-gn="${esc(String(c.id))}" hidden></span>` : ''}${mode === 'cand' || mode === 'split' ? prevBadge(c) : ''}
     ${priceHtml(c, true)}
     ${mode === 'alt' && c.air != null ? `<div>${fkm1(c.air)} vom bisherigen Platz (Luftlinie)</div>` : ''}
     ${c.detour ? `<div>${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div>` : ''}
@@ -2043,7 +2059,7 @@ function relayoutPopup(p){ if (p && p._map){ p._updateLayout(); p._updatePositio
 map.on('popupopen', e => {
   const root = e.popup.getElement();
   root.querySelectorAll('[data-gn]').forEach(el => { const c = campIndex.get(el.dataset.gn) || state.stages.map(s => s.to).find(t => String(t.id) === el.dataset.gn);
-    if (c) loadGName(c).then(() => { el.innerHTML = gNameHtml(c); relayoutPopup(e.popup); }); });
+    if (c) loadGName(c).then(() => { root.querySelectorAll(`[data-cn="${CSS.escape(el.dataset.gn)}"]`).forEach(b => b.innerHTML = nameHtml(c)); relayoutPopup(e.popup); }); });
   root.querySelectorAll('[data-pd]').forEach(el => { const m = el.dataset.pdm;
     const c = (m === 'chosen' && state.stages.map(s => s.to).find(t => String(t.id) === el.dataset.pd)) || campIndex.get(el.dataset.pd);
     if (c) fillPopDist(el, c, m).then(() => relayoutPopup(e.popup)); });
@@ -2245,7 +2261,7 @@ function altHtml(i){
   h += chipsHtml(a.list) + sortHtml(a.list) + '<ul class="cands">';
   sortRows(a.list.filter(passFilter)).forEach(c => {
     h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
-      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${rateHtml(c)}</div>${priceHtml(c, true)}
+      <div class="body" data-show="${esc(c.id)}"><div class="name">${nameHtml(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
       <div class="muted">${fkm1(c.air)} Luftlinie${phoneOf(c) ? ' · ' + esc(phoneOf(c)) : ''}</div></div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <button class="btn small primary" type="button" data-altpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Übernehmen</button>
@@ -2263,7 +2279,7 @@ function splitHtml(i){
   h += chipsHtml(a.list) + sortHtml(a.list) + '<ul class="cands">';
   sortRows(a.list.filter(passFilter)).forEach(c => {
     h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
-      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${c.best ? ' <span class="badge best">beste Teilung</span>' : ''}${prevBadge(c)}${amenHtml(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
+      <div class="body" data-show="${esc(c.id)}"><div class="name">${nameHtml(c)}${c.best ? ' <span class="badge best">beste Teilung</span>' : ''}${prevBadge(c)}${amenHtml(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
       <div class="muted">${fkm(c.stageKm)} + ${fkm(c.after)} · ${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div></div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <button class="btn small primary" type="button" data-splitpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Einfügen</button>
@@ -2338,7 +2354,7 @@ function renderPanel(){
     state.stages.forEach((s, i) => {
       const camp = s.to.kind === 'camp', open = state.openDet.has(i), altOpen = state.alt && state.alt.i === i, splitOpen = state.split && state.split.i === i;
       h += `<li class="stage" data-stagecard="${i}"><div class="num">Etappe ${i + 1}${ds ? ' · ' + fdate(ds[i]) : ''}${i === cur ? ' <span class="badge best">heute/nächste</span>' : ''}</div>
-        <div class="route">${esc(shortLabel(s.from.label))} → ${esc(shortLabel(s.to.label))}${camp ? amenHtml(s.to) : ''}${s.memo?.res ? '<span class="badge res">reserviert ✓</span>' : ''}</div>
+        <div class="route">${esc(shortLabel(s.from.label))} → ${camp ? nameHtml(s.to) : esc(shortLabel(s.to.label))}${s.memo?.res ? '<span class="badge res">reserviert ✓</span>' : ''}</div>
         <div class="row"><span class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${s.to.detour ? ` · ${fkm1(s.to.detour.d)} / ${fdur(s.to.detour.t)} von der Route bis zum Platz` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? ` · ${s.nights} Nächte` : ''}</span>
         ${camp && !(state.done && i === state.stages.length - 1) ? `<button class="btn small" type="button" data-edit="${i}" ${busy ? 'disabled' : ''} title="Ab hier neu planen (anderen Platz im Korridor wählen)">Platz ändern</button>` : ''}</div>
         ${s.to.sights && s.to.sights.length > 1
@@ -2380,7 +2396,7 @@ function renderPanel(){
       sortRows(state.endCands.filter(passFilter)).forEach(c => {
         const chosen = last.to.kind === 'camp' && last.to.id === c.id;
         h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
-          <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${rateHtml(c)}</div>${priceHtml(c, true)}
+          <div class="body" data-show="${esc(c.id)}"><div class="name">${nameHtml(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
           <div class="muted">${fkm1(c.air)} vom Zielort</div></div>
           ${chosen ? '<span class="muted">✓ Ziel</span>' : `<button class="btn small primary" type="button" data-endpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Als Ziel</button>`}</li>`;
       });
@@ -2401,7 +2417,7 @@ function renderPanel(){
     const best0 = p.cands.filter(passFilter)[0];
     sortRows(p.cands.filter(passFilter)).forEach(c => {
       h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
-        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${c === best0 ? ' <span class="badge best">am nächsten</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
+        <div class="body" data-show="${esc(c.id)}"><div class="name">${nameHtml(c)}${amenHtml(c)}${c === best0 ? ' <span class="badge best">am nächsten</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
         ${c.sightD && c.sightD.length > 1
           ? `<div class="sightinfo">${c.sightD.map(x => x ? `★ ${esc(shortLabel(x.label))} ${fkm1(x.d)} / ${fdur(x.t)}` : '').filter(Boolean).join('<br>')}</div><div class="muted">ohne Wohnwagen · Ø ${fkm1(c.sight.d)}</div>`
           : `<div class="sightinfo">${c.sight ? `${fkm1(c.sight.d)} / ${fdur(c.sight.t)} ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit (ohne Wohnwagen)'}` : `${fkm1(c.air)} Luftlinie ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit'}`}</div>`}</div>
@@ -2421,7 +2437,7 @@ function renderPanel(){
     sortRows(p.cands.filter(passFilter)).forEach(c => {
       const k = c === best0 ? 0 : 1;
       h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
-        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${k === 0 ? ' <span class="badge best">Empfehlung</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
+        <div class="body" data-show="${esc(c.id)}"><div class="name">${nameHtml(c)}${amenHtml(c)}${k === 0 ? ' <span class="badge best">Empfehlung</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
         <div class="muted">bei km ${fkm(c.stageKm)} · ${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div>
         <div class="after">${afterText(c)}</div></div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
@@ -2454,7 +2470,7 @@ function renderPanel(){
   el.querySelectorAll('[data-det]').forEach(b => b.onclick = () => {
     const i = +b.dataset.det;
     if (state.openDet.has(i)) state.openDet.delete(i);
-    else { state.openDet.add(i); ensureOneAddr(i); ensureCountries([i]); if (settings.gkey){ loadRatings([state.stages[i].to]); loadGName(state.stages[i].to).then(renderPanel); } }
+    else { state.openDet.add(i); ensureOneAddr(i); ensureCountries([i]); if (settings.gkey){ loadRatings([state.stages[i].to]); loadGName(state.stages[i].to).then(f => f && renderPanel()); } }
     renderPanel();
   });
   el.querySelectorAll('form.addcamp').forEach(f => f.onsubmit = e => { e.preventDefault(); if (!state.busy) searchAddCamp(f); });
@@ -3377,7 +3393,7 @@ function timelineHtml(ia){
     const when = ds ? (isLast ? `ab ${fdate(ds[i])}` : `${fdate(ds[i])} – ${fdate(addDays(ds[i], n))}`) : '';
     const stay = isLast ? 'Endpunkt' : `${n} ${n === 1 ? 'Nacht' : 'Nächte'}${n > 1 ? ` · ${n - 1} ${n === 2 ? 'Tag' : 'Tage'} vor Ort` : ''}`;
     const open = !ia || tlOpen.has(i) || (i === cur && !tlOpen.has(-1));
-    const sum = `<div class="tl-name">⛺ ${esc(c.label)}${s.memo?.res ? ' <span class="badge res">reserviert ✓</span>' : ''}${i === cur ? ' <span class="badge best">heute/nächste</span>' : ''}</div>
+    const sum = `<div class="tl-name">⛺ ${c.kind === 'camp' ? nameHtml(c) : esc(c.label)}${s.memo?.res ? ' <span class="badge res">reserviert ✓</span>' : ''}${i === cur ? ' <span class="badge best">heute/nächste</span>' : ''}</div>
       <div class="muted">${when ? when + ' · ' : ''}${stay}</div>
       ${sg.length && !ia ? `<div class="tl-sights">${sg.map(x => '★ ' + esc(shortLabel(x.label))).join(' · ')}</div>` : ''}`;
     const sights = ia && c.sights && c.sights.length ? `<div class="tl-sightlist">${c.sights.map(x => sightItemHtml(x, c, '★ ',
@@ -3411,7 +3427,9 @@ function renderTrip(){
   el.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => setTab(b.dataset.goto));
   el.querySelectorAll('details[data-tl]').forEach(d => d.addEventListener('toggle', () => {
     const i = +d.dataset.tl; tlOpen.add(-1);            // -1: Nutzer hat selbst auf-/zugeklappt
-    if (d.open){ tlOpen.add(i); ensureOneAddr(i); if (settings.gkey){ loadRatings([state.stages[i].to]); loadGName(state.stages[i].to); } } else tlOpen.delete(i); }));
+    if (d.open){ tlOpen.add(i); ensureOneAddr(i); if (settings.gkey){ loadRatings([state.stages[i].to]); loadGName(state.stages[i].to).then(f => f && renderPanel()); } } else tlOpen.delete(i); }));
+  // Google-Namen/-Infos aller Plätze des Reiseplans einmal laden (lädt nur, was noch fehlt)
+  if (settings.gkey && !gErr && !gBusy) setTimeout(() => loadRatings(state.stages.map(s => s.to).filter(c => c.kind === 'camp')), 0);
   el.querySelectorAll('details[data-tls]').forEach(d => d.addEventListener('toggle', () => {
     const k = d.dataset.tls;
     if (!d.open){ tlsOpen.delete(k); return; }
@@ -3463,7 +3481,7 @@ function renderSummary(){
         <div><span class="k">Strecke</span> ${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}</div>
         ${s.vias && s.vias.length ? `<div><span class="k">Unterwegs</span> ${visitsOf(s).map(v => esc(v.label)).join(', ')}</div>` : ''}
         ${c.near ? `<div><span class="k">Sehenswürdigkeit</span> ★ ${esc(c.near.label)} · ${c.near.d != null ? fkm1(c.near.d) + ' / ' + fdur(c.near.t) : fkm1(c.near.air || 0) + ' Luftlinie'}</div>` : ''}
-        ${camp ? `<div><span class="k">Campingplatz</span> ${esc(c.label)}</div>${priceHtml(c, true)}
+        ${camp ? `<div><span class="k">Campingplatz</span> ${nameHtml(c)}</div>${priceHtml(c, true)}
         <div><span class="k">Adresse</span> ${esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–')}</div>
         <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
         ${rzHtml(c, true) || ''}
@@ -3535,7 +3553,7 @@ async function printTour(){
     rows += `<tr><td>${i + 1}</td><td>${ds ? fdate(ds[i]) : ''}</td>
       <td>${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}${s.vias && s.vias.length ? `<br><span class="sm">unterwegs: ${visitsOf(s).map(v => esc(shortLabel(v.label))).join(', ')}</span>` : ''}${c.near ? `<br><span class="sm">★ ${esc(shortLabel(c.near.label))} ${c.near.d != null ? fkm1(c.near.d) : ''}</span>` : ''}</td>
       <td>${fkm(s.dist)}<br><span class="sm">${fdur(s.dur)}${extra ? '<br>' + esc(extra) : ''}</span></td>
-      <td><b>${esc(c.label)}</b>${camp && priceOf(c) ? `<br><span class="sm">${esc(priceOf(c).text || '')}</span>` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
+      <td><b>${esc(camp ? nameText(c) : c.label)}</b>${camp && priceOf(c) ? `<br><span class="sm">${esc(priceOf(c).text || '')}</span>` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
       <td>${camp ? esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–') : esc(c.label)}<br><span class="sm">${fcoord(c)}</span></td>
       <td>${camp ? rz : ''}</td>
       <td>${web ? `<a href="${esc(safeUrl(web))}">${esc(shortUrl(web))}</a><br>` : ''}${phone ? `<a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a><br>` : ''}<a href="${esc(gEntryUrl(c))}">Google-Eintrag</a></td></tr>`;
