@@ -148,9 +148,21 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .tl-stop summary{cursor:pointer;list-style:none;display:block;position:relative;padding-right:20px}
 .tl-stop summary::-webkit-details-marker{display:none}
 .tl-stop summary::after{content:'▾';position:absolute;right:0;top:0;color:var(--muted)}
-.tl-stop details[open] summary::after{content:'▴'}
+.tl-stop details[open] > summary::after{content:'▴'}
 .tl-name{font-weight:700;overflow-wrap:anywhere}
 .tl-sights{margin-top:4px;font-size:13px;color:var(--accent)}
+/* Sehenswürdigkeiten unter dem Campingplatz: eigene aufklappbare Einträge */
+.tl-sightlist{margin:6px 0 0 18px;display:grid;gap:6px}
+.tl-stop .tl-sightlist details,.tl-drive .tl-sightlist details{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:6px 10px;background:var(--panel)}
+.tl-sightlist summary{cursor:pointer;list-style:none;display:block;position:relative;padding-right:20px;font-size:14px}
+.tl-sightlist summary::-webkit-details-marker{display:none}
+.tl-sightlist summary::after{content:'▾';position:absolute;right:0;top:0;color:var(--muted)}
+.tl-sightlist details[open] > summary::after{content:'▴'}
+.tl-sightlist .sname{color:var(--accent);font-weight:700}
+.tl-drive .tl-sightlist{margin-left:0}
+.tl-sightlist details.gh{border:0;padding:0;background:none}
+.ghours{margin:2px 0 0;padding-left:0;list-style:none;font-size:13px}
+.sweb{display:flex;gap:6px;margin-top:2px}.sweb input{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--text)}
 .tl-body{margin-top:8px;display:grid;gap:4px;font-size:14px;overflow-wrap:anywhere}
 .tl-body .k{color:var(--muted);font-size:12px;display:inline-block;min-width:90px}
 .tl-actions{margin-top:14px}
@@ -1012,6 +1024,107 @@ function rzHtml(c, compact){
   if (!web) return compact ? '' : `<div class="rz none">Keine Website in OpenStreetMap – <a href="https://www.google.com/search?q=${encodeURIComponent((c.tags?.name || c.label) + ' ' + (c.addr || ''))}" target="_blank" rel="noopener">im Web suchen</a>.</div>`;
   if (compact) return '';
   return `<div class="rz none">Rezeptionszeiten: ${ghOn() ? (state.tourId ? 'werden gesucht (1–2 Min. nach dem Speichern) …' : 'werden nach dem Speichern der Tour gesucht.') : 'Suche braucht den Online-Speicher (⚙︎).'}</div>`;
+}
+
+/* ---------- Sehenswürdigkeiten: Infos ----------
+   1) OpenStreetMap beim Hinzufügen (bzw. beim ersten Aufklappen): Website, Öffnungszeiten, Telefon, Eintritt, Adresse
+      → in der Tour gespeichert (`via.info`, ODbL)
+   2) Website-Recherche (Öffnungszeiten, Preise) durch den GitHub-Helfer im Online-Speicher → rezeption.json, Schlüssel „web:<URL>“
+   3) Google live (Adresse, Öffnungszeiten der Woche, Website, Bewertung) – nicht gespeichert (Google-Regeln) */
+function sightSrc(x){
+  if (!x) return null;
+  if (x.uid) for (const v of state.via){ if (v.uid === x.uid) return v; const y = (v.sights || []).find(z => z.uid === x.uid); if (y) return y; }
+  return x;
+}
+const normWeb = u => { u = String(u || '').trim(); if (!u) return ''; if (!/^https?:\/\//i.test(u)) u = 'https://' + u; try { const x = new URL(u); x.hash = ''; return x.href; } catch(e){ return ''; } };
+const sightKey = x => x.uid || (x.label + '@' + (+x.lat).toFixed(4));
+const sightBusy = new Set();
+async function enrichSight(x){
+  const s = sightSrc(x); if (!s || s.info || s.lat == null || sightBusy.has(sightKey(s))) return false;
+  sightBusy.add(sightKey(s));
+  try {
+    const q = `[out:json][timeout:20];nwr(around:800,${(+s.lat).toFixed(5)},${(+s.lon).toFixed(5)})[name][~"^(tourism|leisure|amenity|historic)$"~"."];out tags center 60;`;
+    const els = await overpass(q, { passes:1 });
+    const want = nameTokens(shortLabel(s.label)), match = (a, b) => a === b || (a.length >= 5 && b.length >= 5 && a.slice(0, 5) === b.slice(0, 5));
+    let best = null;
+    for (const e of els){
+      const t = e.tags || {}, toks = nameTokens(t.name), hit = want.filter(w => toks.some(y => match(w, y))).length;
+      if (want.length && !hit) continue;
+      const la = e.lat ?? e.center?.lat, lo = e.lon ?? e.center?.lon, d = la != null ? hav([s.lat, s.lon], [la, lo]) : 9e9;
+      const score = hit * 10 + (t.website || t['contact:website'] || t.url ? 3 : 0) + (t.opening_hours ? 1 : 0) - d / 400;
+      if (!best || score > best.score) best = { score, e, t };
+    }
+    const t = best ? best.t : {};
+    s.info = { at:new Date().toISOString(), osm:best ? `${best.e.type}/${best.e.id}` : null, name:t.name || '',
+      web:normWeb(t.website || t['contact:website'] || t.url || ''), oh:t.opening_hours || '', phone:t.phone || t['contact:phone'] || '',
+      fee:t.fee || '', charge:t.charge || '', addr:addrFromTags(t) || '' };
+  } catch(e){ console.warn(e); return false; }
+  finally { sightBusy.delete(sightKey(s)); }
+  if (!s.info.addr && settings.key){ try { s.info.addr = await reverseAddr(s) || ''; } catch(e){} }
+  touch();
+  return true;
+}
+// alle Sehenswürdigkeiten/Besuche der Tour nacheinander ergänzen (z. B. für ältere Touren), danach neu zeichnen
+let enrichRun = false;
+async function enrichAll(){
+  if (enrichRun) return; enrichRun = true;
+  try {
+    const all = state.via.filter(v => v.kind !== 'rest').flatMap(v => [v, ...(v.sights || [])]).filter(v => !v.info);
+    for (const v of all){ if (await enrichSight(v) && (uiTab === 'trip' || window.__allTabs)) renderTrip(); }
+  } finally { enrichRun = false; }
+}
+const gSight = new Map();          // sightKey → { addr, web, oh:[…], open, r, n, uri } | null
+async function loadGSight(x){
+  if (!settings.gkey) return false;
+  const s = sightSrc(x), k = sightKey(s); if (gSight.has(k)) return false;
+  gSight.set(k, null);
+  try {
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', { method:'POST',
+      headers:{ 'Content-Type':'application/json', 'X-Goog-Api-Key':settings.gkey,
+        'X-Goog-FieldMask':'places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.websiteUri,places.regularOpeningHours.weekdayDescriptions,places.currentOpeningHours.openNow' },
+      body: JSON.stringify({ textQuery:shortLabel(s.label), languageCode:'de', maxResultCount:3,
+        locationBias:{ circle:{ center:{ latitude:+s.lat, longitude:+s.lon }, radius:2000 } } }) });
+    if (!res.ok) return false;
+    const j = await res.json();
+    const b = (j.places || []).map(p => ({ p, d:p.location ? hav([s.lat, s.lon], [p.location.latitude, p.location.longitude]) : 1e9 })).filter(q => q.d < 3000).sort((a, c) => a.d - c.d)[0];
+    if (b) gSight.set(k, { name:b.p.displayName?.text || '', addr:b.p.formattedAddress || '', web:b.p.websiteUri || '', oh:b.p.regularOpeningHours?.weekdayDescriptions || [],
+      open:b.p.currentOpeningHours?.openNow, r:b.p.rating, n:b.p.userRatingCount || 0, uri:b.p.googleMapsUri });
+    return true;
+  } catch(e){ console.warn(e); return false; }
+}
+const snipLink = o => `<div class="snip">„${esc(o.snippet)}“${o.url ? ` – <a href="${esc(safeUrl(o.url))}" target="_blank" rel="noopener">Quelle</a>` : ''}</div>`;
+// Inhalt eines Sehenswürdigkeiten-Eintrags (from = Platz, von dem aus man hinfährt)
+function sightBodyHtml(x, from){
+  const s = sightSrc(x), inf = s.info || {}, g = gSight.get(sightKey(s)), web = inf.web || '';
+  const r = web ? rzData['web:' + web] : null, k = esc(sightKey(s));
+  const pending = !s.info && sightBusy.has(sightKey(s));
+  const dir = from ? `https://www.google.com/maps/dir/?api=1&origin=${from.lat.toFixed(6)},${from.lon.toFixed(6)}&destination=${(+s.lat).toFixed(6)},${(+s.lon).toFixed(6)}&travelmode=driving` : navUrl(s);
+  let h = '';
+  if (x.d != null) h += `<div><span class="k">Vom Platz</span> ${x.est ? '≈' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} ohne Wohnwagen</div>`;
+  else if (x.air != null) h += `<div><span class="k">Vom Platz</span> ${fkm1(x.air)} Luftlinie</div>`;
+  if (x.hours != null) h += `<div><span class="k">Dauer</span> ≈ ${fhours(x.hours)} · <a href="${parkUrl(s)}" target="_blank" rel="noopener">Parken fürs Gespann</a></div>`;
+  if (pending) h += '<div class="muted">Infos werden geladen …</div>';
+  h += `<div><span class="k">Adresse</span> ${esc(inf.addr || g?.addr || s.label)}</div>`;
+  // Öffnungszeiten: OSM, Website-Recherche, Google (diese Woche)
+  if (inf.oh) h += `<div><span class="k">Öffnungszeiten</span> ${esc(inf.oh)} <span class="muted">(OpenStreetMap)</span></div>`;
+  if (r && r.hoursS) h += `<div class="rz"><b>Öffnungszeiten (Website)${r.hoursS.text ? ': ' + esc(r.hoursS.text) : ''}</b>${snipLink(r.hoursS)}</div>`;
+  if (g && g.oh.length) h += `<details class="gh"><summary>Öffnungszeiten laut Google${g.open === true ? ' · <b>jetzt geöffnet</b>' : g.open === false ? ' · jetzt geschlossen' : ''}</summary><ul class="ghours">${g.oh.map(l => `<li>${esc(l)}</li>`).join('')}</ul></details>`;
+  // Preise: Website-Recherche, sonst OSM
+  if (r && r.price) h += `<div class="rz"><b>Preise (Website)${r.price.text ? ': ' + esc(r.price.text) : ''}</b>${snipLink(r.price)}</div>`;
+  else if (inf.charge) h += `<div><span class="k">Eintritt</span> ${esc(inf.charge)} <span class="muted">(OpenStreetMap)</span></div>`;
+  else if (inf.fee === 'no') h += `<div><span class="k">Eintritt</span> frei <span class="muted">(OpenStreetMap)</span></div>`;
+  // Stand der Website-Recherche
+  if (web && !r) h += `<div class="rz none">Öffnungszeiten und Preise von der Website: ${ghOn() ? (state.tourId ? 'werden gesucht (1–2 Min. nach dem Speichern) …' : 'werden nach dem Speichern der Tour gesucht.') : 'Suche braucht den Online-Speicher (⚙︎).'}</div>`;
+  else if (r && !r.hoursS && !r.price) h += `<div class="rz none">Öffnungszeiten/Preise: ${r.status === 'error' ? 'Website nicht erreichbar' : 'auf der Website nicht gefunden'} – <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">selbst nachsehen</a>.</div>`;
+  if (web) h += `<div><span class="k">Website</span> <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">${esc(shortUrl(web))}</a></div>`;
+  else if (s.info || g) h += `<div><span class="k">Website</span> ${g && g.web ? `<a href="${esc(safeUrl(g.web))}" target="_blank" rel="noopener">${esc(shortUrl(g.web))}</a> <span class="muted">(Google)</span>` : '<span class="muted">nicht bekannt</span>'}
+      <form class="sweb" data-sweb="${k}"><input name="w" type="text" inputmode="url" autocomplete="url" placeholder="Website eintragen – dann werden Öffnungszeiten/Preise gesucht" aria-label="Website der Sehenswürdigkeit" value="${g && g.web ? esc(g.web) : ''}"><button class="btn small" type="submit">Merken</button></form></div>`;
+  if (inf.phone) h += `<div><span class="k">Telefon</span> <a href="tel:${esc(inf.phone.replace(/[^+\d]/g, ''))}">${esc(inf.phone)}</a></div>`;
+  if (g && g.r != null) h += `<div><span class="k">Google</span> <a class="stars" href="${esc(g.uri)}" target="_blank" rel="noopener">★ ${g.r.toLocaleString('de-DE', { minimumFractionDigits:1 })} <span>(${g.n.toLocaleString('de-DE')})</span></a></div>`;
+  h += `<div><span class="k">Koordinaten</span> <span class="coordrow"><span class="coord">${fcoord(s)}</span><button class="icobtn" type="button" data-copy="${fcoord(s)}" title="Koordinaten kopieren" aria-label="Koordinaten kopieren">${ICON_COPY}</button></span></div>`;
+  h += `<div class="sbtns"><a class="btn small" href="${dir}" target="_blank" rel="noopener">🧭 ${from ? 'Vom Platz hin' : 'Navigation'}</a>
+    <a class="btn small" href="${esc(g?.uri || `https://www.google.com/maps/search/${encodeURIComponent(shortLabel(s.label))}/@${(+s.lat).toFixed(5)},${(+s.lon).toFixed(5)},15z`)}" target="_blank" rel="noopener">Google Maps</a></div>`;
+  return `<div class="tl-body">${h}</div>`;
 }
 
 /* ---------- Google-Bewertungen (Places API New, Text Search; nur live, nicht dauerhaft gespeichert) ---------- */
@@ -2471,7 +2584,7 @@ function renderVia(){
     const t = inp.value.trim(), v = state.via[+inp.dataset.vsadd]; if (!t || !v) return;
     try { const r = await placeSearch(t, false); if (!r.length) throw new Error('Ort nicht gefunden: ' + t);
       const g = r[0]; if (!g.full) flash(`„${t}“ nicht genau gefunden – „${shortLabel(g.label)}“ übernommen.`);
-      (v.sights = v.sights || []).push({ uid:'s' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon }); ch(); fitGoals();
+      (v.sights = v.sights || []).push({ uid:'s' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon }); ch(); fitGoals(); enrichSight(v.sights[v.sights.length - 1]);
       setTimeout(() => $(`[data-vsadd="${state.via.indexOf(v)}"]`)?.focus(), 0); }
     catch(err){ setStatus(err.message, 'error'); }
   });
@@ -2542,6 +2655,7 @@ function addVia(g){
   if (g.camp) flash(`⛺ „${shortLabel(g.label)}“ ist ein Campingplatz – als Zwischenstopp „Pause / freie Tage“ eingetragen; er steht bei der Platzwahl ganz oben.`);
   $('#viaIn').value = ''; $('#viaSugg').innerHTML = '';
   renderVia(); renderMap(); fitGoals();
+  if (!g.camp) enrichSight(state.via[state.via.length - 1]);      // Website/Öffnungszeiten aus OSM im Hintergrund
 }
 // Reihenfolge mit der kürzesten Gesamtstrecke (Luftlinie; bis 8 Ziele exakt, sonst Nächster Nachbar + 2-opt)
 async function optimizeVia(){
@@ -3048,8 +3162,12 @@ function xlsxRows(){
     rows.push(row);
     if (web) links.push({ r:rows.length - 1, c:14, url:safeUrl(web) });
     links.push({ r:rows.length - 1, c:16, url:navUrl(c) });
-    stopSights(c).forEach(x => rows.push([i + 1, 'Sehenswürdigkeit', '', '', '', x.label, '', x.lat != null ? fcoord(x) : '',
-      x.d != null ? `${x.est ? '≈ ' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} vom Platz (ohne Wohnwagen)` : x.air != null ? `${fkm1(x.air)} Luftlinie` : '', '', '', '', '', '', '', '', '', '', '']));
+    stopSights(c).forEach(x => { const src = sightSrc(x) || x, inf = src.info || {}, rr = inf.web ? rzData['web:' + inf.web] : null;
+      const oh = [inf.oh, rr?.hoursS?.text].filter(Boolean).join(' / '), pr = rr?.price?.text || inf.charge || '';
+      rows.push([i + 1, 'Sehenswürdigkeit', '', '', '', x.label, inf.addr || '', x.lat != null ? fcoord(x) : '',
+        x.d != null ? `${x.est ? '≈ ' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} vom Platz (ohne Wohnwagen)` : x.air != null ? `${fkm1(x.air)} Luftlinie` : '', '', '',
+        oh ? 'Geöffnet: ' + oh : '', '', '', inf.web || '', inf.phone || '', '', pr ? 'Preise: ' + pr : '', '']);
+      if (inf.web) links.push({ r:rows.length - 1, c:14, url:safeUrl(inf.web) }); });
   });
   return { rows, links };
 }
@@ -3111,15 +3229,23 @@ const addDays = (d, n) => { if (!d) return null; const x = new Date(d); x.setDat
 function stopSights(c){ return c.sights && c.sights.length ? c.sights : c.near ? [c.near] : []; }
 function stopBodyHtml(s, i){
   const c = s.to, camp = c.kind === 'camp', web = camp && webOf(c), phone = camp && phoneOf(c), sg = stopSights(c);
-  return `${sg.length ? `<div><span class="k">Sehenswürdigkeiten</span> ${sg.map(x => esc(shortLabel(x.label)) + (x.d != null ? ` · ${x.est ? '≈' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} ohne Wohnwagen` : x.air != null ? ` · ${fkm1(x.air)} Luftlinie` : '')).join('<br>')}</div>` : ''}
+  // nur Pausen-Ziel (Campingplatz statt Sehenswürdigkeit): Entfernung zum Ort; Sehenswürdigkeiten stehen als eigene Einträge darunter
+  const near = !(c.sights && c.sights.length) && c.near;
+  return `${near ? `<div><span class="k">Zum Ort</span> ${esc(shortLabel(near.label))}${near.d != null ? ` · ${fkm1(near.d)}${near.t ? ' / ' + fdur(near.t) : ''}` : near.air != null ? ` · ${fkm1(near.air)} Luftlinie` : ''}</div>` : ''}
     ${camp ? `<div><span class="k">Wohnwagen</span> ${isOk(c) ? '<span class="badge ok">erlaubt</span>' : '<span class="badge unk">keine Angabe</span>'}${amenHtml(c)}${rateHtml(c)}</div>
     ${gNameHtml(c)}
     <div><span class="k">Adresse</span> ${esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–')}</div>
     <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
     ${rzHtml(c, true) || ''}
+    ${c.tags?.opening_hours ? `<div><span class="k">Geöffnet</span> ${esc(c.tags.opening_hours)} <span class="muted">(OpenStreetMap)</span></div>` : ''}
     ${web ? `<div><span class="k">Website</span> <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">${esc(shortUrl(web))}</a></div>` : ''}
     ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
     ${s.memo?.text || s.memo?.res ? `<div><span class="k">Notiz</span> ${s.memo.res ? 'reserviert ✓ ' : ''}${esc(s.memo.text || '')}</div>` : ''}` : ''}`;
+}
+const tlsOpen = new Set();
+function sightItemHtml(x, from, pre, post){
+  const s = sightSrc(x), k = sightKey(s), open = tlsOpen.has(k);
+  return `<details data-tls="${esc(k)}"${open ? ' open' : ''}><summary><span class="sname">${pre}${esc(shortLabel(x.label))}</span>${post}</summary>${open ? sightBodyHtml(x, from) : ''}</details>`;
 }
 function timelineHtml(ia){
   const ds = stageDates(), cur = currentStage(), st = state.stages, last = st.length - 1;
@@ -3131,7 +3257,8 @@ function timelineHtml(ia){
     const vs = visitsOf(s), c = s.to;
     h += `<li class="tl-drive"><b>${CARAVAN}${ds ? fdate(ds[i]) + ' · ' : ''}Fahrt nach ${esc(shortLabel(c.label))}</b>
       <div class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${vs.length ? ` · Tag gesamt ≈ ${fdur(s.dur + vs.reduce((a, v) => a + (+v.hours || 2) * 3600, 0))}` : ''}${s.ex && s.ex.ferry > 500 ? ' · ⛴ Fähre' : ''}</div>
-      ${vs.map(v => `<div class="tl-visit">◆ unterwegs: ${esc(shortLabel(v.label))} (≈ ${fhours(v.hours)})${ia ? ` · <a href="${parkUrl(v)}" target="_blank" rel="noopener">Parken fürs Gespann</a>` : ''}</div>`).join('')}</li>`;
+      ${vs.length ? (ia ? `<div class="tl-sightlist">${vs.map(v => sightItemHtml(v, null, '◆ unterwegs: ', ` (≈ ${fhours(v.hours)})`)).join('')}</div>`
+        : vs.map(v => `<div class="tl-visit">◆ unterwegs: ${esc(shortLabel(v.label))} (≈ ${fhours(v.hours)})</div>`).join('')) : ''}</li>`;
     if (i === last && c.kind !== 'camp'){ h += `<li class="tl-pt"><b>${home ? 'Zurück in' : 'Ziel:'} ${esc(shortLabel(c.label))}</b></li>`; return; }
     const n = Math.max(1, +s.nights || 1), sg = stopSights(c), isLast = i === last;
     const when = ds ? (isLast ? `ab ${fdate(ds[i])}` : `${fdate(ds[i])} – ${fdate(addDays(ds[i], n))}`) : '';
@@ -3139,13 +3266,15 @@ function timelineHtml(ia){
     const open = !ia || tlOpen.has(i) || (i === cur && !tlOpen.has(-1));
     const sum = `<div class="tl-name">⛺ ${esc(c.label)}${s.memo?.res ? ' <span class="badge res">reserviert ✓</span>' : ''}${i === cur ? ' <span class="badge best">heute/nächste</span>' : ''}</div>
       <div class="muted">${when ? when + ' · ' : ''}${stay}</div>
-      ${sg.length ? `<div class="tl-sights">${sg.map(x => '★ ' + esc(shortLabel(x.label))).join(' · ')}</div>` : ''}`;
+      ${sg.length && !ia ? `<div class="tl-sights">${sg.map(x => '★ ' + esc(shortLabel(x.label))).join(' · ')}</div>` : ''}`;
+    const sights = ia && c.sights && c.sights.length ? `<div class="tl-sightlist">${c.sights.map(x => sightItemHtml(x, c, '★ ',
+      x.d != null ? ` <span class="muted">· ${x.est ? '≈' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''}</span>` : '')).join('')}</div>` : '';
     const body = `<div class="tl-body">${stopBodyHtml(s, i)}
       ${ia && !isLast ? `<div class="nstep">Nächte hier <button type="button" data-tlnight="${i}" data-d="-1" aria-label="eine Nacht weniger" ${n <= 1 ? 'disabled' : ''}>−</button><b>${n}</b><button type="button" data-tlnight="${i}" data-d="1" aria-label="eine Nacht mehr">+</button></div>` : ''}
       ${ia ? `<div class="sbtns"><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation</a>
         <button class="btn small" type="button" data-share="${i}">📤 Teilen</button>
         <button class="btn small" type="button" data-tledit="${i}">Bearbeiten</button></div>` : ''}</div>`;
-    h += `<li class="tl-stop${i === cur ? ' cur' : ''}">${ia ? `<details data-tl="${i}"${open ? ' open' : ''}><summary>${sum}</summary>${body}</details>` : `<details open><summary>${sum}</summary>${body}</details>`}</li>`;
+    h += `<li class="tl-stop${i === cur ? ' cur' : ''}">${ia ? `<details data-tl="${i}"${open ? ' open' : ''}><summary>${sum}</summary>${body}</details>${sights}` : `<details open><summary>${sum}</summary>${body}</details>`}</li>`;
   });
   return h + '</ol>';
 }
@@ -3170,6 +3299,25 @@ function renderTrip(){
   el.querySelectorAll('details[data-tl]').forEach(d => d.addEventListener('toggle', () => {
     const i = +d.dataset.tl; tlOpen.add(-1);            // -1: Nutzer hat selbst auf-/zugeklappt
     if (d.open){ tlOpen.add(i); ensureOneAddr(i); if (settings.gkey){ loadRatings([state.stages[i].to]); loadGName(state.stages[i].to); } } else tlOpen.delete(i); }));
+  el.querySelectorAll('details[data-tls]').forEach(d => d.addEventListener('toggle', () => {
+    const k = d.dataset.tls;
+    if (!d.open){ tlsOpen.delete(k); return; }
+    if (tlsOpen.has(k)) return;                 // schon offen gezeichnet (toggle feuert auch beim Neuzeichnen)
+    tlsOpen.add(k);
+    const x = [...state.via, ...state.via.flatMap(v => v.sights || [])].find(v => sightKey(v) === k)
+      || state.stages.flatMap(s => s.to.sights || []).find(v => sightKey(v) === k);
+    renderTrip();
+    if (x) Promise.all([enrichSight(x), loadGSight(x)]).then(r => { if (r.some(Boolean)) renderTrip(); });
+  }));
+  el.querySelectorAll('form[data-sweb]').forEach(f => f.onsubmit = e => {
+    e.preventDefault();
+    const k = f.dataset.sweb, w = normWeb(f.w.value);
+    const x = [...state.via, ...state.via.flatMap(v => v.sights || []), ...state.stages.flatMap(s => s.to.sights || [])].find(v => sightKey(v) === k);
+    if (!x || !w){ flash('Bitte eine gültige Website eintragen.'); return; }
+    x.info = { ...(x.info || {}), web:w }; touch(); renderTrip();
+    flash(state.tourId ? 'Website gemerkt – Öffnungszeiten und Preise werden in 1–2 Min. gesucht.' : 'Website gemerkt – Öffnungszeiten und Preise werden nach dem Speichern der Tour gesucht.');
+  });
+  if (state.via.some(v => v.kind !== 'rest' && (!v.info || (v.sights || []).some(y => !y.info)))) setTimeout(enrichAll, 0);
   el.querySelectorAll('[data-tlall]').forEach(b => b.onclick = () => { tlOpen.clear(); tlOpen.add(-1);
     if (b.dataset.tlall === '1') state.stages.forEach((_, i) => tlOpen.add(i)); renderTrip(); if (b.dataset.tlall === '1') ensureAddrs().then(ch => ch && renderTrip()); });
   el.querySelectorAll('[data-tlnight]').forEach(b => b.onclick = () => {
