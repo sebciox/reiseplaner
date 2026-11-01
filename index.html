@@ -154,8 +154,11 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 2px;align-items:center}
 .chip{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:99px;padding:3px 10px;cursor:pointer}
 .chip.on{background:var(--brand);border-color:var(--brand);color:#fff}
-.daterow{display:flex;align-items:center;gap:8px;margin:10px 0 2px;font-size:14px}
-.daterow input{width:auto;min-height:38px;padding:6px 10px}
+.trip{margin:10px 0 2px;padding:8px 10px;border-radius:10px;background:var(--brand-soft);font-size:14px}
+.trip.warn{background:var(--danger-soft);color:var(--danger)}
+.nstep{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)}
+.nstep button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer}
+.nstep b{color:var(--text);min-width:14px;text-align:center}
 .stars{font-size:13px;color:#b7791f;text-decoration:none;white-space:nowrap;margin-left:4px}
 .stars span{color:var(--muted)} .stars.none{color:var(--muted)}
 .coord{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
@@ -174,6 +177,7 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .vialist .vt{flex:1;min-width:0}
 .vialist .vt b{display:block;overflow-wrap:anywhere;font-weight:600}
 .vialist .vopts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:13px;color:var(--muted)}
+.vialist select{max-width:100%;min-width:0}
 .vialist select,.segrow select{font:inherit;font-size:13px;padding:3px 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
 .vialist input[type=number]{width:56px;min-height:30px;padding:3px 6px;font-size:13px}
 .vialist .vbtns{display:flex;gap:2px}
@@ -297,6 +301,10 @@ a{color:var(--brand)}
         <ul class="sugg" id="endSugg"></ul>
         <label class="check" style="margin-top:6px"><input type="checkbox" id="roundIn"><span>zurück zum Start (Rundreise)</span></label>
       </div>
+      <div class="grid2">
+        <div class="field"><label for="dateIn">Abfahrt</label><input type="date" id="dateIn"></div>
+        <div class="field"><label for="retIn" id="retLbl">Ankunft spätestens</label><input type="date" id="retIn"></div>
+      </div>
       <button class="btn primary wide" id="planBtn" type="submit">Strecke berechnen</button>
     </form>
     <section id="result"></section>
@@ -396,7 +404,7 @@ const state = { start:null, end:null, stages:[], pending:null, done:false, busy:
                 openDet:new Set(), showEndList:false,
                 via:[],          // Zwischenziele { uid, label, lat, lon, kind:'stay'|'visit', nights }
                 round:false,     // Rundreise: zurück zum Start
-                segs:null };     // Abschnitte bei Zwischenzielen { to, kind:'sight'|'end'|'home', visits, n, nights, radius, dist, dur }
+                segs:null, ret:null };   // ret = spätestes Rückkehr-/Ankunftsdatum; segs = Abschnitte bei Zwischenzielen { to, kind:'sight'|'end'|'home', visits, n, nights, radius, dist, dur }
 const campIndex = new Map();
 const $ = s => document.querySelector(s);
 
@@ -709,6 +717,39 @@ function stageDates(){
   return state.stages.map(s => { const d = new Date(d0); d.setDate(d.getDate() + off); off += Math.max(1, +s.nights || 1); return d; });
 }
 const fdate = d => d ? d.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'numeric' }) : '';
+/* Voraussichtliches Reiseende (Tag der letzten Ankunft): geplante Etappen + Nächte, noch offene Etappen geschätzt
+   (Transit-Stopp 1 Nacht, Zwischenziel mit seinen Nächten). nOverride: Etappenzahl für die Abfrage „Wie viele?“ */
+function tripEnd(nOverride){
+  if (!state.date) return null;
+  const d0 = new Date(state.date + 'T12:00:00'); if (isNaN(d0)) return null;
+  const st = state.stages, nts = s => Math.max(1, +s.nights || 1);
+  let off = 0;
+  if (state.done){
+    if (!st.length) return null;
+    st.forEach((s, i) => { if (i < st.length - 1) off += nts(s); });
+  } else {
+    st.forEach(s => { off += nts(s); });                      // → Abfahrtstag der nächsten offenen Etappe
+    const rem = [];
+    if (state.segs) state.segs.forEach((g, k) => { const r = g.n - segDone(k); if (r > 0) rem.push({ r, stop: k < state.segs.length - 1 ? (g.kind === 'sight' ? g.nights : 1) : 0 }); });
+    else { const n = nOverride || state.n || (state.overview ? plan(state.overview.dist).n : 0); if (n - st.length > 0) rem.push({ r:n - st.length, stop:0 }); }
+    if (!rem.length) return null;
+    rem.forEach(x => { off += (x.r - 1) + x.stop; });       // Transit-Stopps 1 Nacht, Zwischenziel mit seinen Nächten
+  }
+  const e = new Date(d0); e.setDate(e.getDate() + off); return e;
+}
+const dayDiff = (a, b) => Math.round((a - b) / 864e5);
+function tripHtml(nOverride){
+  const e = tripEnd(nOverride);
+  if (!e) return state.stages.length || state.overview ? '<div class="trip muted">Abfahrtsdatum oben eintragen → Datum je Etappe und Reiseende.</div>' : '';
+  const d0 = new Date(state.date + 'T12:00:00'), days = dayDiff(e, d0) + 1, est = !state.done ? ' (geschätzt)' : '';
+  let h = `Reise: ${fdate(d0)} – ${fdate(e)}${est} · ${days} ${days === 1 ? 'Tag' : 'Tage'}`;
+  if (state.ret){
+    const r = new Date(state.ret + 'T12:00:00'), over = dayDiff(e, r);
+    if (over > 0) return `<div class="trip warn"><b>⚠ ${over} ${over === 1 ? 'Tag' : 'Tage'} zu lang:</b> ${h} – ${state.round ? 'zurück' : 'Ankunft'} spätestens ${fdate(r)} – weniger Nächte/freie Tage, weniger Zwischenziele oder längere Etappen einplanen.</div>`;
+    h += ` · ${-over === 0 ? 'genau passend' : `${-over} ${-over === 1 ? 'Tag' : 'Tage'} Puffer`} bis ${fdate(r)}`;
+  }
+  return `<div class="trip">${h}</div>`;
+}
 const dayKey = d => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
 // Während der Tour: Index der nächsten anstehenden Etappe, sonst -1
 function currentStage(){
@@ -1008,7 +1049,7 @@ async function computeSegs(){
   const segs = []; let pend = [];
   for (const v of state.via){
     if (v.kind === 'visit'){ pend.push(v); continue; }
-    segs.push({ to:{ lat:v.lat, lon:v.lon, label:v.label, uid:v.uid }, kind:'sight', visits:pend, nights:Math.max(1, +v.nights || 1), radius:+v.radius || 20 });
+    segs.push({ to:{ lat:v.lat, lon:v.lon, label:v.label, uid:v.uid }, kind:'sight', rest:v.kind === 'rest', visits:pend, nights:Math.max(1, +v.nights || 1), radius:+v.radius || 20 });
     pend = [];
   }
   segs.push({ to:{ ...(state.round ? state.start : state.end) }, kind: state.round ? 'home' : 'end', visits:pend });
@@ -1310,8 +1351,8 @@ function renderMap(){
     c._m = L.circleMarker([c.lat, c.lon], { radius:7, color:isOk(c) ? COL.ok : COL.unk, weight:3, fillColor:'#fff', fillOpacity:1 })
       .bindPopup(() => campInfo(c, 'end')).addTo(lyr.cands);
   });
-  state.via.forEach((v, i) => L.marker([v.lat, v.lon], { icon:pinIcon(v.kind === 'visit' ? '•' : '★', v.kind === 'visit' ? 'visit' : 'sight'), zIndexOffset:-100 })
-    .bindPopup(`<b>${esc(v.label)}</b><br>${v.kind === 'visit' ? 'Besuch unterwegs' : `Zwischenziel ${i + 1} · ${Math.max(1, +v.nights || 1)} Nächte`}`).addTo(lyr.pins));
+  state.via.forEach((v, i) => L.marker([v.lat, v.lon], { icon:pinIcon(v.kind === 'visit' ? '•' : v.kind === 'rest' ? 'P' : '★', v.kind === 'visit' ? 'visit' : 'sight'), zIndexOffset:-100 })
+    .bindPopup(`<b>${esc(v.label)}</b><br>${v.kind === 'visit' ? 'Besuch unterwegs' : `${v.kind === 'rest' ? 'Pause' : 'Zwischenziel'} ${i + 1} · ${Math.max(1, +v.nights || 1)} Nächte`}`).addTo(lyr.pins));
   if (state.pending && state.pending.mode === 'anchor'){
     const q = state.pending.sight;
     L.circle([q.lat, q.lon], { radius:state.pending.radius * 1000, color:COL.corridor, weight:2, fillOpacity:.05, dashArray:'6 6' }).addTo(lyr.corridor);
@@ -1436,10 +1477,10 @@ function renderSegAsk(){
   const nights = segs.reduce((a, g) => a + (g.n - 1) + (g.kind === 'sight' ? g.nights : 0), 0);
   let h = `<div class="total"><div class="muted">${state.round ? 'Rundreise ab' : 'Reise'} ${esc(shortLabel(state.start.label))} · ${segs.length} Abschnitte</div>
     <div class="big">${fkm(o.dist)}</div><div>ca. ${fdur(o.dur)} reine Fahrzeit · ${n} Etappen · ${nights} Übernachtungen</div></div>
-    <h3>Abschnitte</h3><ol class="segs">`;
+    ${tripHtml()}<h3>Abschnitte</h3><ol class="segs">`;
   let from = state.start;
   segs.forEach((g, k) => {
-    const name = g.kind === 'sight' ? '★ ' + shortLabel(g.to.label) : g.kind === 'home' ? 'zurück nach ' + shortLabel(g.to.label) : shortLabel(g.to.label);
+    const name = g.kind === 'sight' ? (g.rest ? '⛺ ' : '★ ') + shortLabel(g.to.label) : g.kind === 'home' ? 'zurück nach ' + shortLabel(g.to.label) : shortLabel(g.to.label);
     h += `<li class="segrow"><div class="st"><b>${esc(shortLabel(from.label))} → ${esc(name)}</b>
       <div class="muted">${fkm(g.dist)} · ${fdur(g.dur)}${g.visits.length ? ' · unterwegs: ' + g.visits.map(v => esc(shortLabel(v.label))).join(', ') : ''}${g.kind === 'sight' ? ` · ${g.nights} ${g.nights === 1 ? 'Nacht' : 'Nächte'} dort` : ''}</div>
       <div class="muted">${g.n === 1 ? 'direkt' : `${g.n} Etappen à ~${fkm(g.dist / g.n)}`}${g.n !== g.rec ? ` (Empfehlung ${g.rec})` : ''}</div></div>
@@ -1456,11 +1497,12 @@ function renderAsk(){
   let h = `<div class="total"><div class="muted">Gesamtstrecke ${esc(shortLabel(state.start.label))} → ${esc(shortLabel(state.end.label))}</div>
     <div class="big">${fkm(o.dist)}</div><div>ca. ${fdur(o.dur)} reine Fahrzeit (max. ${Math.max(80, +settings.speed || 80)} km/h)</div></div>
     <h3>Wie viele Etappen?</h3><ul class="opts">`;
+  const ret = state.ret ? new Date(state.ret + 'T12:00:00') : null;
   list.forEach(n => {
     const nights = n - 1;
     h += `<li><button type="button" data-n="${n}" class="${n === rec ? 'rec' : ''}" ${state.busy ? 'disabled' : ''}>
       <span class="n">${n}</span><span class="d"><b>${n === 1 ? 'Etappe' : 'Etappen'} à ~${fkm(o.dist / n)}</b>${n === rec ? ' <span class="badge best">Empfehlung</span>' : ''}
-      <div class="muted">je ca. ${fdur(o.dur / n)} · ${nights ? nights + (nights === 1 ? ' Übernachtung' : ' Übernachtungen') : 'ohne Übernachtung'}</div></span></button></li>`;
+      <div class="muted">je ca. ${fdur(o.dur / n)} · ${nights ? nights + (nights === 1 ? ' Übernachtung' : ' Übernachtungen') : 'ohne Übernachtung'}${(() => { const e = tripEnd(n); return e ? ` · Ankunft ${fdate(e)}${ret && e > ret ? ' <b style="color:var(--danger)">⚠ zu spät</b>' : ''}` : ''; })()}</div></span></button></li>`;
   });
   h += `</ul><form class="custom" id="nForm"><label for="nIn" class="muted">Andere Anzahl:</label>
     <input id="nIn" type="number" min="1" max="30" step="1" inputmode="numeric" value="${rec}">
@@ -1476,8 +1518,7 @@ function renderPanel(){
   let h = askingN() ? renderAsk() : '';
   if (state.stages.length){
     const ds = stageDates(), cur = currentStage();
-    h += `<div class="daterow"><label for="dateIn">Abfahrt</label><input type="date" id="dateIn" value="${esc(state.date || '')}">
-      ${ds ? `<span class="muted">bis ${fdate(ds[ds.length - 1])}</span>` : '<span class="muted">für Datum je Etappe</span>'}</div>`;
+    h += tripHtml();
     h += '<h3>Etappen</h3><ol class="stages">';
     state.stages.forEach((s, i) => {
       const camp = s.to.kind === 'camp', open = state.openDet.has(i), altOpen = state.alt && state.alt.i === i;
@@ -1487,6 +1528,7 @@ function renderPanel(){
         ${camp && !(state.done && i === state.stages.length - 1) ? `<button class="btn small" type="button" data-edit="${i}" ${busy ? 'disabled' : ''} title="Ab hier neu planen (anderen Platz im Korridor wählen)">Platz ändern</button>` : ''}</div>
         ${s.to.near ? `<div class="sightinfo">★ ${esc(shortLabel(s.to.near.label))} · ${s.to.near.d != null ? `${fkm1(s.to.near.d)} / ${fdur(s.to.near.t)} (ohne Wohnwagen)` : `${fkm1(s.to.near.air || 0)} Luftlinie`}</div>` : ''}
         ${s.vias && s.vias.length ? `<div class="muted">unterwegs: ${visitsOf(s).map(v => esc(shortLabel(v.label))).join(', ')}</div>` : ''}
+        ${i < state.stages.length - 1 || !state.done ? `<div class="nstep">Nächte hier <button type="button" data-nstep="${i}" data-d="-1" aria-label="eine Nacht weniger" ${(s.nights || 1) <= 1 ? 'disabled' : ''}>−</button><b>${s.nights || 1}</b><button type="button" data-nstep="${i}" data-d="1" aria-label="eine Nacht mehr">+</button>${(s.nights || 1) > 1 ? ` · ${(s.nights || 1) - 1} ${(s.nights || 1) === 2 ? 'freier Tag' : 'freie Tage'}` : ''}</div>` : ''}
         ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
         <div class="sbtns">
           <a class="btn" href="${navUrl(s.to)}" target="_blank" rel="noopener">🧭 Navigation</a>
@@ -1529,7 +1571,7 @@ function renderPanel(){
   if (p && p.mode === 'anchor'){
     const g = state.segs[p.seg];
     h += `<h3>Etappe ${state.stages.length + 1} von ${state.n}: Campingplatz bei ${esc(shortLabel(p.sight.label))}</h3>
-      <div class="ideal">★ <b>${esc(p.sight.label)}</b> · ${g.nights} ${g.nights === 1 ? 'Nacht' : 'Nächte'}
+      <div class="ideal">${g.rest ? '⛺ Pause' : '★'} <b>${esc(p.sight.label)}</b> · ${g.nights} ${g.nights === 1 ? 'Nacht' : 'Nächte'}${g.nights > 1 ? ` (${g.nights - 1} ${g.nights === 2 ? 'freier Tag' : 'freie Tage'})` : ''}
         ${!busy ? ` · <button class="linkbtn" type="button" id="nChange">Abschnitte ändern</button>` : ''}
         <div class="sbtns" style="margin-top:4px"><span class="muted">Umkreis</span>
           <select id="ancR" aria-label="Umkreis um die Sehenswürdigkeit">${[10, 20, 30, 50].map(k => `<option value="${k}"${k === p.radius ? ' selected' : ''}>${k} km</option>`).join('')}</select>
@@ -1542,10 +1584,10 @@ function renderPanel(){
     sortRows(p.cands.filter(passFilter)).forEach(c => {
       h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
         <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${c === best0 ? ' <span class="badge best">am nächsten</span>' : ''}${rateHtml(c)}</div>
-        <div class="sightinfo">${c.sight ? `${fkm1(c.sight.d)} / ${fdur(c.sight.t)} zur Sehenswürdigkeit (ohne Wohnwagen)` : `${fkm1(c.air)} Luftlinie zur Sehenswürdigkeit`}</div></div>
+        <div class="sightinfo">${c.sight ? `${fkm1(c.sight.d)} / ${fdur(c.sight.t)} ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit (ohne Wohnwagen)'}` : `${fkm1(c.air)} Luftlinie ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit'}`}</div></div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
     });
-    h += `</ul><div class="muted" style="margin-top:8px">Sortiert nach Entfernung zur Sehenswürdigkeit. Weitere Plätze erscheinen auf der Karte beim Reinzoomen.</div>`;
+    h += `</ul><div class="muted" style="margin-top:8px">Sortiert nach Entfernung ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit'}. Weitere Plätze erscheinen auf der Karte beim Reinzoomen.</div>`;
   }
   else if (p){
     h += `<h3>Etappe ${state.stages.length + 1} von ${state.n}: ${state.segs ? 'Transit-Stopp' : 'Platz wählen'}</h3>
@@ -1621,7 +1663,8 @@ function renderPanel(){
     if (b.dataset.sort === 'rating' && !settings.gkey){ flash('Für Google-Bewertungen bitte unter ⚙︎ einen Google-API-Schlüssel eintragen.'); return; }
     settings.sortBy = b.dataset.sort; saveSettings(); renderPanel();
   });
-  const di = $('#dateIn'); if (di) di.onchange = () => { state.date = di.value || null; touch(); renderPanel(); };
+  el.querySelectorAll('[data-nstep]').forEach(b => b.onclick = () => {
+    const s = state.stages[+b.dataset.nstep]; s.nights = Math.max(1, Math.min(30, (+s.nights || 1) + +b.dataset.d)); touch(); renderPanel(); });
   const elb = $('#endListBtn'); if (elb) elb.onclick = () => {
     state.showEndList = true;
     if (state.endSearched) renderAll(); else run(loadEndCands);
@@ -1721,11 +1764,13 @@ function renderVia(){
   const ul = $('#viaList');
   ul.innerHTML = state.via.map((v, i) => `<li class="${v.kind === 'visit' ? 'visit' : ''}"><span class="vn">${i + 1}</span>
     <div class="vt"><b>${esc(v.label)}</b><div class="vopts">
-      <select data-vkind="${i}" aria-label="Art des Zwischenziels"><option value="stay"${v.kind !== 'visit' ? ' selected' : ''}>★ Übernachten in der Nähe</option><option value="visit"${v.kind === 'visit' ? ' selected' : ''}>Besuch unterwegs</option></select>
+      <select data-vkind="${i}" aria-label="Art des Zwischenziels"><option value="stay"${v.kind === 'stay' || !v.kind ? ' selected' : ''}>★ Übernachten in der Nähe</option><option value="rest"${v.kind === 'rest' ? ' selected' : ''}>Pause / freie Tage (nur Campingplatz)</option><option value="visit"${v.kind === 'visit' ? ' selected' : ''}>Besuch unterwegs</option></select>
       ${v.kind !== 'visit' ? `<label><input type="number" min="1" max="30" data-vnights="${i}" value="${Math.max(1, +v.nights || 1)}"> Nächte</label>` : ''}</div></div>
     <div class="vbtns"><button type="button" data-vup="${i}" aria-label="nach oben" ${i === 0 ? 'disabled' : ''}>▲</button><button type="button" data-vdown="${i}" aria-label="nach unten" ${i === state.via.length - 1 ? 'disabled' : ''}>▼</button><button type="button" data-vdel="${i}" aria-label="entfernen">✕</button></div></li>`).join('');
   $('#viaTools').hidden = state.via.length < 2;
   $('#roundIn').checked = !!state.round;
+  $('#retLbl').textContent = state.round ? 'Zurück spätestens' : 'Ankunft spätestens';
+  $('#dateIn').value = state.date || ''; $('#retIn').value = state.ret || '';
   $('#endIn').disabled = !!state.round;
   if (state.round) $('#endIn').value = state.start ? state.start.label : $('#startIn').value;
   const ch = () => { renderVia(); renderMap(); };
@@ -1789,7 +1834,9 @@ async function optimizeVia(){
     catch(err){ setStatus(err.message, 'error'); }
   });
   $('#viaOpt').onclick = optimizeVia;
-  $('#roundIn').onchange = () => { state.round = $('#roundIn').checked; if (state.round) state.end = null; renderVia(); };
+  $('#roundIn').onchange = () => { state.round = $('#roundIn').checked; if (state.round) state.end = null; renderVia(); renderPanel(); };
+  $('#dateIn').onchange = () => { state.date = $('#dateIn').value || null; touch(); renderPanel(); };
+  $('#retIn').onchange = () => { state.ret = $('#retIn').value || null; touch(); renderPanel(); };
 })();
 
 /* ---------- Eingabe Start/Ziel ---------- */
@@ -1895,10 +1942,15 @@ async function ghDelete(path, sha, message){
 const tourPath = id => `touren/${id}.json`;
 const tourFile = t => ({ app:'gespann-etappen', version:1, tour:t });
 
-let syncing = null;
+let syncing = null, syncQueued = null;
 function syncNow(){
   if (!ghOn()) return Promise.resolve(null);
-  if (!syncing) syncing = doSync().finally(() => { syncing = null; });
+  // Läuft schon ein Abgleich, danach noch einen – sonst gingen Änderungen von währenddessen erst später online
+  if (syncing){
+    if (!syncQueued) syncQueued = syncing.catch(() => {}).then(() => { syncQueued = null; return syncNow(); });
+    return syncQueued;
+  }
+  syncing = doSync().finally(() => { syncing = null; });
   return syncing;
 }
 async function doSync(){
@@ -2003,8 +2055,8 @@ const defaultName = () => state.round ? `Rundreise ab ${shortLabel(state.start.l
 function buildTour(name, id){
   return { id: id || state.tourId || Date.now(), name: (name || '').trim() || defaultName(), savedAt: new Date().toISOString(),
     start: slimPoint(state.start), end: slimPoint(state.end), done: state.done, n: state.n, date: state.date || undefined,
-    via: state.via.length ? state.via : undefined, round: state.round || undefined,
-    segs: state.segs ? state.segs.map(g => ({ to:g.to, kind:g.kind, visits:g.visits, n:g.n, rec:g.rec, nights:g.nights, radius:g.radius, dist:g.dist, dur:g.dur })) : undefined,
+    via: state.via.length ? state.via : undefined, round: state.round || undefined, ret: state.ret || undefined,
+    segs: state.segs ? state.segs.map(g => ({ to:g.to, kind:g.kind, rest:g.rest || undefined, visits:g.visits, n:g.n, rec:g.rec, nights:g.nights, radius:g.radius, dist:g.dist, dur:g.dur })) : undefined,
     stages: state.stages.map(s => ({ from:slimPoint(s.from), to:slimPoint(s.to), dist:s.dist, dur:s.dur, note:s.note, line:thin(s.line),
       ex: s.ex || undefined, countries: s.countries || undefined, seg: s.seg || undefined, vias: s.vias && s.vias.length ? s.vias : undefined,
       memo: s.memo && (s.memo.res || s.memo.text) ? s.memo : undefined, nights: s.nights > 1 ? s.nights : undefined })),
@@ -2121,7 +2173,7 @@ function loadTour(id, given){
   Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id,
     endCands: (t.endCands || []).map(c => ({ ...c })), endSearched: !!t.endCands,
     n: t.n || (t.done ? t.stages.length : null), overview:null, date: t.date || null, alt:null, openDet:new Set(), showEndList:false,
-    via: t.via || [], round: !!t.round, segs: t.segs || null });
+    via: t.via || [], round: !!t.round, segs: t.segs || null, ret: t.ret || null });
   t.stages.forEach(s => { if (s.seg == null) s.seg = 0; });
   renderVia();
   t.stages.forEach(s => { if (s.to.kind === 'camp') campIndex.set(s.to.id, s.to); });
@@ -2136,7 +2188,7 @@ function loadTour(id, given){
 function resetTour(){
   if (state.busy) return;
   Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null, endCands:[], n:null, overview:null,
-    date:null, alt:null, openDet:new Set(), showEndList:false, via:[], round:false, segs:null, endSearched:false });
+    date:null, alt:null, openDet:new Set(), showEndList:false, via:[], round:false, segs:null, endSearched:false, ret:null });
   $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end; renderVia();
   setStatus(''); renderAll();
 }
@@ -2175,7 +2227,7 @@ function totalsText(){
 }
 function renderSummary(){
   const ds = stageDates(), cur = currentStage();
-  let h = `<div class="sumhead"><b>${esc(tourTitle())}</b><div class="muted">${esc(totalsText())}</div>
+  let h = `${tripHtml().includes('warn') ? tripHtml() : ''}<div class="sumhead"><b>${esc(tourTitle())}</b><div class="muted">${esc(totalsText())}</div>
     ${cur >= 0 ? '<div class="muted">Tour läuft – die nächste Etappe ist aufgeklappt.</div>' : ''}</div>`;
   state.stages.forEach((s, i) => {
     const c = s.to, camp = c.kind === 'camp', web = camp && webOf(c), phone = camp && phoneOf(c);
