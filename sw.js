@@ -1,5 +1,5 @@
 // Service Worker: hält die App-Dateien offline vor. Karten, Routing und Campingplatz-Abfragen brauchen Netz.
-const CACHE = 'gespann-etappen-v29';
+const CACHE = 'gespann-etappen-v30';
 const TILES = 'gespann-kacheln', MAX_TILES = 2500;   // angesehene Kartenkacheln für unterwegs (offline)
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
@@ -35,7 +35,7 @@ async function tile(req){
 }
 self.addEventListener('fetch', e => {
   const req = e.request;
-  if (req.method === 'GET' && req.url.includes('tile.openstreetmap.org')) { e.respondWith(tile(req)); return; }
+  if (req.method === 'GET' && (req.url.includes('tile.openstreetmap.org') || req.url.includes('server.arcgisonline.com'))) { e.respondWith(tile(req)); return; }
   if (req.method !== 'GET' || LIVE.some(h => req.url.includes(h))) return;
   // Netz zuerst (damit Updates ankommen), sonst Cache
   e.respondWith(
