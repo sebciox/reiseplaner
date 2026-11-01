@@ -1,5 +1,5 @@
 // Service Worker: hält die App-Dateien offline vor. Karten, Routing und Campingplatz-Abfragen brauchen Netz.
-const CACHE = 'gespann-etappen-v36';
+const CACHE = 'gespann-etappen-v37';
 const TILES = 'gespann-kacheln', MAX_TILES = 2500;   // angesehene Kartenkacheln für unterwegs (offline)
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',

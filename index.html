@@ -39,12 +39,15 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 /* Griff: großer Bereich zum Ziehen/Antippen; ziehen geht auch an der Kopfzeile */
 #handle{border:0;background:none;padding:12px 0 8px;width:100%;cursor:grab;flex:none;touch-action:none}
 #handle span{display:block;width:44px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
-#scroll{overflow:auto;flex:1;padding:0 16px 20px;-webkit-overflow-scrolling:touch;scroll-padding-top:var(--stick-h,110px)}
+/* fester Kopf: App-Kopf, Karteireiter, Reisezeile – scrollt nicht mit */
+#panelHead{flex:none;padding:0 16px;background:var(--panel);position:relative;z-index:4}
+#panelHead.shadow{box-shadow:0 6px 8px -6px rgba(0,0,0,.18)}
+#scroll{overflow:auto;flex:1;padding:12px 16px 20px;-webkit-overflow-scrolling:touch;scroll-padding-top:8px}
 @media (min-width:900px){
   #panel{top:0;bottom:0;right:auto;width:var(--pw,410px);height:auto !important;border-radius:0;
     box-shadow:2px 0 18px rgba(0,0,0,.12)}
   #handle{display:none}
-  #scroll{padding-top:14px}
+  #panelHead{padding-top:14px}
   #map{left:var(--pw,410px)}
   /* Seitenleiste in der Breite ziehbar (Rand rechts) */
   #resizer{display:block;position:absolute;top:0;bottom:0;right:-5px;width:10px;cursor:col-resize;z-index:2;touch-action:none}
@@ -93,13 +96,17 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
   padding:9px 10px;border-radius:8px;cursor:pointer}
 .sugg button:hover,.sugg button:focus{background:var(--brand-soft)}
 #status:empty{display:none}
-.sticky{position:sticky;top:0;z-index:4;background:var(--panel);margin:0 -16px 8px;padding:6px 16px 6px;border-bottom:1px solid var(--line)}
-.tabs{display:flex;gap:4px}
-.tabs button{flex:1;font:inherit;font-size:14px;padding:8px 4px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tabs button.on{background:var(--brand);border-color:var(--brand);color:#1c2420;font-weight:700}
+/* Karteireiter: aktiver Reiter weiß mit Salbei-Oberkante, geht nahtlos in den Inhalt über */
+.tabs{display:flex;gap:4px;margin:0 -16px;padding:0 12px;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;font:inherit;font-size:14px;padding:8px 4px 7px;margin-bottom:-1px;border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0;
+  background:var(--brand-soft);color:var(--muted);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}
+.tabs button:hover{color:var(--text)}
+.tabs button.on{background:var(--panel);color:var(--text);font-weight:700;box-shadow:inset 0 3px 0 var(--brand-ink);padding-bottom:8px;z-index:1}
 .tabs button .cnt{font-weight:400;font-size:12px;opacity:.8}
 #tripBar:empty{display:none}
-#tripBar .trip{margin:6px 0 0;padding:6px 10px;font-size:13px}
+#tripBar{padding:8px 0 10px;border-bottom:1px solid var(--line);margin:0 -16px;padding-left:16px;padding-right:16px}
+#tripBar:empty{display:none}
+#tripBar .trip{margin:0;padding:6px 10px;font-size:13px}
 [hidden]{display:none !important}
 .tlhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .tl{list-style:none;margin:6px 0 0 6px;padding:0 0 0 16px;border-left:2px solid var(--brand);display:grid;gap:8px}
@@ -374,7 +381,7 @@ a{color:var(--brand-ink)}
 <aside id="panel" class="half">
   <div id="resizer" role="separator" aria-orientation="vertical" aria-label="Breite der Seitenleiste ändern" tabindex="0" title="ziehen: Breite ändern"></div>
   <button id="handle" type="button" aria-label="Bereich vergrößern oder verkleinern"><span></span></button>
-  <div id="scroll">
+  <div id="panelHead">
     <header class="top">
       <div class="brand"><svg class="logo" viewBox="0 0 72 40" width="40" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M37 30 H58 V20 C57 12 51 6 43 6 H14 a6 6 0 0 0 -6 6 V30 H25 A6 6 0 0 1 37 30"/><path d="M8 23 H14 M23 23 H58"/><rect x="14" y="11" width="9" height="16" rx="2.5"/><path d="M16.5 19 v1.5"/><path d="M35 11 H50 C52.5 11 54 13 54.5 18 H35 Z"/><path d="M44 11 V18"/><path d="M58 28 H70"/><circle cx="31" cy="31" r="4"/></svg><h1>Reiseplaner</h1></div>
       <div>
@@ -383,7 +390,7 @@ a{color:var(--brand-ink)}
         <button class="btn ghost icon" id="settingsBtn" type="button" aria-label="Einstellungen" title="Einstellungen">⚙︎</button>
       </div>
     </header>
-    <div class="sticky" id="stickyHead">
+    <div id="stickyHead">
       <nav class="tabs" id="tabs" role="tablist" aria-label="Planungsschritte">
         <button type="button" role="tab" data-tabbtn="goals">1 Ziele</button>
         <button type="button" role="tab" data-tabbtn="plan">2 Plätze</button>
@@ -391,6 +398,8 @@ a{color:var(--brand-ink)}
       </nav>
       <div id="tripBar"></div>
     </div>
+  </div>
+  <div id="scroll">
     <div id="status" role="status" aria-live="polite"></div>
     <div id="fbNote" class="note" hidden>Ersatzdienst aktiv (OSRM/Photon statt OpenRouteService) – Fahrzeiten sind Schätzungen. <button class="linkbtn" type="button" id="fbOff">zurück zu ORS</button></div>
     <form id="planForm" autocomplete="off">
@@ -2047,7 +2056,7 @@ function renderPanel(){
   lyr.hits.clearLayers();
   const el = $('#result'), p = state.pending, busy = state.busy;
   $('#planBtn').disabled = busy;
-  $('#sumBtn').hidden = $('#fabSum').hidden = !state.stages.length;
+  $('#fabSum').hidden = !state.stages.length; $('#sumBtn').hidden = !state.stages.length || !window.__allTabs;   // Reiter 3 ersetzt den Knopf
   let h = askingN() ? renderAsk() : '';
   if (state.stages.length){
     const ds = stageDates(), cur = currentStage();
@@ -2284,10 +2293,10 @@ function applyTab(){
   document.querySelectorAll('[data-tabbtn]').forEach(b => { const t = b.dataset.tabbtn, on = t === uiTab;
     b.classList.toggle('on', on); b.setAttribute('aria-selected', on); b.innerHTML = lab[t] + cnt[t]; });
   $('#tripBar').innerHTML = state.stages.length || state.overview ? tripHtml() : '';
-  document.documentElement.style.setProperty('--stick-h', ($('#stickyHead').offsetHeight + 8) + 'px');   // Platz unter der festen Kopfzeile beim Scrollen
   if (uiTab === 'trip' || all) renderTrip();
 }
 document.querySelectorAll('[data-tabbtn]').forEach(b => b.onclick = () => setTab(b.dataset.tabbtn));
+$('#scroll').addEventListener('scroll', () => $('#panelHead').classList.toggle('shadow', $('#scroll').scrollTop > 2), { passive:true });
 
 /* Bottom-Sheet am Handy */
 const SHEET = ['min', 'half', 'full'];
