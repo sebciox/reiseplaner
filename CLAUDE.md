@@ -139,6 +139,9 @@ Hintergrund: Sebastians erste Testtour Witten → Sant Pere Pescador ergab 3 Üb
 Port; Ausgaben/Screenshots nach `tests/out/`, nicht eingecheckt; Vorlage `tests/fixtures/tour.etappen.json`).
 `npm install` (Playwright 1.63, Leaflet 1.9.4, SheetJS 0.18.5 nur zum Lesen der Excel-Datei, ESLint, Prettier), dann
 `npm test` (alle) oder `node tests/run-all.js sights tabs` (Auswahl nach Dateianfang). Neue Funktion → Test ergänzen.
+Schlägt eine Testdatei fehl, wiederholt `run-all.js` sie einmal; besteht sie dann, wird sie als **„wacklig“** gemeldet
+(= Wettlauf im Test, beheben). Typischer Wettlauf: nach einem Klick auf „Wählen“ sind die alten Knöpfe noch kurz da →
+nicht nur auf Knöpfe, sondern auf `!state.busy` (und das erwartete Ergebnis) warten.
 Die Arbeitsumgebung erreicht ORS/Overpass oft nicht. Bewährt: Playwright-Test mit gemockten Antworten
 (`page.route` für ORS-Directions/Matrix/Geocode und Overpass, Leaflet lokal aus npm, `serviceWorkers:'block'`),
 Ablauf: planen → Plätze wählen → Zielplatz → Tour-Datei exportieren → neu → importieren.

@@ -186,7 +186,9 @@ const srv = require('./lib/server')(ROOT, 8123);
     const done = await page.$('[data-endpick]');
     if (done) break;
     await page.click('[data-pick]');
-    await page.waitForFunction(() => document.querySelector('[data-pick]') || document.querySelector('[data-endpick]'), null, { timeout: 15000 });
+    await page.waitForFunction(() => !state.busy && (document.querySelector('[data-pick]') || document.querySelector('[data-endpick]')), null, {
+      timeout: 15000
+    });
     await page.waitForTimeout(300);
   }
   await page.waitForSelector('[data-endpick]', { timeout: 15000 });

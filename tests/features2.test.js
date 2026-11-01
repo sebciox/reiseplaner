@@ -299,7 +299,7 @@ const srv = require('./lib/server')(ROOT, 8134);
     if (await page.$('[data-endpick]')) break;
     await page.waitForSelector('[data-pick]');
     await page.click('[data-pick]');
-    await page.waitForFunction(() => document.querySelector('[data-pick]') || document.querySelector('[data-endpick]'));
+    await page.waitForFunction(() => !state.busy && (document.querySelector('[data-pick]') || document.querySelector('[data-endpick]')));
     await page.waitForTimeout(200);
   }
   await page.click('[data-endpick]');

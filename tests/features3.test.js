@@ -214,11 +214,12 @@ const srv = require('./lib/server')(ROOT, 8135);
     if (await page.$('[data-endpick]')) break;
     await page.waitForSelector('[data-pick]');
     await page.click('[data-pick]');
-    await page.waitForFunction(() => document.querySelector('[data-pick]') || document.querySelector('[data-endpick]'));
+    await page.waitForFunction(() => !state.busy && (document.querySelector('[data-pick]') || document.querySelector('[data-endpick]')));
     await page.waitForTimeout(200);
   }
   await page.click('[data-endpick]');
   await page.waitForSelector('.endsel');
+  await page.waitForFunction(() => !state.busy);
   // 3) Zoom-Plätze: kein „außerhalb des Suchkorridors“, keine Dopplungen
   const st1 = await page.evaluate(() => ({ lat: state.stages[1].to.lat, lon: state.stages[1].to.lon, id: state.stages[1].to.id }));
   await page.evaluate(([la, lo]) => map.setView([la, lo], 12, { animate: false }), [st1.lat, st1.lon]);
