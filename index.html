@@ -278,6 +278,10 @@ li.flashrow{animation:flashrow 2.4s ease-out}
 .pin.sight{background:#e07b24}
 .pin.visit{background:#fdf1e3;border:2px dashed #e07b24}
 .pin.visit span{color:#b8560d}
+.pin.hit{background:#3b6fb6}
+.rhandle{width:30px;height:30px;border-radius:50%;background:#fff;border:3px solid #e07b24;color:#b8560d;font:700 15px system-ui,sans-serif;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:ew-resize;touch-action:none}
+.leaflet-tooltip.rtip{font-weight:700;color:#b8560d;padding:2px 6px}
+.cand.hl{background:var(--brand-soft)}
 .endsel{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-top:8px}
 /* Schwebende Knöpfe am Handy: Menü ein/aus, Übersicht */
 #fabs{position:fixed;left:12px;top:calc(12px + env(safe-area-inset-top));z-index:1001;display:flex;flex-direction:column;gap:8px}
@@ -1354,9 +1358,18 @@ async function searchAddCamp(form){
       .filter(x => !ctr || x.dist <= 150000);
     r.sort((a, b) => (b.camp - a.camp) || a.dist - b.dist); r = r.slice(0, 8);
     if (!r.length){ out.innerHTML = '<li class="muted">Nichts in der Nähe gefunden. In Google Maps den Platz antippen, Koordinaten oder Link kopieren und hier einfügen.</li>'; return; }
-    out.innerHTML = r.map((x, i) => `<li><button type="button" data-ar="${i}">${x.camp ? '⛺ ' : ''}${esc(x.label)}${ctr ? ` <span class="muted">· ${fkm(x.dist)} entfernt</span>` : ''}</button></li>`).join('');
-    out.querySelectorAll('[data-ar]').forEach(b => b.onclick = () => { const x = r[+b.dataset.ar]; out.innerHTML = '';
-      run(() => addCustomCamp(ctx, { lat:x.lat, lon:x.lon, name:x.name, id:x.camp ? x.id : null })); });
+    out.innerHTML = r.map((x, i) => `<li><button type="button" data-ar="${i}"><b>${i + 1}</b> ${x.camp ? '⛺ ' : ''}${esc(x.label)}${ctr ? ` <span class="muted">· ${fkm(x.dist)} entfernt</span>` : ''}</button></li>`).join('');
+    const take = i => { const x = r[i]; out.innerHTML = ''; lyr.hits.clearLayers();
+      run(() => addCustomCamp(ctx, { lat:x.lat, lon:x.lon, name:x.name, id:x.camp ? x.id : null })); };
+    // Treffer auch auf der Karte (Nummern wie in der Liste) – Karte fährt dorthin
+    lyr.hits.clearLayers();
+    const mk = r.map((x, i) => L.marker([x.lat, x.lon], { icon:pinIcon(String(i + 1), 'hit'), zIndexOffset:800 })
+      .bindTooltip(`${x.camp ? '⛺ ' : ''}${esc(x.name)} – antippen zum Hinzufügen`, { direction:'top', offset:[0, -26] }).on('click', () => take(i)).addTo(lyr.hits));
+    map.fitBounds(L.latLngBounds([...r.map(x => [x.lat, x.lon]), ...(ctr ? [[ctr.lat, ctr.lon]] : [])]).pad(0.15), { ...sheetPad(), maxZoom:13 });
+    out.querySelectorAll('[data-ar]').forEach(b => { const i = +b.dataset.ar;
+      b.onclick = () => take(i);
+      b.onmouseenter = () => { mk[i].openTooltip(); followCamp(r[i]); };
+      b.onmouseleave = () => mk[i].closeTooltip(); });
   } catch(e){ out.innerHTML = `<li class="muted">${esc(e.message)} – alternativ Koordinaten oder Google-Maps-Link einfügen.</li>`; }
 }
 const viaByUid = uid => state.via.find(v => v.uid === uid);
@@ -1475,12 +1488,15 @@ async function loadAnchorCands(from, k, visits, r, km){
     // Basislager: kleinste Summe der Wege zu allen Sehenswürdigkeiten
     camps.sort((a, b) => (a.sight ? a.sight.d : a.air * 1.4) - (b.sight ? b.sight.d : b.air * 1.4));
   }
+  // selbst ergänzte Plätze bleiben bei neuer Suche (z. B. anderer Umkreis) erhalten
+  const old = state.pending && state.pending.mode === 'anchor' && state.pending.seg === k ? state.pending.cands.filter(c => c.added && !camps.includes(c)) : [];
+  if (old.length){ camps.push(...old); camps.sort((a, b) => (a.sight ? a.sight.d : a.air * 1.4) - (b.sight ? b.sight.d : b.air * 1.4)); }
   camps.forEach((c, i) => c.best = i === 0);
   state.pending = { mode:'anchor', seg:k, from, visits, line:r.line, cum:cumul(r.line), remain:r.dist, remainDur:r.dur, cands:camps,
     sight, sights:S, radius:km, plan:null, cmin:0, cmax:0, detour:0,
     note: camps.length ? null : `Keine Campingplätze im Umkreis von ${km} km – Umkreis vergrößern oder auf der Karte reinzoomen.` };
   renderAll();
-  map.fitBounds(L.latLngBounds([...S.map(x => [x.lat, x.lon]), ...camps.map(c => [c.lat, c.lon])]).pad(0.15), sheetPad());
+  map.fitBounds(L.latLng(sight.lat, sight.lon).toBounds(rad * 2.15).extend(L.latLngBounds([...S.map(x => [x.lat, x.lon]), ...camps.map(c => [c.lat, c.lon])])), sheetPad());
 }
 
 /* Campingplätze rund um den Zielort, um das Ziel auf einen Platz zu legen */
@@ -1655,7 +1671,7 @@ const BaseCtl = L.Control.extend({ options:{ position:'bottomright' }, onAdd(){
 new BaseCtl().addTo(map);
 setBase(baseSat);
 const lyr = { route:L.layerGroup().addTo(map), corridor:L.layerGroup().addTo(map), area:L.layerGroup().addTo(map),
-              cands:L.layerGroup().addTo(map), pins:L.layerGroup().addTo(map) };
+              cands:L.layerGroup().addTo(map), pins:L.layerGroup().addTo(map), hits:L.layerGroup().addTo(map) };
 
 function pinIcon(text, cls){
   return L.divIcon({ className:'', html:`<div class="pin ${cls||''}"><span>${esc(text)}</span></div>`, iconSize:[28,28], iconAnchor:[14,30], popupAnchor:[0,-28] });
@@ -1748,29 +1764,28 @@ function afterText(c){
   return a.n === 1 ? `danach noch ${fkm(a.len)} bis zum Ziel` : `danach noch ${a.n} Etappen à ~${fkm(a.len)}`;
 }
 map.on('popupclose', e => { lastClosed = { src:e.popup._source, t:Date.now() }; });
+// Info-Fenster neu ausrichten, ohne den Inhalt neu zu zeichnen (popup.update() würde bei Funktions-Inhalten das
+// HTML neu erzeugen – Knöpfe und nachgeladene Entfernungen gingen verloren)
+function relayoutPopup(p){ if (p && p._map){ p._updateLayout(); p._updatePosition(); } }
 map.on('popupopen', e => {
-  e.popup.getElement().querySelectorAll('[data-gn]').forEach(el => { const c = campIndex.get(el.dataset.gn) || state.stages.map(s => s.to).find(t => String(t.id) === el.dataset.gn);
-    if (c) loadGName(c).then(() => { el.innerHTML = gNameHtml(c); e.popup.update(); }); });
-  e.popup.getElement().querySelectorAll('[data-pd]').forEach(el => { const c = campIndex.get(el.dataset.pd); if (c) fillPopDist(el, c); });
-  e.popup.getElement().querySelectorAll('[data-pick]').forEach(b => {
-    b.onclick = () => { const c = campIndex.get(b.dataset.pick); map.closePopup(); if (c) run(() => selectCamp(c)); };
-  });
-  e.popup.getElement().querySelectorAll('[data-altpick]').forEach(b => {
-    b.onclick = () => { const c = campIndex.get(b.dataset.altpick), i = state.alt?.i; map.closePopup();
-      if (c && i != null) run(() => replaceStop(i, c)); };
-  });
-  e.popup.getElement().querySelectorAll('[data-stagepick]').forEach(b => {
-    b.onclick = () => { const c = campIndex.get(b.dataset.stagepick), i = +b.dataset.stage; map.closePopup();
-      if (c && state.stages[i]) run(() => replaceStop(i, c)); };
-  });
-  e.popup.getElement().querySelectorAll('[data-splitpick]').forEach(b => {
-    b.onclick = () => { const c = campIndex.get(b.dataset.splitpick), i = state.split?.i; map.closePopup();
-      if (c && i != null) run(() => splitStage(i, c)); };
-  });
-  e.popup.getElement().querySelectorAll('[data-endpick]').forEach(b => {
-    b.onclick = () => { const c = campIndex.get(b.dataset.endpick); map.closePopup(); if (c) run(() => selectEnd(c)); };
-  });
+  const root = e.popup.getElement();
+  root.querySelectorAll('[data-gn]').forEach(el => { const c = campIndex.get(el.dataset.gn) || state.stages.map(s => s.to).find(t => String(t.id) === el.dataset.gn);
+    if (c) loadGName(c).then(() => { el.innerHTML = gNameHtml(c); relayoutPopup(e.popup); }); });
+  root.querySelectorAll('[data-pd]').forEach(el => { const c = campIndex.get(el.dataset.pd); if (c) fillPopDist(el, c).then(() => relayoutPopup(e.popup)); });
 });
+// Knöpfe im Info-Fenster: ein Klick-Abfänger für alle (Capture-Phase, weil Leaflet Klicks im Fenster nicht weiterreicht)
+$('#map').addEventListener('click', ev => {
+  const b = ev.target.closest('.leaflet-popup [data-pick], .leaflet-popup [data-altpick], .leaflet-popup [data-stagepick], .leaflet-popup [data-splitpick], .leaflet-popup [data-endpick]');
+  if (!b) return;
+  ev.preventDefault(); ev.stopPropagation();
+  const d = b.dataset;
+  map.closePopup();
+  if (d.pick != null){ const c = campIndex.get(d.pick); if (c) run(() => selectCamp(c)); }
+  else if (d.altpick != null){ const c = campIndex.get(d.altpick), i = state.alt?.i; if (c && i != null) run(() => replaceStop(i, c)); }
+  else if (d.stagepick != null){ const c = campIndex.get(d.stagepick), i = +d.stage; if (c && state.stages[i]) run(() => replaceStop(i, c)); }
+  else if (d.splitpick != null){ const c = campIndex.get(d.splitpick), i = state.split?.i; if (c && i != null) run(() => splitStage(i, c)); }
+  else if (d.endpick != null){ const c = campIndex.get(d.endpick); if (c) run(() => selectEnd(c)); }
+}, true);
 
 function renderMap(){
   lyr.route.clearLayers(); lyr.corridor.clearLayers(); lyr.cands.clearLayers(); lyr.pins.clearLayers();
@@ -1822,7 +1837,8 @@ function renderMap(){
     .bindPopup(`<b>${esc(v.label)}</b><br>${v.kind === 'visit' ? 'Besuch unterwegs' : `${v.kind === 'rest' ? 'Pause' : 'Zwischenziel'} ${i + 1} · ${Math.max(1, +v.nights || 1)} Nächte`}`).addTo(lyr.pins));
   if (state.pending && state.pending.mode === 'anchor'){
     const q = state.pending.sight;
-    L.circle([q.lat, q.lon], { radius:state.pending.radius * 1000, color:COL.corridor, weight:2, fillOpacity:.05, dashArray:'6 6', interactive:false }).addTo(lyr.corridor);
+    const circ = L.circle([q.lat, q.lon], { radius:state.pending.radius * 1000, color:COL.corridor, weight:2, fillOpacity:.05, dashArray:'6 6', interactive:false }).addTo(lyr.corridor);
+    if (!state.busy) radiusHandle(circ, state.pending);
   }
   if (state.start) L.marker([state.start.lat, state.start.lon], { icon:pinIcon('S') }).bindPopup(esc(state.start.label)).addTo(lyr.pins);
   if (state.end && !endIsCamp) L.marker([state.end.lat, state.end.lon], { icon:pinIcon('Z', 'end') }).bindPopup(esc(state.end.label)).addTo(lyr.pins);
@@ -1832,6 +1848,35 @@ function renderMap(){
     L.marker([s.to.lat, s.to.lon], { icon:fin ? pinIcon('Z', 'end') : pinIcon(String(i + 1)) })
       .bindPopup(() => campInfo(s.to, 'chosen')).addTo(lyr.pins);
   });
+}
+// Griff am Kreisrand: Umkreis um die Sehenswürdigkeit durch Ziehen ändern, beim Loslassen wird neu gesucht
+const edgeAt = (q, m) => L.latLng(q.lat, q.lon + m / (111320 * Math.cos(q.lat * RAD)));
+function radiusHandle(circ, p){
+  const q = p.sight, kmAt = ll => Math.max(3, Math.min(100, Math.round(map.distance([q.lat, q.lon], ll) / 1000)));
+  const h = L.marker(edgeAt(q, p.radius * 1000), { draggable:true, zIndexOffset:1000, keyboard:false, title:'Umkreis ändern: ziehen',
+    icon:L.divIcon({ className:'', html:'<div class="rhandle">↔</div>', iconSize:[30, 30], iconAnchor:[15, 15] }) })
+    .bindTooltip(`${p.radius} km`, { permanent:true, direction:'right', offset:[16, 0], className:'rtip' }).addTo(lyr.corridor);
+  h.on('drag', () => { const km = kmAt(h.getLatLng()); circ.setRadius(km * 1000); h.setTooltipContent(`${km} km – loslassen = suchen`); });
+  h.on('dragend', () => {
+    const km = kmAt(h.getLatLng());
+    if (km === p.radius || state.pending !== p || state.busy){ h.setLatLng(edgeAt(q, p.radius * 1000)); circ.setRadius(p.radius * 1000); h.setTooltipContent(`${p.radius} km`); return; }
+    run(() => loadAnchorCands(p.from, p.seg, p.visits, { line:p.line, dist:p.remain, dur:p.remainDur }, km));
+  });
+  return h;
+}
+// Karte folgt der Liste: Platz unter der Maus hervorheben, liegt er außerhalb des Kartenbilds, dorthin schieben
+let hlTimer = 0, hlCamp = null;
+function hlCampOn(c, on){
+  if (!c || !c._m || !c._m.setStyle) return;
+  const m = c._m;
+  if (on){ hlCamp = c; if (!m._o0) m._o0 = { r:m.getRadius(), color:m.options.color, weight:m.options.weight };
+    m.setRadius(m._o0.r + 5); m.setStyle({ color:'#3b6fb6', weight:5 }); m.bringToFront(); }
+  else if (m._o0){ m.setRadius(m._o0.r); m.setStyle({ color:m._o0.color, weight:m._o0.weight }); delete m._o0; if (hlCamp === c) hlCamp = null; }
+}
+function followCamp(c){
+  if (!c) return;
+  const ll = L.latLng(c.lat, c.lon), pad = sheetPad();
+  if (!map.getBounds().pad(-0.05).contains(ll)) map.panInside(ll, { paddingTopLeft:pad.paddingTopLeft, paddingBottomRight:pad.paddingBottomRight });
 }
 function sheetPad(){
   const mobile = window.innerWidth < 900, hidden = $('#panel').classList.contains('hide');
@@ -1999,6 +2044,7 @@ function renderAsk(){
   return h;
 }
 function renderPanel(){
+  lyr.hits.clearLayers();
   const el = $('#result'), p = state.pending, busy = state.busy;
   $('#planBtn').disabled = busy;
   $('#sumBtn').hidden = $('#fabSum').hidden = !state.stages.length;
@@ -2064,8 +2110,8 @@ function renderPanel(){
       <div class="ideal">${g.rest ? '⛺ Pause' : (p.sights && p.sights.length > 1 ? '★ Basislager für' : '★')} <b>${p.sights && p.sights.length > 1 ? p.sights.map(x => esc(shortLabel(x.label))).join(', ') : esc(p.sight.label)}</b> · ${g.nights} ${g.nights === 1 ? 'Nacht' : 'Nächte'}${g.nights > 1 ? ` (${g.nights - 1} ${g.nights === 2 ? 'freier Tag' : 'freie Tage'})` : ''}
         ${!busy ? ` · <button class="linkbtn" type="button" id="nChange">Abschnitte ändern</button>` : ''}
         <div class="sbtns" style="margin-top:4px"><span class="muted">Umkreis</span>
-          <select id="ancR" aria-label="Umkreis um die Sehenswürdigkeit">${[10, 20, 30, 50].map(k => `<option value="${k}"${k === p.radius ? ' selected' : ''}>${k} km</option>`).join('')}</select>
-          ${coordHtml(p.sight)}</div></div>
+          <select id="ancR" aria-label="Umkreis um die Sehenswürdigkeit">${[...new Set([10, 20, 30, 50, p.radius])].sort((a, b) => a - b).map(k => `<option value="${k}"${k === p.radius ? ' selected' : ''}>${k} km</option>`).join('')}</select>
+          ${coordHtml(p.sight)}</div><div class="muted" style="font-size:13px">oder auf der Karte den Griff ↔ am Kreisrand ziehen</div></div>
       <div class="muted">Anfahrt ${fkm(p.remain)} · ${fdur(p.remainDur)}${p.visits.length ? ' · unterwegs: ' + p.visits.map(v => esc(shortLabel(v.label))).join(', ') : ''}</div>
       ${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}
       <div class="legend"><span><i style="background:${COL.ok}"></i>Wohnwagen erlaubt</span><span><i style="background:${COL.unk}"></i>keine Angabe</span></div>
@@ -2180,6 +2226,12 @@ function renderPanel(){
   };
   el.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { const c = campIndex.get(b.dataset.pick); if (c) run(() => selectCamp(c)); });
   el.querySelectorAll('[data-endpick]').forEach(b => b.onclick = () => { const c = campIndex.get(b.dataset.endpick); if (c) run(() => selectEnd(c)); });
+  if (matchMedia('(hover:hover)').matches) el.querySelectorAll('li.cand').forEach(li => {
+    const b = li.querySelector('[data-show]'); if (!b) return;
+    li.onmouseenter = () => { const c = campIndex.get(b.dataset.show); clearTimeout(hlTimer); if (hlCamp && hlCamp !== c) hlCampOn(hlCamp, false);
+      li.classList.add('hl'); hlCampOn(c, true); hlTimer = setTimeout(() => followCamp(c), 250); };
+    li.onmouseleave = () => { clearTimeout(hlTimer); li.classList.remove('hl'); hlCampOn(campIndex.get(b.dataset.show), false); };
+  });
   el.querySelectorAll('[data-show]').forEach(b => b.onclick = () => {
     const c = campIndex.get(b.dataset.show); if (!c) return;
     if (window.innerWidth < 900) setSheet('min');
