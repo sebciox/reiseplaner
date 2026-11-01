@@ -32,7 +32,10 @@ der höchstens ~10 km von der Route entfernt liegt.
 | Verkettung | jede Etappe startet am gewählten Platz der vorherigen |
 | Letzte Etappe | gewählte Anzahl erreicht → direkt zum Ziel, danach Liste „Campingplatz am Ziel“ (wird in der Tour als `endCands` gespeichert; beim Laden einer fertigen Tour **keine** neue Abfrage – ältere Touren ohne Liste zeigen einen Knopf „Campingplätze am Ziel …“) |
 | Nichts gefunden | stufenweise erweitern: Umweg 20 km, dann Korridor ±50 km; Hinweis anzeigen |
-| Manuelle Wahl | jeder Campingplatz beim Reinzoomen (Zoom ≥ 10) als Etappenziel wählbar |
+| Manuelle Wahl | jeder Campingplatz beim Reinzoomen (Zoom ≥ 10) als Etappenziel wählbar. Zoom-Plätze (`drawArea`) lassen Plätze weg, die schon als Vorschlag/Ausweichplatz/Ziel-Liste/Etappenziel angezeigt sind. Popup: während der Planung „außerhalb des Suchkorridors“ + „Als Etappenziel wählen“; danach Entfernung zum nächsten Etappenziel + „Als Ziel von Etappe N übernehmen“ (N = offene Ausweichplatz-Etappe, sonst nächstgelegenes Ziel; wie Ausweichplatz übernehmen) |
+| Links je Platz | 🧭 Navigation (Routenführung), „Google-Eintrag“ (mit Google-Schlüssel der gefundene Eintrag, sonst Namenssuche `maps/search/<Name>/@lat,lon,15z`), park4night |
+| Umweg-Text | „7,4 km / 9 min von der Route bis zum Platz“ (einfache Richtung) |
+| Tournamen | gleicher Name (Groß/Klein + Leerzeichen egal) beim Speichern → Warnung: OK = vorhandene Tour überschreiben (gleiche id, eigener alter Eintrag wird gelöscht), Abbrechen = Vorschlag „Name (2)“. Tourenliste zeigt Datum + Uhrzeit |
 | Geschwindigkeit | max. 80 km/h (ORS-Minimum ist 80) |
 | Autobahn bevorzugen | Standard an: Route **ohne** `maximum_speed` (`preference: fastest`), Fahrzeit danach je Schritt auf max. km/h gedeckelt. Grund: mit 80-km/h-Limit wählt ORS oft Landstraßen. Aus: altes Verhalten mit `maximum_speed` |
 | Maut meiden | Standard aus; `options.avoid_features: ['tollways']` (gilt nur fürs Routing, nicht für die Umweg-Matrix) |
@@ -44,7 +47,7 @@ der höchstens ~10 km von der Route entfernt liegt.
 | Ausweichplatz | Umkreis 5/10/20/30 km (gemerkt in `settings.altRadius`) um den Platz der Etappe; „Übernehmen“ rechnet diese und die nächste Etappe neu, spätere bleiben |
 | Google-Bewertungen | Places API (New) Text Search (`places.googleapis.com/v1/places:searchText`, Feldmaske rating/userRatingCount/googleMapsUri), Schlüssel `settings.gkey` (synchronisiert). Nur live + im Arbeitsspeicher (Google-Regeln), max. 20 Plätze je Liste (Kontingent). Sortierung „Entfernung/Etappe“ oder „★ Google-Bewertung“ (gewichtet, `settings.sortBy`) |
 | Ersatzdienst | nur auf Rückfrage: bei ORS-Fehler (kein/ungültiger Schlüssel, 429, 5xx, Netz) `confirm` → für die Sitzung OSRM-Demo (`router.project-osrm.org`, Route + Table, `exclude=toll`) und Photon (`photon.komoot.io`, Ortssuche/Rückwärtssuche); Hinweis `#fbNote` mit „zurück zu ORS“ |
-| Koordinaten | in Details/Übersicht/PDF und am Idealpunkt der Etappe, je mit „Kopieren“ und „Camping in der Nähe“ (Google-Maps-Suche „camping“ am Punkt – findet auch Plätze, die in OSM fehlen) |
+| Koordinaten | in Details/Übersicht/PDF und am Idealpunkt der Etappe, je mit Kopier-Symbol (SVG, zwei Rechtecke; danach kurz ✓) und „Camping in der Nähe“ (Google-Maps-Suche „camping“ am Punkt – findet auch Plätze, die in OSM fehlen) |
 | Länder/Fähre/Maut | ORS `extra_info: waycategory, tollways` → `stage.ex {ferry, toll}` (Meter); Länder je Etappe per Photon-Rückwärtssuche alle ~60 km → `stage.countries`; Tabelle `LAND` mit Gespann-Richtwerten (ohne Gewähr) |
 | Teilen | 📤 je Etappe: Text (Datum, Ziel, Adresse, Koordinaten, Rezeption/Check-in/out, Telefon, Website, Navigation, Notiz) über `navigator.share`, sonst Zwischenablage |
 | Offline-Karte | Service Worker speichert jede angesehene OSM-Kachel (Cache `gespann-kacheln`, max. 2500, Netz zuerst). Kein Massen-Vorabladen (OSM-Kachelregeln) – nur „Etappenziele für unterwegs laden“ (je Ziel Zoom 10/13/15) |

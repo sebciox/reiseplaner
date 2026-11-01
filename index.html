@@ -159,6 +159,11 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .stars{font-size:13px;color:#b7791f;text-decoration:none;white-space:nowrap;margin-left:4px}
 .stars span{color:var(--muted)} .stars.none{color:var(--muted)}
 .coord{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.coordrow{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
+.icobtn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:8px;
+  background:transparent;color:var(--muted);cursor:pointer;vertical-align:middle}
+.icobtn:hover,.icobtn:focus-visible{background:var(--brand-soft);color:var(--brand)}
+.icobtn.done{color:var(--ok)}
 .det .sbtns,.det .coord{vertical-align:middle}
 .land > div{margin-top:2px}
 .endsel{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-top:8px}
@@ -678,6 +683,14 @@ function currentStage(){
 /* Links */
 const navUrl = p => `https://www.google.com/maps/dir/?api=1&destination=${p.lat.toFixed(6)},${p.lon.toFixed(6)}&travelmode=driving`;
 const mapsUrl = p => `https://www.google.com/maps/search/?api=1&query=${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
+// Google-Eintrag des Platzes (Bewertungen, Fotos, Öffnungszeiten): mit Google-Schlüssel der gefundene Eintrag,
+// sonst Suche nach dem Namen rund um die Koordinate
+function gEntryUrl(c){
+  const g = typeof gRate !== 'undefined' && gRate.get(c.id);
+  if (g && g.uri) return g.uri;
+  const name = c.tags?.name || (c.kind === 'camp' ? c.label : '');
+  return name ? `https://www.google.com/maps/search/${encodeURIComponent(name)}/@${c.lat.toFixed(5)},${c.lon.toFixed(5)},15z` : mapsUrl(c);
+}
 const webOf = c => { const t = c.tags || {}; return t.website || t['contact:website'] || t.url || null; };
 const phoneOf = c => { const t = c.tags || {}; return t.phone || t['contact:phone'] || null; };
 const shortUrl = u => String(u).replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
@@ -775,14 +788,19 @@ function sortHtml(list){
 /* ---------- Koordinaten ---------- */
 const fcoord = p => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
 const nearUrl = p => `https://www.google.com/maps/search/camping/@${p.lat.toFixed(5)},${p.lon.toFixed(5)},12z`;
+const ICON_COPY = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg>';
+const ICON_OK = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 function coordHtml(p){
-  return `<span class="coord">${fcoord(p)}</span> <button class="btn small" type="button" data-copy="${fcoord(p)}">Kopieren</button>
+  return `<span class="coordrow"><span class="coord">${fcoord(p)}</span><button class="icobtn" type="button" data-copy="${fcoord(p)}" title="Koordinaten kopieren" aria-label="Koordinaten kopieren">${ICON_COPY}</button></span>
     <a class="btn small" href="${nearUrl(p)}" target="_blank" rel="noopener">Camping in der Nähe</a>`;
 }
-async function copyText(t){
+async function copyText(t, btn){
   try { await navigator.clipboard.writeText(t); }
   catch(e){ const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch(x){} a.remove(); }
-  flash('Kopiert: ' + (t.length > 40 ? t.slice(0, 40) + '…' : t));
+  if (btn && btn.classList.contains('icobtn')){
+    btn.innerHTML = ICON_OK; btn.classList.add('done');
+    setTimeout(() => { btn.innerHTML = ICON_COPY; btn.classList.remove('done'); }, 1500);
+  } else flash('Kopiert: ' + (t.length > 40 ? t.slice(0, 40) + '…' : t));
 }
 
 /* ---------- Länder, Tempo für Gespanne, Maut/Vignette, Fähre ---------- */
@@ -1082,25 +1100,38 @@ function campInfo(c, mode){
   const t = c.tags || {}, name = t.name || 'Campingplatz ohne Namen';
   const web = t.website || t['contact:website'] || t.url, phone = t.phone || t['contact:phone'];
   const ok = isOk(c);
-  const gm = `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lon}`;
   const p4n = `https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14`;
   return `<div class="ci"><b>${esc(name)}</b>
     <div><span class="badge ${ok ? 'ok' : 'unk'}">${ok ? 'Wohnwagen erlaubt' : 'Wohnwagen: keine Angabe'}</span></div>
     ${amenList(c).length ? `<div>${amenList(c).map(a => a.i + ' ' + a.t).join(' · ')}</div>` : ''}
     ${mode === 'alt' && c.air != null ? `<div>${fkm1(c.air)} vom bisherigen Platz (Luftlinie)</div>` : ''}
-    ${c.detour ? `<div>Umweg ${fkm1(c.detour.d)} · ${fdur(c.detour.t)} (einfach)</div>` : ''}
+    ${c.detour ? `<div>${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div>` : ''}
     ${c.stageKm != null && mode === 'cand' ? `<div>Liegt bei Etappen-km ${fkm(c.stageKm)}</div>` : ''}
     ${c.afterPlan && mode === 'cand' ? `<div>${afterText(c)}</div>` : ''}
     ${mode === 'end' && c.air != null ? `<div>${fkm1(c.air)} vom Zielort (Luftlinie)</div>` : ''}
-    ${mode === 'area' ? '<div class="muted">außerhalb des Suchkorridors</div>' : ''}
+    ${mode === 'area' ? (state.pending ? '<div class="muted">außerhalb des Suchkorridors</div>' : nearStopHtml(c)) : ''}
     ${t.opening_hours ? `<div class="muted">Öffnungszeiten (OSM): ${esc(t.opening_hours)}</div>` : ''}
     ${web ? `<div><a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">Website</a></div>` : ''}
     ${phone ? `<div><a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
-    <div><a href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation</a> · <a href="${gm}" target="_blank" rel="noopener">Google Maps</a> · <a href="${p4n}" target="_blank" rel="noopener">park4night</a></div>
+    <div><a href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation</a> · <a href="${esc(gEntryUrl(c))}" target="_blank" rel="noopener">Google-Eintrag</a> · <a href="${p4n}" target="_blank" rel="noopener">park4night</a></div>
     ${mode === 'alt' && state.alt && !state.busy ? `<button class="btn primary" type="button" data-altpick="${esc(c.id)}">Als Ausweichplatz übernehmen</button>` : ''}
     ${(mode === 'cand' || mode === 'area') && state.pending && !state.busy ? `<button class="btn primary" type="button" data-pick="${esc(c.id)}">Als Etappenziel wählen</button>` : ''}
     ${mode === 'end' && state.done && !state.busy ? `<button class="btn primary" type="button" data-endpick="${esc(c.id)}">Als Ziel wählen</button>` : ''}
+    ${mode === 'area' && !state.pending && !state.busy && targetStage(c) >= 0 ? `<button class="btn primary" type="button" data-stagepick="${esc(c.id)}" data-stage="${targetStage(c)}">Als Ziel von Etappe ${targetStage(c) + 1} übernehmen</button>` : ''}
   </div>`;
+}
+// Etappe, deren Ziel ein Platz aus der Karte ersetzen soll: offene Ausweichplatz-Suche, sonst das nächstgelegene Ziel
+function targetStage(c){
+  if (!state.stages.length) return -1;
+  if (state.alt) return state.alt.i;
+  let best = -1, bd = Infinity;
+  state.stages.forEach((s, i) => { const d = hav([s.to.lat, s.to.lon], [c.lat, c.lon]); if (d < bd){ bd = d; best = i; } });
+  return best;
+}
+function nearStopHtml(c){
+  const i = targetStage(c); if (i < 0) return '';
+  const t = state.stages[i].to;
+  return `<div class="muted">${fkm1(hav([t.lat, t.lon], [c.lat, c.lon]))} von ${esc(shortLabel(t.label))} (Ziel Etappe ${i + 1}, Luftlinie)</div>`;
 }
 function afterText(c){
   const a = c.afterPlan;
@@ -1114,6 +1145,10 @@ map.on('popupopen', e => {
     b.onclick = () => { const c = campIndex.get(b.dataset.altpick), i = state.alt?.i; map.closePopup();
       if (c && i != null) run(() => replaceStop(i, c)); };
   });
+  e.popup.getElement().querySelectorAll('[data-stagepick]').forEach(b => {
+    b.onclick = () => { const c = campIndex.get(b.dataset.stagepick), i = +b.dataset.stage; map.closePopup();
+      if (c && state.stages[i]) run(() => replaceStop(i, c)); };
+  });
   e.popup.getElement().querySelectorAll('[data-endpick]').forEach(b => {
     b.onclick = () => { const c = campIndex.get(b.dataset.endpick); map.closePopup(); if (c) run(() => selectEnd(c)); };
   });
@@ -1121,6 +1156,7 @@ map.on('popupopen', e => {
 
 function renderMap(){
   lyr.route.clearLayers(); lyr.corridor.clearLayers(); lyr.cands.clearLayers(); lyr.pins.clearLayers();
+  drawArea();
   state.stages.forEach(s => L.polyline(s.line, { color:COL.brand, weight:5, opacity:.9 }).addTo(lyr.route));
   if (askingN()) L.polyline(state.overview.line, { color:COL.brand, weight:5, opacity:.8 }).addTo(lyr.route);
   const p = state.pending;
@@ -1176,7 +1212,21 @@ function fitAll(){
 }
 
 /* Q20: alle Campingplätze im Ausschnitt beim Reinzoomen */
-let areaKey = '', areaCtl = null;
+let areaKey = '', areaCtl = null, areaCamps = [];
+// Zoom-Plätze zeichnen – ohne Plätze, die schon als Vorschlag, Ausweichplatz, Platz am Ziel oder Etappenziel
+// auf der Karte sind (sonst läge der einfache Marker über dem mit dem vollständigen Popup)
+function drawArea(){
+  lyr.area.clearLayers();
+  if (map.getZoom() < AREA_ZOOM) return;
+  const shown = new Set([...(state.pending?.cands || []), ...(state.alt?.list || []), ...state.endCands, ...state.stages.map(s => s.to)].map(c => c.id));
+  areaCamps.forEach(c => {
+    if (shown.has(c.id)) return;
+    if (!campIndex.has(c.id)) campIndex.set(c.id, c);
+    const cc = campIndex.get(c.id);
+    L.circleMarker([c.lat, c.lon], { radius:6, color:isOk(c) ? COL.ok : COL.unk, weight:2, fillColor:'#fff', fillOpacity:.95 })
+      .bindPopup(() => campInfo(cc, 'area')).addTo(lyr.area);
+  });
+}
 const loadArea = debounce(async () => {
   if (map.getZoom() < AREA_ZOOM){ lyr.area.clearLayers(); areaKey = ''; areaCtl?.abort(); return; }
   // Während einer Etappensuche nicht zusätzlich abfragen (Overpass erlaubt nur wenige gleichzeitige Abfragen)
@@ -1191,15 +1241,7 @@ const loadArea = debounce(async () => {
   try {
     const camps = await campsInBox(box, { signal:ctl.signal, passes:1 });
     if (k !== areaKey) return;
-    lyr.area.clearLayers();
-    const candIds = new Set((state.pending?.cands || []).map(c => c.id));
-    camps.forEach(c => {
-      if (candIds.has(c.id)) return;
-      if (!campIndex.has(c.id)) campIndex.set(c.id, c);
-      const cc = campIndex.get(c.id);
-      L.circleMarker([c.lat, c.lon], { radius:6, color:isOk(c) ? COL.ok : COL.unk, weight:2, fillColor:'#fff', fillOpacity:.95 })
-        .bindPopup(() => campInfo(cc, 'area')).addTo(lyr.area);
-    });
+    areaCamps = camps; drawArea();
   } catch(e){ if (e.name !== 'AbortError') console.warn(e); if (k === areaKey) areaKey = ''; }
 }, 700);
 map.on('moveend', loadArea);
@@ -1218,7 +1260,7 @@ function detailsHtml(s, i){
     ${t.opening_hours ? `<div><span class="k">Geöffnet (OSM)</span> ${esc(t.opening_hours)}</div>` : ''}
     ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
     ${web ? `<div><span class="k">Website</span> <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">${esc(shortUrl(web))}</a></div>` : ''}
-    <div><a href="${mapsUrl(c)}" target="_blank" rel="noopener">Google Maps</a> · <a href="https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14" target="_blank" rel="noopener">park4night</a></div>
+    <div><a href="${esc(gEntryUrl(c))}" target="_blank" rel="noopener">Google-Eintrag</a> · <a href="https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14" target="_blank" rel="noopener">park4night</a></div>
     <div class="memo">
       <input type="text" data-memo="${i}" placeholder="Notiz (z. B. Preis, Ankunft bis …)" value="${esc(s.memo?.text || '')}">
       <label class="check"><input type="checkbox" data-res="${i}" ${s.memo?.res ? 'checked' : ''}><span>reserviert</span></label>
@@ -1292,7 +1334,7 @@ function renderPanel(){
       const camp = s.to.kind === 'camp', open = state.openDet.has(i), altOpen = state.alt && state.alt.i === i;
       h += `<li class="stage"><div class="num">Etappe ${i + 1}${ds ? ' · ' + fdate(ds[i]) : ''}${i === cur ? ' <span class="badge best">heute/nächste</span>' : ''}</div>
         <div class="route">${esc(shortLabel(s.from.label))} → ${esc(shortLabel(s.to.label))}${camp ? amenHtml(s.to) : ''}${s.memo?.res ? '<span class="badge res">reserviert ✓</span>' : ''}</div>
-        <div class="row"><span class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${s.to.detour ? ` · Umweg ${fkm1(s.to.detour.d)}` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? ` · ${s.nights} Nächte` : ''}</span>
+        <div class="row"><span class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${s.to.detour ? ` · ${fkm1(s.to.detour.d)} / ${fdur(s.to.detour.t)} von der Route bis zum Platz` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? ` · ${s.nights} Nächte` : ''}</span>
         ${camp && !(state.done && i === state.stages.length - 1) ? `<button class="btn small" type="button" data-edit="${i}" ${busy ? 'disabled' : ''} title="Ab hier neu planen (anderen Platz im Korridor wählen)">Platz ändern</button>` : ''}</div>
         ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
         <div class="sbtns">
@@ -1345,7 +1387,7 @@ function renderPanel(){
       const k = c === best0 ? 0 : 1;
       h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
         <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${k === 0 ? ' <span class="badge best">Empfehlung</span>' : ''}${rateHtml(c)}</div>
-        <div class="muted">bei km ${fkm(c.stageKm)} · Umweg ${fkm1(c.detour.d)} · ${fdur(c.detour.t)}</div>
+        <div class="muted">bei km ${fkm(c.stageKm)} · ${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div>
         <div class="after">${afterText(c)}</div></div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
     });
@@ -1399,7 +1441,7 @@ function renderPanel(){
   el.querySelectorAll('[data-nights]').forEach(b => b.onchange = () => {
     const s = state.stages[+b.dataset.nights]; s.nights = Math.max(1, Math.min(30, Math.round(+b.value) || 1)); touch(); renderPanel();
   });
-  el.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy));
+  el.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy, b));
   el.querySelectorAll('[data-share]').forEach(b => b.onclick = () => shareStage(+b.dataset.share));
   el.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => {
     if (b.dataset.sort === 'rating' && !settings.gkey){ flash('Für Google-Bewertungen bitte unter ⚙︎ einen Google-API-Schlüssel eintragen.'); return; }
@@ -1717,12 +1759,33 @@ function flash(msg){
   setStatus(msg);
   setTimeout(() => { if ($('#status').textContent === msg) setStatus(''); }, 2500);
 }
+const normName = n => String(n || '').trim().replace(/\s+/g, ' ').toLowerCase();
+const fstamp = iso => new Date(iso).toLocaleString('de-DE', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
+// Tour lokal löschen (und die Löschung für den Online-Speicher vormerken)
+function deleteTourLocal(id){
+  try { localStorage.setItem('gp.tours', JSON.stringify(loadTours().filter(x => x.id !== id))); } catch(e){}
+  const m = syncMeta();
+  if (m.known[id] && !m.deleted.includes(id)){ m.deleted.push(id); saveSyncMeta(m); }
+}
 function saveTour(){
   if (!state.stages.length) return;
-  const old = loadTours().find(t => t.id === state.tourId);
-  const name = prompt('Name der Tour', old ? old.name : defaultName());
-  if (name === null) return;
-  const tour = buildTour(name);
+  const tours = loadTours(), old = tours.find(t => t.id === state.tourId);
+  let name = old ? old.name : defaultName(), targetId = state.tourId;
+  // Gleicher Name wie eine andere Tour → Warnung: überschreiben oder anderen Namen wählen
+  for (;;){
+    name = prompt('Name der Tour', name);
+    if (name === null) return;
+    name = name.trim() || defaultName();
+    const twin = tours.find(t => t.id !== state.tourId && normName(t.name) === normName(name));
+    if (!twin){ break; }
+    if (confirm(`Es gibt schon eine Tour „${twin.name}“ (gespeichert ${fstamp(twin.savedAt)}).\n\nOK = diese Tour damit überschreiben\nAbbrechen = anderen Namen wählen`)){
+      if (state.tourId && state.tourId !== twin.id && old) deleteTourLocal(state.tourId);   // bisherigen eigenen Eintrag entfernen
+      targetId = twin.id; break;
+    }
+    let k = 2; while (tours.some(t => normName(t.name) === normName(`${name} (${k})`))) k++;
+    name = `${name} (${k})`;
+  }
+  const tour = buildTour(name, targetId);
   try { storeTour(tour); state.tourId = tour.id; }
   catch(e){ setStatus('Speicher voll – bitte alte Touren löschen.', 'error'); return; }
   if (ghOn()){ setStatus('Tour gespeichert – wird online gesichert …', 'busy');
@@ -1777,7 +1840,7 @@ function openTours(fromButton){
     : 'Nur in diesem Browser gespeichert. Online-Speicher für Handy + Laptop unter ⚙︎ einrichten.';
   ul.innerHTML = tours.length ? tours.map(t => {
     const km = t.stages.reduce((a, s) => a + s.dist, 0);
-    return `<li><div class="t"><b>${esc(t.name)}</b><div class="muted">${t.stages.length} Etappen${t.done ? '' : ' (unvollständig)'} · ${fkm(km)} · ${new Date(t.savedAt).toLocaleDateString('de-DE')}</div></div>
+    return `<li><div class="t"><b>${esc(t.name)}</b><div class="muted">${t.stages.length} Etappen${t.done ? '' : ' (unvollständig)'} · ${fkm(km)} · ${fstamp(t.savedAt)}</div></div>
       <button class="btn small primary" type="button" data-load="${t.id}">Laden</button>
       <button class="btn small" type="button" data-del="${t.id}" aria-label="Löschen">✕</button></li>`;
   }).join('') : '<li class="muted">Noch keine Touren gespeichert.</li>';
@@ -1785,10 +1848,8 @@ function openTours(fromButton){
   ul.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
     const t = tours.find(x => x.id === +b.dataset.del);
     if (t && confirm(`„${t.name}“ löschen?`)){
-      try { localStorage.setItem('gp.tours', JSON.stringify(loadTours().filter(x => x.id !== t.id))); } catch(e){}
+      deleteTourLocal(t.id);
       if (state.tourId === t.id) state.tourId = null;
-      const m = syncMeta();
-      if (m.known[t.id] && !m.deleted.includes(t.id)){ m.deleted.push(t.id); saveSyncMeta(m); }
       openTours();
       syncAndReport();
     }
@@ -1877,7 +1938,7 @@ function renderSummary(){
   h += `<div class="muted" style="margin-top:6px">Offline: Angesehene Kartenausschnitte bleiben gespeichert.
     <button class="linkbtn" type="button" id="offBtn">Etappenziele jetzt für unterwegs laden</button></div>`;
   $('#sumBody').innerHTML = h;
-  $('#sumBody').querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy));
+  $('#sumBody').querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy, b));
   $('#sumBody').querySelectorAll('[data-share]').forEach(b => b.onclick = () => shareStage(+b.dataset.share));
   $('#offBtn').onclick = () => { $('#sumDlg').close(); prefetchStops(); };
 }
@@ -1912,7 +1973,7 @@ async function printTour(){
       <td><b>${esc(c.label)}</b>${camp && isOk(c) ? '<br><span class="sm">Wohnwagen ✓</span>' : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
       <td>${camp ? esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–') : esc(c.label)}<br><span class="sm">${fcoord(c)}</span></td>
       <td>${camp ? rz : ''}</td>
-      <td>${web ? `<a href="${esc(safeUrl(web))}">${esc(shortUrl(web))}</a><br>` : ''}${phone ? `<a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a><br>` : ''}<a href="${mapsUrl(c)}">Google Maps</a></td></tr>`;
+      <td>${web ? `<a href="${esc(safeUrl(web))}">${esc(shortUrl(web))}</a><br>` : ''}${phone ? `<a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a><br>` : ''}<a href="${esc(gEntryUrl(c))}">Google-Eintrag</a></td></tr>`;
   });
   el.innerHTML = `<h1>${esc(tourTitle())}</h1><div class="sub">${esc(totalsText())}</div><div class="pmap"></div>
     <table><colgroup><col style="width:9mm"><col style="width:18mm"><col style="width:34mm"><col style="width:27mm"><col style="width:42mm"><col style="width:50mm"><col style="width:36mm"><col></colgroup>
