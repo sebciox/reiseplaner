@@ -6,7 +6,7 @@ Absicht erschließen und liefern.
 **Fragen immer als Auswahl stellen:** Wenn Entscheidungen oder Vorschläge zur Wahl stehen, diese über den
 Auswahl-Dialog (AskUserQuestion, mit Optionen und Empfehlung) stellen – nicht als Fließtext-Liste.
 
-Live: https://sebciox.github.io/gespann-etappen/ (GitHub Pages, Branch `main`, Root). Jeder Push auf `main`
+Live: https://sebciox.github.io/reiseplaner/ (Repo `sebciox/reiseplaner`, bis Nov. 2026 `gespann-etappen`; GitHub Pages, Branch `main`, Root). Jeder Push auf `main`
 wird automatisch veröffentlicht. Kein Build-Schritt, kein Backend.
 
 ## Idee

@@ -10,10 +10,10 @@ die letzte Etappe führt direkt zum Ziel.
 1. **OpenRouteService-Schlüssel holen:** https://openrouteservice.org/dev/#/signup → kostenloses Konto →
    Dashboard → Token anlegen (Standard-Plan). Der Schlüssel kommt später in der App unter ⚙︎ rein.
 2. **Auf GitHub Pages veröffentlichen:**
-   - Neues Repository anlegen, z. B. `gespann-etappen` (privat geht nur mit bezahltem GitHub-Plan; öffentlich ist ok, der Schlüssel liegt nicht im Code).
+   - Neues Repository anlegen, z. B. `reiseplaner` (privat geht nur mit bezahltem GitHub-Plan; öffentlich ist ok, der Schlüssel liegt nicht im Code).
    - Alle Dateien aus diesem Ordner hochladen (Add file → Upload files).
    - Settings → Pages → Branch `main`, Ordner `/ (root)` → Save.
-   - Nach 1–2 Minuten läuft die App unter `https://<dein-name>.github.io/gespann-etappen/`.
+   - Nach 1–2 Minuten läuft die App unter `https://<dein-name>.github.io/reiseplaner/`.
 3. **Aufs Handy:** Seite im Browser öffnen → „Zum Home-Bildschirm“ (iPhone: Teilen-Menü; Android: Menü → App installieren).
 4. **Online-Speicher (optional, für Handy + Laptop):**
    - Privates Repo `touren` anlegen (https://github.com/new, „Private“, Haken bei „Add a README file“).
