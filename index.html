@@ -1424,6 +1424,18 @@ function setStatus(text, kind){
 }
 
 /* ---------- Karte ---------- */
+// Zweiter Klick auf denselben Punkt schließt das Info-Fenster (Leaflet macht das nur bei Stecknadeln, nicht bei Kreisen)
+// Leaflet schließt das offene Fenster schon beim „preclick“ der Karte – deshalb merken, welches gerade zuging.
+const _openPopup0 = L.Layer.prototype._openPopup;
+let lastClosed = { src:null, t:0 };
+L.Layer.prototype._openPopup = function(e){
+  const t = e.layer || e.target;
+  if (this._popup && this._map && t instanceof L.Path){
+    if (this._popup._source === t && this._map.hasLayer(this._popup)){ L.DomEvent.stop(e); this.closePopup(); return; }
+    if (lastClosed.src === t && Date.now() - lastClosed.t < 400){ L.DomEvent.stop(e); lastClosed.src = null; return; }
+  }
+  return _openPopup0.call(this, e);
+};
 const map = L.map('map', { zoomControl:false, attributionControl:false }).setView([51.2, 10.4], 6);
 L.control.attribution({ position:'bottomright', prefix:false }).addTo(map);
 L.control.zoom({ position:'bottomright' }).addTo(map);
@@ -1502,6 +1514,7 @@ function afterText(c){
   const a = c.afterPlan;
   return a.n === 1 ? `danach noch ${fkm(a.len)} bis zum Ziel` : `danach noch ${a.n} Etappen à ~${fkm(a.len)}`;
 }
+map.on('popupclose', e => { lastClosed = { src:e.popup._source, t:Date.now() }; });
 map.on('popupopen', e => {
   e.popup.getElement().querySelectorAll('[data-pick]').forEach(b => {
     b.onclick = () => { const c = campIndex.get(b.dataset.pick); map.closePopup(); if (c) run(() => selectCamp(c)); };
