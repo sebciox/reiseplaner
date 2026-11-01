@@ -2471,7 +2471,7 @@ function renderVia(){
     const t = inp.value.trim(), v = state.via[+inp.dataset.vsadd]; if (!t || !v) return;
     try { const r = await placeSearch(t, false); if (!r.length) throw new Error('Ort nicht gefunden: ' + t);
       const g = r[0]; if (!g.full) flash(`„${t}“ nicht genau gefunden – „${shortLabel(g.label)}“ übernommen.`);
-      (v.sights = v.sights || []).push({ uid:'s' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon }); ch();
+      (v.sights = v.sights || []).push({ uid:'s' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon }); ch(); fitGoals();
       setTimeout(() => $(`[data-vsadd="${state.via.indexOf(v)}"]`)?.focus(), 0); }
     catch(err){ setStatus(err.message, 'error'); }
   });
@@ -2526,6 +2526,14 @@ function startViaDrag(e, grip){
   };
   grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
 }
+// Karte folgt der Eingabe: solange noch keine Strecke berechnet ist (oder Reiter 1 offen), alle eingegebenen Orte zeigen
+function fitGoals(){
+  if ((state.overview || state.stages.length) && uiTab !== 'goals') return;
+  const pts = [state.start, ...state.via.flatMap(v => [v, ...(v.sights || [])]), state.round ? null : state.end].filter(p => p && p.lat != null).map(p => [p.lat, p.lon]);
+  if (!pts.length) return;
+  if (pts.length === 1) map.flyTo(pts[0], Math.max(Math.min(map.getZoom(), 9), 7), { duration:.6 });
+  else map.flyToBounds(L.latLngBounds(pts).pad(0.12), { ...sheetPad(), maxZoom:9, duration:.6 });
+}
 function addVia(g){
   if (!g) return;
   const dup = state.via.find(v => v.label === g.label && Math.abs(v.lat - g.lat) < 1e-4 && Math.abs(v.lon - g.lon) < 1e-4);
@@ -2533,7 +2541,7 @@ function addVia(g){
   state.via.push({ uid:'v' + (++viaSeq), label:g.label, lat:g.lat, lon:g.lon, kind:g.camp ? 'rest' : 'stay', nights:1 });
   if (g.camp) flash(`⛺ „${shortLabel(g.label)}“ ist ein Campingplatz – als Zwischenstopp „Pause / freie Tage“ eingetragen; er steht bei der Platzwahl ganz oben.`);
   $('#viaIn').value = ''; $('#viaSugg').innerHTML = '';
-  renderVia(); renderMap();
+  renderVia(); renderMap(); fitGoals();
 }
 // Reihenfolge mit der kürzesten Gesamtstrecke (Luftlinie; bis 8 Ziele exakt, sonst Nächster Nachbar + 2-opt)
 async function optimizeVia(){
@@ -2640,6 +2648,8 @@ function setupGeoInput(inp, list, key){
       list.innerHTML = r.map((g, i) => `<li><button type="button" data-i="${i}">${esc(g.label)}</button></li>`).join('');
       list.querySelectorAll('button').forEach(b => b.onclick = () => {
         state[key] = r[+b.dataset.i]; inp.value = state[key].label; list.innerHTML = '';
+        if (key === 'start' && state.round) state.end = null;
+        renderVia(); renderMap(); fitGoals();
       });
     } catch(e){ list.innerHTML = ''; }
   }, 450);
