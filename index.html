@@ -1151,9 +1151,11 @@ function sightFacts(s, compact){
   const r = r0 && (r0.v || 0) >= 2 ? r0 : null;      // ältere Recherche (v1) verwechselte z. B. Parkgebühren mit Eintritt
   if (inf.town) return '';
   let h = '';
+  const hasHours = (g && g.oh && g.oh.length) || (r && r.hoursS && r.hoursS.text) || inf.oh;
+  if (!hasHours) h += `<div><span class="k">Öffnungszeiten</span> –${r && r.hoursUrl ? ' · ' + linkA(safeUrl(r.hoursUrl), 'auf der Website') : ''}</div>`;
   if (g && g.oh && g.oh.length) h += gHoursHtml(g.oh, g.open);
   if (r && r.hoursS && r.hoursS.text) h += compact ? `<div>Öffnungszeiten laut Website: ${linkA(safeUrl(r.hoursS.url), r.hoursS.text)}</div>` : `<div class="rz"><b>Öffnungszeiten laut Website: ${esc(r.hoursS.text)}</b>${snipLink(r.hoursS)}</div>`;
-  else if (r && r.hoursUrl) h += `<div>${linkA(safeUrl(r.hoursUrl), 'Öffnungszeiten auf der Website')}</div>`;
+  else if (r && r.hoursUrl && hasHours) h += `<div>${linkA(safeUrl(r.hoursUrl), 'Öffnungszeiten auf der Website')}</div>`;
   if (r && r.season) h += `<div>Saison laut Website: „${esc(r.season.snippet)}“${r.season.url ? ' – ' + linkA(safeUrl(r.season.url), 'Quelle') : ''}</div>`;
   if (inf.oh && !(g && g.oh && g.oh.length)) h += `<div>Öffnungszeiten (OSM): ${esc(inf.oh)}</div>`;
   const ageP = p => p && (p.adult || p.child) ? [p.adult && 'Erwachsene ' + euroAb(p.adult, s), p.child && 'Kinder ' + euroAb(p.child, s)].filter(Boolean).join(' · ') : '';
@@ -1162,7 +1164,7 @@ function sightFacts(s, compact){
   else if (inf.charge) h += `<div class="price">Preis ${euroText({ text:inf.charge }, s)} <span class="muted">(OSM)</span></div>`;
   else if (inf.fee === 'no') h += `<div class="price">Eintritt frei <span class="muted">(OSM)</span></div>`;
   else if (g && g.price) h += `<div class="price">Preis ${euroText({ text:g.price }, s)} <span class="muted">(Google)</span></div>`;
-  else if (r && r.priceUrl) h += `<div>${linkA(safeUrl(r.priceUrl), 'Preise auf der Website')}</div>`;
+  else h += `<div><span class="k">Preise</span> –${r && r.priceUrl ? ' · ' + linkA(safeUrl(r.priceUrl), 'auf der Website') : ''}</div>`;
   return h;
 }
 const snipLink = o => `<div class="snip">„${esc(o.snippet)}“${o.url ? ` – <a href="${esc(safeUrl(o.url))}" target="_blank" rel="noopener">Quelle</a>` : ''}</div>`;
@@ -1245,15 +1247,20 @@ function priceOf(c){
   return null;
 }
 const priceReq = new Map();      // camp id → Zeitpunkt der Anfrage
-function priceHtml(c, compact){
+// Strom-Hinweis zum Platzpreis: „mit Strom“ / „ohne Strom (+ ≈ 5 € Strom)“
+function powerHtml(p, c){
+  if (!p || !p.power) return '';
+  return p.power === 'with' ? ' · mit Strom' : ` · ohne Strom${p.elec ? ` (+ ${euroText({ text:p.elec, url:p.url }, c).replace(/ <span[^>]*>.*<\/span>/, '')} Strom)` : ''}`;
+}
+function priceHtml(c, compact, placeholder){
   const p = priceOf(c);
   const srcName = { web:'Website', osm:'OSM', google:'Google' };
-  if (p && compact) return `<div class="price">Preis ${euroText(p, c) || 'siehe Website'} <span class="muted">· ${p.url ? `<a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener" title="${esc(p.snippet || '')}">${srcName[p.src]}</a>` : srcName[p.src]}</span></div>`;
-  if (p) return `<div class="rz"><b>Preis${p.text ? ': ' + euroText(p, c) : ''}</b> <span class="muted">${p.src === 'web' ? '(Website, bitte für Wohnwagen + Personen prüfen)' : p.src === 'google' ? '(Preisspanne laut Google)' : '(OpenStreetMap)'}</span>${p.snippet ? snipLink(p) : ''}</div>`;
+  if (p && compact) return `<div class="price">Preis ${euroText(p, c) || 'siehe Website'} <span class="muted">${powerHtml(p, c)} · ${p.url ? `<a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener" title="${esc(p.snippet || '')}">${srcName[p.src]}</a>` : srcName[p.src]}</span></div>`;
+  if (p) return `<div class="rz"><b>Preis${p.text ? ': ' + euroText(p, c) : ''}</b><span class="muted">${powerHtml(p, c)} ${p.src === 'web' ? '(Website, bitte für Wohnwagen + Personen prüfen)' : p.src === 'google' ? '(Preisspanne laut Google)' : '(OpenStreetMap)'}</span>${p.snippet ? snipLink(p) : ''}</div>`;
   const t = researchTarget(c), r = rzFor(c);
-  if (r && t && r.v >= 3) return compact ? '' : `<div class="rz none">Preis: auf der Website nicht gefunden – ${linkA(safeUrl(t.web), 'selbst nachsehen')}.</div>`;
   if (t && priceReq.has(t.key) && Date.now() - priceReq.get(t.key) < 8 * 60000) return `<div class="muted price">Preis wird auf der Website gesucht …</div>`;
-  return '';
+  if (!compact) return `<div><span class="k">Preis</span> –${r && t && r.v >= 3 ? ` <span class="muted">(auf der Website nicht gefunden – ${linkA(safeUrl(t.web), 'selbst nachsehen')})</span>` : ''}</div>`;
+  return placeholder ? `<div class="price muted">Preis: –</div>` : '';
 }
 let priceQueue = new Map(), priceTimer = null, pricePoll = [];
 function requestPrices(list){
@@ -2039,7 +2046,7 @@ function campInfo(c, mode){
   const ok = isOk(c);
   const p4n = `${p4nUrl(c)}`;
   return `<div class="ci" data-cp="${esc(String(c.id))}"><b data-cn="${esc(String(c.id))}">${nameHtml(c)}</b>${settings.gkey ? `<span class="gname-slot" data-gn="${esc(String(c.id))}" hidden></span>` : ''}${mode === 'cand' || mode === 'split' ? prevBadge(c) : ''}
-    <div data-pr="${esc(String(c.id))}">${priceHtml(c, true)}</div>
+    <div data-pr="${esc(String(c.id))}">${priceHtml(c, true, true)}</div>
     ${mode === 'alt' && c.air != null ? `<div>${fkm1(c.air)} vom bisherigen Platz (Luftlinie)</div>` : ''}
     ${c.detour ? `<div>${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div>` : ''}
     ${c.stageKm != null && mode === 'cand' ? `<div>Liegt bei Etappen-km ${fkm(c.stageKm)}</div>` : ''}
@@ -2147,7 +2154,7 @@ map.on('popupopen', e => {
     const id = cp.dataset.cp, c = state.stages.map(s => s.to).find(t => String(t.id) === id) || campIndex.get(id);
     if (c && !gRate.has(c.id)) gFetch(c).then(g => { gRate.set(c.id, g); if (!e.popup.isOpen()) return;
       root.querySelectorAll('[data-cn]').forEach(b => b.innerHTML = nameHtml(c));
-      root.querySelectorAll('[data-pr]').forEach(b => b.innerHTML = priceHtml(c, true));
+      root.querySelectorAll('[data-pr]').forEach(b => b.innerHTML = priceHtml(c, true, true));
       root.querySelectorAll('[data-lk]').forEach(b => b.innerHTML = campLinks(c));
       relayoutPopup(e.popup); }).catch(() => {});
   }
@@ -3381,7 +3388,7 @@ function xlsxRows(){
     const row = [i + 1, camp ? 'Campingplatz' : (i === last && home ? 'Zuhause' : 'Ziel'), day(ds && ds[i]), ds && i < last ? day(addDays(ds[i], n)) : '',
       i < last ? n : '', c.label, c.addr && c.addr !== 'unbekannt' ? c.addr : '', fcoord(c), c.detour ? `${fkm1(c.detour.d)} von der Route` : '',
       Math.round(s.dist / 1000), fdur(s.dur), okR ? (r.hours || '') : '', okR ? (r.checkin?.text || '') : '', okR ? (r.checkout?.text || '') : '',
-      web || '', camp ? (phoneOf(c) || '') : '', 'Route', s.memo?.text || '', s.memo?.res ? 'ja' : '', camp && priceOf(c) ? euroPlain(priceOf(c), c) : ''];
+      web || '', camp ? (phoneOf(c) || '') : '', 'Route', s.memo?.text || '', s.memo?.res ? 'ja' : '', camp && priceOf(c) ? euroPlain(priceOf(c), c) + powerHtml(priceOf(c), c).replace(/<[^>]+>/g, '') : ''];
     rows.push(row);
     if (web) links.push({ r:rows.length - 1, c:14, url:safeUrl(web) });
     links.push({ r:rows.length - 1, c:16, url:navUrl(c) });
@@ -3457,7 +3464,7 @@ function stopBodyHtml(s, i){
   return `${near ? `<div><span class="k">Zum Ort</span> ${esc(shortLabel(near.label))}${near.d != null ? ` · ${fkm1(near.d)}${near.t ? ' / ' + fdur(near.t) : ''}` : near.air != null ? ` · ${fkm1(near.air)} Luftlinie` : ''}</div>` : ''}
     ${camp ? `${priceHtml(c)}${settings.gkey && gRate.has(c.id) ? `<div><span class="k">Google</span>${rateHtml(c)}</div>${gHoursHtml(gRate.get(c.id)?.oh, gRate.get(c.id)?.open)}` : ''}
     ${gNameHtml(c)}
-    ${rzHtml(c, true) || ''}
+    ${rzHtml(c, true) || '<div><span class="k">Rezeption</span> –</div>'}
     <div><span class="k">Adresse</span> ${esc(gRate.get(c.id)?.near && gRate.get(c.id).addr || (c.addr && c.addr !== 'unbekannt' ? c.addr : '–'))}</div>
     <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
     ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
