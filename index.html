@@ -220,6 +220,8 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .segrow .st{flex:1;min-width:0}
 .segrow .st b{overflow-wrap:anywhere}
 .stepper{display:flex;align-items:center;gap:4px;flex:none}
+.keepinfo{font-size:13px;color:var(--brand-ink);background:var(--brand-soft);border-radius:8px;padding:3px 8px;margin:4px 0;overflow-wrap:anywhere}
+.badge.prev{background:var(--brand-soft);color:var(--brand-ink);border:1px solid var(--brand);margin-left:4px;vertical-align:1px}
 .segn{display:flex;flex-direction:column;align-items:center;gap:2px;flex:none;font-size:12px}
 .stepper button{width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;font-size:16px}
 .stepper span{min-width:22px;text-align:center;font-weight:700}
@@ -1110,7 +1112,7 @@ const halfWidth = () => Math.max(25, (+settings.cmax - +settings.cmin) / 2);
 
 /* Schritt 1: Gesamtstrecke berechnen, danach fragt das Panel nach der Anzahl der Etappen */
 async function computeOverview(){
-  state.stages = []; state.pending = null; state.done = false; state.endCands = []; state.n = null; state.tourId = null; state.segs = null; state.split = null;
+  state.stages = []; state.pending = null; state.done = false; state.endCands = []; state.n = null; state.tourId = null; state.segs = null; state.split = null; state.prevPicks = null; state.keepEnd = null;
   setStatus('Gesamtstrecke wird berechnet …', 'busy'); renderAll();
   if (state.via.length){ await computeSegs(); renderAll(); fitAll(); return; }
   const r = await route(state.start, state.end);
@@ -1140,6 +1142,37 @@ async function computeSegs(){
   state.overview = { from:state.start, multi:true, line, dist, dur };
 }
 const segDone = k => state.stages.filter(s => s.seg === k).length;
+/* Erneut „Strecke berechnen“ (z. B. Ziel nachträglich eingefügt): Etappen unveränderter Abschnitte werden übernommen.
+   Ein Abschnitt gilt als unverändert, wenn Start, Ziel, Art, Besuche unterwegs und Sehenswürdigkeiten gleich sind. */
+const ptKey = p => p ? (p.uid || `${(+p.lat).toFixed(4)},${(+p.lon).toFixed(4)}`) : '';
+const segKey = (from, g) => [ptKey(from), ptKey(g.to), g.kind, g.rest ? 'r' : '', (g.visits || []).map(v => v.uid).join('+'),
+  (g.sights || []).map(x => x.uid || ptKey(x)).join('+')].join('|');
+function snapshotKeep(){
+  const st = state.stages; if (!st.length) return null;
+  const secs = new Map(), prev = new Set(st.filter(s => s.to.kind === 'camp').map(s => String(s.to.id)));
+  const keepEnd = { endCands: state.endCands, endSearched: state.endSearched };
+  if (state.segs){
+    let from = st[0].from;
+    state.segs.forEach((g, k) => {
+      const ss = st.filter(s => s.seg === k);
+      const complete = ss.length === g.n && (g.kind !== 'sight' || ss[ss.length - 1].to.kind === 'camp') && (g.kind === 'sight' || state.done);
+      if (complete) secs.set(segKey(from, g), ss.map(s => ({ ...s })));
+      from = g.to;
+    });
+  } else if (state.done && state.end){
+    secs.set(segKey(st[0].from, { to:state.end, kind:state.round ? 'home' : 'end', visits:[] }), st.map(s => ({ ...s })));
+  }
+  return { secs, prev, keepEnd };
+}
+// nach computeSegs: passende Abschnitte markieren (g.keep = alte Etappen, Anzahl wie bisher)
+function applyKeep(kp){
+  state.prevPicks = kp ? kp.prev : null; state.keepEnd = kp ? kp.keepEnd : null;
+  if (!kp || !state.segs) return 0;
+  let from = state.start, n = 0;
+  state.segs.forEach(g => { const ss = kp.secs.get(segKey(from, g)); if (ss){ g.keep = ss; g.n = ss.length; n++; } from = g.to; });
+  return n;
+}
+const prevBadge = c => state.prevPicks && state.prevPicks.has(String(c.id)) ? ' <span class="badge prev">bisher gewählt</span>' : '';
 const viaByUid = uid => state.via.find(v => v.uid === uid);
 const visitsOf = s => (s.vias || []).map(viaByUid).filter(Boolean);
 // Abstand eines Punktes entlang der Linie (nächster Linienpunkt)
@@ -1169,6 +1202,23 @@ async function computeNext(from){
     k = segs.findIndex((x, i) => segDone(i) < x.n);
     if (k < 0){ state.done = true; renderAll(); return; }
     g = segs[k]; target = g.to;
+    if (g.keep && segDone(k) === 0){
+      const ks = g.keep.map(s => ({ ...s, seg:k })); delete g.keep;
+      if (ptKey(ks[0].from) !== ptKey(from)){            // Platz davor hat sich geändert → nur die erste Etappe neu routen
+        setStatus('Übernommene Etappe wird neu berechnet …', 'busy');
+        const r0 = await route(from, ks[0].to, visitsOf(ks[0]));
+        ks[0] = { ...ks[0], from, line:r0.line, dist:r0.dist, dur:r0.dur, ex:r0.ex, countries:undefined };
+      }
+      if (g.kind === 'sight') ks[ks.length - 1].nights = g.nights;
+      state.stages.push(...ks);
+      if (g.kind === 'sight') return computeNext(ks[ks.length - 1].to);
+      state.done = true; state.pending = null;
+      const ke = state.keepEnd;
+      if (ke && ke.endSearched){ state.endCands = ke.endCands || []; state.endSearched = true; }
+      renderAll(); fitAll();
+      if (g.kind !== 'home' && !state.endSearched && ks[ks.length - 1].to.kind !== 'camp') await loadEndCands();
+      return;
+    }
     const passed = new Set(state.stages.flatMap(s => s.vias || []));
     visits = g.visits.filter(v => !passed.has(v.uid));
     left = g.n - segDone(k);
@@ -1414,7 +1464,7 @@ function campInfo(c, mode){
   const web = t.website || t['contact:website'] || t.url, phone = t.phone || t['contact:phone'];
   const ok = isOk(c);
   const p4n = `https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14`;
-  return `<div class="ci"><b>${esc(name)}</b>
+  return `<div class="ci"><b>${esc(name)}</b>${mode === 'cand' || mode === 'split' ? prevBadge(c) : ''}
     <div><span class="badge ${ok ? 'ok' : 'unk'}">${ok ? 'Wohnwagen erlaubt' : 'Wohnwagen: keine Angabe'}</span></div>
     ${amenList(c).length ? `<div>${amenList(c).map(a => a.i + ' ' + a.t).join(' · ')}</div>` : ''}
     ${mode === 'alt' && c.air != null ? `<div>${fkm1(c.air)} vom bisherigen Platz (Luftlinie)</div>` : ''}
@@ -1635,7 +1685,7 @@ function splitHtml(i){
   h += chipsHtml(a.list) + sortHtml(a.list) + '<ul class="cands">';
   sortRows(a.list.filter(passFilter)).forEach(c => {
     h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${c.best ? ' <span class="badge best">beste Teilung</span>' : ''}${amenHtml(c)}${rateHtml(c)}</div>
+      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${c.best ? ' <span class="badge best">beste Teilung</span>' : ''}${prevBadge(c)}${amenHtml(c)}${rateHtml(c)}</div>
       <div class="muted">${fkm(c.stageKm)} + ${fkm(c.after)} · ${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div></div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <button class="btn small primary" type="button" data-splitpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Einfügen</button>
@@ -1669,6 +1719,7 @@ function renderSegAsk(){
     const name = g.kind === 'sight' ? (g.rest ? '⛺ ' : '★ ') + shortLabel(g.to.label) : g.kind === 'home' ? 'zurück nach ' + shortLabel(g.to.label) : shortLabel(g.to.label);
     h += `<li class="segrow"><div class="st"><b>${esc(shortLabel(from.label))} → ${esc(name)}</b>
       <div class="muted">${fkm(g.dist)} · ${fdur(g.dur)}${g.visits.length ? ' · unterwegs: ' + g.visits.map(v => esc(shortLabel(v.label))).join(', ') : ''}${g.kind === 'sight' ? ` · ${g.nights} ${g.nights === 1 ? 'Nacht' : 'Nächte'} dort` : ''}</div>
+      ${g.keep ? `<div class="keepinfo">✓ bisherige Plätze werden übernommen: ${g.keep.filter(s => s.to.kind === 'camp').map(s => esc(shortLabel(s.to.label))).join(' → ') || 'Ziel'}</div>` : ''}
       <div class="muted">${g.n === 1 ? 'direkt, ohne Zwischenstopp' : `${g.n - 1} ${g.n === 2 ? 'Zwischenstopp' : 'Zwischenstopps'} · ${g.n} Etappen à ~${fkm(g.dist / g.n)}`}${g.n !== g.rec ? ` (Empfehlung ${g.rec})` : ''}</div></div>
       <div class="segn"><span class="muted">Etappen</span><div class="stepper"><button type="button" data-segn="${k}" data-d="-1" aria-label="weniger Etappen">−</button><span>${g.n}</span><button type="button" data-segn="${k}" data-d="1" aria-label="mehr Etappen (Zwischenstopp)">+</button></div></div></li>`;
     from = g.to;
@@ -1773,7 +1824,7 @@ function renderPanel(){
     const best0 = p.cands.filter(passFilter)[0];
     sortRows(p.cands.filter(passFilter)).forEach(c => {
       h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${c === best0 ? ' <span class="badge best">am nächsten</span>' : ''}${rateHtml(c)}</div>
+        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${c === best0 ? ' <span class="badge best">am nächsten</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>
         ${c.sightD && c.sightD.length > 1
           ? `<div class="sightinfo">${c.sightD.map(x => x ? `★ ${esc(shortLabel(x.label))} ${fkm1(x.d)} / ${fdur(x.t)}` : '').filter(Boolean).join('<br>')}</div><div class="muted">ohne Wohnwagen · Ø ${fkm1(c.sight.d)}</div>`
           : `<div class="sightinfo">${c.sight ? `${fkm1(c.sight.d)} / ${fdur(c.sight.t)} ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit (ohne Wohnwagen)'}` : `${fkm1(c.air)} Luftlinie ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit'}`}</div>`}</div>
@@ -1794,7 +1845,7 @@ function renderPanel(){
     sortRows(p.cands.filter(passFilter)).forEach(c => {
       const k = c === best0 ? 0 : 1;
       h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${k === 0 ? ' <span class="badge best">Empfehlung</span>' : ''}${rateHtml(c)}</div>
+        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${k === 0 ? ' <span class="badge best">Empfehlung</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>
         <div class="muted">bei km ${fkm(c.stageKm)} · ${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div>
         <div class="after">${afterText(c)}</div></div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
@@ -1887,10 +1938,11 @@ function renderPanel(){
   const anr = $('#ancR'); if (anr) anr.onchange = () => { const q = state.pending;
     if (q && q.mode === 'anchor') run(() => loadAnchorCands(q.from, q.seg, q.visits, { line:q.line, dist:q.remain, dur:q.remainDur }, +anr.value)); };
   el.querySelectorAll('[data-segn]').forEach(b => b.onclick = () => {
-    const g = state.segs[+b.dataset.segn]; g.n = Math.max(1, Math.min(15, g.n + +b.dataset.d)); renderPanel(); });
+    const g = state.segs[+b.dataset.segn]; delete g.keep; g.n = Math.max(1, Math.min(15, g.n + +b.dataset.d)); renderPanel(); });
   const sg = $('#segGo'); if (sg) sg.onclick = startSegs;
   const nc = $('#nChange'); if (nc) nc.onclick = () => { if (state.busy) return;
-    Object.assign(state, { stages:[], pending:null, done:false, n:null, endCands:[] }); setStatus(''); renderAll(); fitAll(); };
+    const kp = state.segs ? snapshotKeep() : null; if (state.segs) state.segs.forEach(g => delete g.keep);
+    Object.assign(state, { stages:[], pending:null, done:false, n:null, endCands:[] }); applyKeep(kp); setStatus(''); renderAll(); fitAll(); };
   const esb = $('#endSearchBtn'); if (esb) esb.onclick = () => run(loadEndCands);
   const cb = $('#contBtn'); if (cb) cb.onclick = () => run(() => computeNext(state.stages.length ? state.stages[state.stages.length - 1].to : state.start));
   const sb = $('#saveBtn'); if (sb) sb.onclick = saveTour;
@@ -2199,6 +2251,7 @@ $('#planForm').addEventListener('submit', e => {
     openSettings(); return;
   }
   if (!settings.key){ useFallback = true; renderFallbackNote(); }
+  const keep = snapshotKeep();
   run(async () => {
     setStatus('Orte werden gesucht …', 'busy');
     if (!state.start) state.start = await geocodeFirst($('#startIn').value);
@@ -2206,6 +2259,8 @@ $('#planForm').addEventListener('submit', e => {
     else if (!state.end) state.end = await geocodeFirst($('#endIn').value);
     $('#startIn').value = state.start.label; $('#endIn').value = state.end.label;
     await computeOverview();
+    const kn = applyKeep(keep);
+    if (kn){ renderAll(); flash(`${kn} unveränderte${kn === 1 ? 'r Abschnitt wird' : ' Abschnitte werden'} mit den bisherigen Plätzen übernommen.`); }
     if (window.innerWidth < 900) setSheet('half');
   });
 });
@@ -2507,7 +2562,7 @@ function loadTour(id, given){
   const t = given || loadTours().find(x => x.id === id); if (!t || state.busy) return;
   Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id,
     endCands: (t.endCands || []).map(c => ({ ...c })), endSearched: !!t.endCands,
-    n: t.n || (t.done ? t.stages.length : null), overview:null, date: t.date || null, alt:null, split:null, openDet:new Set(), showEndList:false,
+    n: t.n || (t.done ? t.stages.length : null), overview:null, date: t.date || null, alt:null, split:null, prevPicks:null, keepEnd:null, openDet:new Set(), showEndList:false,
     via: t.via || [], round: !!t.round, segs: t.segs || null, ret: t.ret || null });
   t.stages.forEach(s => { if (s.seg == null) s.seg = 0; });
   renderVia();
@@ -2523,7 +2578,7 @@ function loadTour(id, given){
 function resetTour(){
   if (state.busy) return;
   Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null, endCands:[], n:null, overview:null,
-    date:null, alt:null, split:null, openDet:new Set(), showEndList:false, via:[], round:false, segs:null, endSearched:false, ret:null });
+    date:null, alt:null, split:null, prevPicks:null, keepEnd:null, openDet:new Set(), showEndList:false, via:[], round:false, segs:null, endSearched:false, ret:null });
   $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end; renderVia();
   setStatus(''); renderAll();
 }
