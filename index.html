@@ -603,7 +603,7 @@ async function computeNext(from){
 
 /* Campingplätze rund um den Zielort, um das Ziel auf einen Platz zu legen */
 async function loadEndCands(){
-  state.endCands = [];
+  state.endCands = []; state.endSearched = false;
   const e = state.end, rad = Math.max(10, +settings.detour) * 1000;
   try {
     setStatus('Suche Campingplätze am Ziel …', 'busy');
@@ -611,6 +611,7 @@ async function loadEndCands(){
     const camps = await campsInBox([e.lat - dLat, e.lon - dLon, e.lat + dLat, e.lon + dLon], { onStatus: t => setStatus(t, 'busy') });
     camps.forEach(c => { c.air = hav([e.lat, e.lon], [c.lat, c.lon]); campIndex.set(c.id, c); });
     state.endCands = camps.filter(c => c.air <= rad).sort((a, b) => a.air - b.air).slice(0, 20);
+    state.endSearched = true;
   } catch(err){ console.warn(err); }
   renderAll();
 }
@@ -817,6 +818,8 @@ function renderPanel(){
     const km = state.stages.reduce((a, s) => a + s.dist, 0), t = state.stages.reduce((a, s) => a + s.dur, 0);
     const n = state.stages.length - 1;
     h += `<div class="summary">Gesamt ${fkm(km)} · ${fdur(t)} Fahrzeit · ${n} ${n === 1 ? 'Übernachtung' : 'Übernachtungen'}</div>`;
+    if (!state.endSearched && !busy)
+      h += `<button class="btn wide" type="button" id="endSearchBtn">Campingplätze am Ziel ${state.stages[state.stages.length - 1].to.kind === 'camp' ? 'anzeigen (Zielplatz ändern)' : 'suchen'}</button>`;
     if (state.endCands.length){
       const last = state.stages[state.stages.length - 1];
       h += `<h3>Campingplatz am Ziel</h3>
@@ -881,6 +884,7 @@ function renderPanel(){
   }
   const nc = $('#nChange'); if (nc) nc.onclick = () => { if (state.busy) return;
     Object.assign(state, { stages:[], pending:null, done:false, n:null, endCands:[] }); setStatus(''); renderAll(); fitAll(); };
+  const esb = $('#endSearchBtn'); if (esb) esb.onclick = () => run(loadEndCands);
   const cb = $('#contBtn'); if (cb) cb.onclick = () => run(() => computeNext(state.stages.length ? state.stages[state.stages.length - 1].to : state.start));
   const sb = $('#saveBtn'); if (sb) sb.onclick = saveTour;
   const gb = $('#gpxBtn'); if (gb) gb.onclick = exportGpx;
@@ -1084,7 +1088,8 @@ const defaultName = () => `${shortLabel(state.start.label)} → ${shortLabel(sta
 function buildTour(name, id){
   return { id: id || state.tourId || Date.now(), name: (name || '').trim() || defaultName(), savedAt: new Date().toISOString(),
     start: slimPoint(state.start), end: slimPoint(state.end), done: state.done, n: state.n,
-    stages: state.stages.map(s => ({ from:slimPoint(s.from), to:slimPoint(s.to), dist:s.dist, dur:s.dur, note:s.note, line:thin(s.line) })) };
+    stages: state.stages.map(s => ({ from:slimPoint(s.from), to:slimPoint(s.to), dist:s.dist, dur:s.dur, note:s.note, line:thin(s.line) })),
+    endCands: state.endSearched ? state.endCands.map(c => ({ id:c.id, lat:c.lat, lon:c.lon, tags:c.tags, air:Math.round(c.air) })) : undefined };
 }
 function storeTour(tour){
   const rest = loadTours().filter(t => t.id !== tour.id), str = JSON.stringify([tour, ...rest]);
@@ -1175,13 +1180,16 @@ function openTours(fromButton){
 }
 function loadTour(id, given){
   const t = given || loadTours().find(x => x.id === id); if (!t || state.busy) return;
-  Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id, endCands:[],
+  Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id,
+    endCands: (t.endCands || []).map(c => ({ ...c })), endSearched: !!t.endCands,
     n: t.n || (t.done ? t.stages.length : null), overview:null });
   t.stages.forEach(s => { if (s.to.kind === 'camp') campIndex.set(s.to.id, s.to); });
+  state.endCands.forEach(c => campIndex.set(c.id, c));
   $('#startIn').value = t.start.label; $('#endIn').value = t.end.label;
   setStatus(''); renderAll(); fitAll();
+  // Unfertige Tour: Planung geht weiter (braucht die Suche). Fertige Tour: keine Abfrage – Plätze am Ziel kommen
+  // aus der gespeicherten Tour oder erst auf Knopfdruck.
   if (!t.done){ const last = t.stages.length ? t.stages[t.stages.length - 1].to : t.start; run(() => computeNext(last)); }
-  else run(loadEndCands);
 }
 function resetTour(){
   if (state.busy) return;

@@ -28,7 +28,7 @@ der höchstens ~10 km von der Route entfernt liegt.
 | Öffnungszeiten | **keine Prüfung** (nur Anzeige, falls in OSM) |
 | Auswahl | alle Treffer im Korridor auf der Karte + Liste; Nutzer wählt |
 | Verkettung | jede Etappe startet am gewählten Platz der vorherigen |
-| Letzte Etappe | gewählte Anzahl erreicht → direkt zum Ziel, danach Liste „Campingplatz am Ziel“ |
+| Letzte Etappe | gewählte Anzahl erreicht → direkt zum Ziel, danach Liste „Campingplatz am Ziel“ (wird in der Tour als `endCands` gespeichert; beim Laden einer fertigen Tour **keine** neue Abfrage – ältere Touren ohne Liste zeigen einen Knopf „Campingplätze am Ziel …“) |
 | Nichts gefunden | stufenweise erweitern: Umweg 20 km, dann Korridor ±50 km; Hinweis anzeigen |
 | Manuelle Wahl | jeder Campingplatz beim Reinzoomen (Zoom ≥ 10) als Etappenziel wählbar |
 | Geschwindigkeit | max. 80 km/h (ORS-Minimum ist 80) |
