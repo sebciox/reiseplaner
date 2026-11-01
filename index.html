@@ -1058,8 +1058,8 @@ function rzHtml(c, compact){
   if (c.kind !== 'camp') return '';
   const r = rzFor(c), web = researchTarget(c)?.web || webOf(c);
   if (r && (r.status === 'ok' || r.status === 'partial'))
-    return `<div class="rz">${r.status === 'ok' ? `<b>Rezeption: ${esc(r.hours || 'siehe Text')}</b>${compact ? '' : `<div class="snip">„${esc(r.snippet)}“</div>`}` : ''}
-      ${cioHtml(r, compact)}
+    return `<div class="rz">${r.status === 'ok' ? `<b>Rezeption: ${esc(r.hours || 'siehe Website')}</b>${compact || !deEn(r.lang) ? '' : `<div class="snip">„${esc(r.snippet)}“</div>`}` : ''}
+      ${cioHtml(r, compact || !deEn(r.lang))}
       ${r.url ? `<div><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener">Quelle: ${esc(shortUrl(r.url))}</a> <span class="muted">· geprüft ${new Date(r.checkedAt).toLocaleDateString('de-DE')}</span></div>` : ''}</div>`;
   if (r && web)
     return `<div class="rz none">Rezeptionszeiten: ${r.status === 'none' ? 'auf der Website nicht gefunden' : 'Website nicht erreichbar'}${compact ? '' : ` – bitte <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">selbst nachsehen</a>`}.</div>`;
@@ -1154,20 +1154,28 @@ function sightFacts(s, compact){
   const hasHours = (g && g.oh && g.oh.length) || (r && r.hoursS && r.hoursS.text) || inf.oh;
   if (!hasHours) h += `<div><span class="k">Öffnungszeiten</span> –${r && r.hoursUrl ? ' · ' + linkA(safeUrl(r.hoursUrl), 'auf der Website') : ''}</div>`;
   if (g && g.oh && g.oh.length) h += gHoursHtml(g.oh, g.open);
-  if (r && r.hoursS && r.hoursS.text) h += compact ? `<div>Öffnungszeiten laut Website: ${linkA(safeUrl(r.hoursS.url), r.hoursS.text)}</div>` : `<div class="rz"><b>Öffnungszeiten laut Website: ${esc(r.hoursS.text)}</b>${snipLink(r.hoursS)}</div>`;
+  if (r && r.hoursS && r.hoursS.text) h += compact ? `<div>Öffnungszeiten laut Website: ${linkA(safeUrl(r.hoursS.url), r.hoursS.text)}</div>` : `<div class="rz"><b>Öffnungszeiten laut Website: ${esc(r.hoursS.text)}</b>${snipLink(r.hoursS, r.lang)}</div>`;
   else if (r && r.hoursUrl && hasHours) h += `<div>${linkA(safeUrl(r.hoursUrl), 'Öffnungszeiten auf der Website')}</div>`;
-  if (r && r.season) h += `<div>Saison laut Website: „${esc(r.season.snippet)}“${r.season.url ? ' – ' + linkA(safeUrl(r.season.url), 'Quelle') : ''}</div>`;
+  if (r && r.season){
+    const se = r.season, dates = se.from && se.to && dmDe(se.from) && dmDe(se.to) ? `${dmDe(se.from)} – ${dmDe(se.to)}` : '';
+    h += `<div>Saison laut Website: ${dates ? `<b>${dates}</b>` : ''}${!dates && deEn(r.lang) ? `„${esc(se.snippet)}“` : ''}${!dates && !deEn(r.lang) ? 'siehe Website' : ''}${se.url ? ' – ' + linkA(safeUrl(se.url), 'Quelle') : ''}</div>`;
+  }
   if (inf.oh && !(g && g.oh && g.oh.length)) h += `<div>Öffnungszeiten (OSM): ${esc(inf.oh)}</div>`;
   const ageP = p => p && (p.adult || p.child) ? [p.adult && 'Erwachsene ' + euroAb(p.adult, s), p.child && 'Kinder ' + euroAb(p.child, s)].filter(Boolean).join(' · ') : '';
-  if (r && r.price && ageP(r.price)) h += compact ? `<div class="price">${ageP(r.price)}</div>` : `<div class="rz"><b>${ageP(r.price)}</b> <span class="muted">(Website)</span>${snipLink(r.price)}</div>`;
-  else if (r && r.price) h += compact ? `<div class="price">Preis ${euroText(r.price, s)}</div>` : `<div class="rz"><b>Preis: ${euroText(r.price, s)}</b> <span class="muted">(Website)</span>${snipLink(r.price)}</div>`;
+  if (r && r.price && ageP(r.price)) h += compact ? `<div class="price">${ageP(r.price)}</div>` : `<div class="rz"><b>${ageP(r.price)}</b> <span class="muted">(Website)</span>${snipLink(r.price, r.lang)}</div>`;
+  else if (r && r.price) h += compact ? `<div class="price">Preis ${euroText(r.price, s)}</div>` : `<div class="rz"><b>Preis: ${euroText(r.price, s)}</b> <span class="muted">(Website)</span>${snipLink(r.price, r.lang)}</div>`;
   else if (inf.charge) h += `<div class="price">Preis ${euroText({ text:inf.charge }, s)} <span class="muted">(OSM)</span></div>`;
   else if (inf.fee === 'no') h += `<div class="price">Eintritt frei <span class="muted">(OSM)</span></div>`;
   else if (g && g.price) h += `<div class="price">Preis ${euroText({ text:g.price }, s)} <span class="muted">(Google)</span></div>`;
   else h += `<div><span class="k">Preise</span> –${r && r.priceUrl ? ' · ' + linkA(safeUrl(r.priceUrl), 'auf der Website') : ''}</div>`;
   return h;
 }
-const snipLink = o => `<div class="snip">„${esc(o.snippet)}“${o.url ? ` – <a href="${esc(safeUrl(o.url))}" target="_blank" rel="noopener">Quelle</a>` : ''}</div>`;
+// Textausschnitt von der Website nur zeigen, wenn die Seite deutsch oder englisch war (Sebastian: Hinweise nur DE/EN), sonst nur „Quelle“
+const deEn = lang => lang === 'de' || lang === 'en';
+const snipLink = (o, lang) => deEn(lang ?? o.lang) ? `<div class="snip">„${esc(o.snippet)}“${o.url ? ` – <a href="${esc(safeUrl(o.url))}" target="_blank" rel="noopener">Quelle</a>` : ''}</div>`
+  : (o.url ? `<div class="snip"><a href="${esc(safeUrl(o.url))}" target="_blank" rel="noopener">Quelle</a></div>` : '');
+const MON = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+const dmDe = x => { const m = String(x || '').match(/^(\d{1,2})\.(\d{1,2})\.$/); return m ? `${+m[1]}. ${MON[+m[2] - 1]}` : ''; };
 // Inhalt eines Sehenswürdigkeiten-Eintrags (from = Platz, von dem aus man hinfährt)
 function sightBodyHtml(x, from){
   const s = sightSrc(x), inf = s.info || {}, g = gSight.get(sightKey(s)), web = inf.web || '';
@@ -1240,7 +1248,7 @@ const euroAb = (t, c) => { const ab = /^ab\s/i.test(t); return (ab ? 'ab ' : '')
 const euroPlain = (p, c) => euroText(p, c).replace(/<[^>]+>/g, '');
 function priceOf(c){
   const r = rzFor(c);
-  if (r && r.price) return { ...r.price, src:'web' };
+  if (r && r.price) return { ...r.price, src:'web', lang:r.lang };
   if (c.tags?.charge) return { text:c.tags.charge, src:'osm' };
   const g = gRate.get(c.id);
   if (g && g.price) return { text:g.price, src:'google', url:g.uri };
@@ -1447,16 +1455,15 @@ async function stageCountries(s){
   s.countries = codes;
   return codes;
 }
-function landHtml(s, compact){
+// Strecke: nur Fähre/Maut (Sebastian: keine Länder-Richtwerte – zu viel Text für den Platz)
+function landHtml(s){
   const ex = s.ex || {}, parts = [];
-  if (ex.ferry > 200) parts.push(`⛴ Fähre auf der Strecke (${fkm(ex.ferry)})`);
-  if (ex.toll > 1000) parts.push(`💶 Mautstrecke ca. ${fkm(ex.toll)}`);
-  if (!s.countries) return (parts.length ? `<div>${parts.join(' · ')}</div>` : '') + (compact ? '' : '<div class="muted">Länder werden ermittelt …</div>');
-  const lines = s.countries.map(cc => { const l = LAND[cc]; return l ? `<div><b>${esc(l[0])}</b>: ${esc(l[1])} · ${esc(l[2])}</div>` : `<div><b>${esc(cc)}</b></div>`; });
-  return `<div class="land">${parts.length ? `<div>${parts.join(' · ')}</div>` : ''}${compact ? `<div>${s.countries.join(' → ')}</div>` : lines.join('') +
-    '<div class="muted">Richtwerte für Pkw + Wohnwagen bis 3,5 t, ohne Gewähr – vor der Reise prüfen (z. B. ADAC).</div>'}</div>`;
+  if (ex.ferry > 200) parts.push(`Fähre auf der Strecke (${fkm(ex.ferry)})`);
+  if (ex.toll > 1000) parts.push(`Mautstrecke ca. ${fkm(ex.toll)}`);
+  return parts.join(' · ');
 }
-async function ensureCountries(idx){
+async function ensureCountries(){ return; }   // Länder werden nicht mehr angezeigt (Sebastian: zu viel Text) – keine Abfragen mehr
+async function ensureCountriesOld(idx){
   let changed = false;
   for (const i of idx){ const s = state.stages[i]; if (s && !s.countries){ if (await stageCountries(s)) changed = true; } }
   if (changed){ touch(); renderPanel(); if ($('#sumDlg').open) renderSummary(); }
@@ -2340,7 +2347,7 @@ function detailsHtml(s, i){
     ${gNameHtml(c)}
     <div><span class="k">Adresse</span> ${c.addr ? esc(c.addr) : '<span class="muted">wird ermittelt …</span>'}</div>
     <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
-    <div><span class="k">Strecke</span>${landHtml(s)}</div>
+    ${landHtml(s) ? `<div><span class="k">Strecke</span> ${landHtml(s)}</div>` : ''}
     ${t.opening_hours ? `<div><span class="k">Geöffnet (OSM)</span> ${esc(t.opening_hours)}</div>` : ''}
     ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
     <div class="links">${campLinks(c)}</div>
@@ -3592,7 +3599,7 @@ function renderSummary(){
         ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
         ${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<div><span class="k">Aufenthalt</span> ${s.nights} Nächte</div>` : ''}
         ${s.memo?.text || s.memo?.res ? `<div><span class="k">Notiz</span> ${s.memo.res ? 'reserviert ✓ ' : ''}${esc(s.memo.text || '')}</div>` : ''}` : ''}
-        <div><span class="k">Unterwegs</span> ${landHtml(s, true)}</div>
+        ${landHtml(s) ? `<div><span class="k">Unterwegs</span> ${landHtml(s)}</div>` : ''}
         <div class="sbtns"><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">Navigation starten</a>
           <button class="btn small" type="button" data-share="${i}">Teilen</button></div>
       </div></details>`;
