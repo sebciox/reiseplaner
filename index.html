@@ -647,7 +647,7 @@ async function orsGeocode(text, size, auto){
   let res; try { res = await fetch(url); } catch(e){ throw orsErr('Ortssuche nicht erreichbar (Netzwerk).'); }
   if (!res.ok) throw orsErr('Ortssuche fehlgeschlagen (' + res.status + ').', res.status);
   const j = await res.json();
-  return (j.features || []).map(f => ({ lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], label:f.properties.label }));
+  return (j.features || []).map(f => ({ lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], label:cleanLabel(f.properties.label) }));
 }
 
 /* ---------- Ersatzdienste ohne Schlüssel (nur nach Rückfrage): OSRM (Route, Umwege), Photon (Ortssuche) ---------- */
@@ -658,11 +658,16 @@ async function getJson(url, what){
   if (!r.ok) throw new Error(what + ': Fehler ' + r.status);
   return r.json();
 }
+// Ortsname für Suchtreffer ohne Postleitzahl („Stockholm, Schweden“ statt „Stockholm, 111 29, Schweden“)
+const photonPlace = p => [p.name, p.city || p.town || p.village, p.state, p.country].filter((x, i, a) => x && a.indexOf(x) === i).join(', ');
+// ältere Einträge: Postleitzahl beim Anzeigen entfernen („598 37 Vimmerby“ → „Vimmerby“, „111 29“ → weg)
+const cleanLabel = l => String(l || '').split(', ').map(x => x.replace(/^(\d{3} \d{2}|\d{4,5}|[A-Z]{1,2}-\d{4,5})\s+(?=\D)/, ''))
+  .filter((x, i, a) => x && !/^(\d{3} ?\d{2}|\d{4,5}|\d{4} ?[A-Z]{2})$/.test(x) && a.indexOf(x) === i).join(', ');
 const photonLabel = p => [p.name, [p.postcode, p.city || p.town || p.village].filter(Boolean).join(' '), p.state, p.country]
   .filter((x, i, a) => x && a.indexOf(x) === i).join(', ');
 async function photonGeocode(text, size){
   const j = await getJson(`${PHOTON}/api/?q=${encodeURIComponent(text)}&limit=${size}&lang=de`, 'Ersatz-Ortssuche (Photon)');
-  return (j.features || []).map(f => ({ lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], label:photonLabel(f.properties),
+  return (j.features || []).map(f => ({ lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], label:photonPlace(f.properties),
     camp: f.properties.osm_value === 'camp_site' || f.properties.osm_value === 'caravan_site' }));
 }
 async function photonReverse(p){
@@ -1117,27 +1122,27 @@ function sightBodyHtml(x, from){
   const pending = !s.info && sightBusy.has(sightKey(s));
   const dir = from ? `https://www.google.com/maps/dir/?api=1&origin=${from.lat.toFixed(6)},${from.lon.toFixed(6)}&destination=${(+s.lat).toFixed(6)},${(+s.lon).toFixed(6)}&travelmode=driving` : navUrl(s);
   let h = '';
-  if (x.d != null) h += `<div><span class="k">Vom Platz</span> ${x.est ? '≈' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} ohne Wohnwagen</div>`;
+  if (x.d != null) h += `<div><span class="k">Vom Platz</span> ${x.est ? '≈' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''}</div>`;
   else if (x.air != null) h += `<div><span class="k">Vom Platz</span> ${fkm1(x.air)} Luftlinie</div>`;
   if (x.hours != null) h += `<div><span class="k">Dauer</span> ≈ ${fhours(x.hours)} · <a href="${parkUrl(s)}" target="_blank" rel="noopener">Parken fürs Gespann</a></div>`;
   if (pending) h += '<div class="muted">Infos werden geladen …</div>';
   if (inf.town){        // Stadt/Ort (Stockholm, Göteborg …): keine Öffnungszeiten, Preise oder Website-Recherche
     if (inf.web) h += `<div><span class="k">Website</span> <a href="${esc(safeUrl(inf.web))}" target="_blank" rel="noopener">${esc(shortUrl(inf.web))}</a></div>`;
     h += `<div><span class="k">Koordinaten</span> <span class="coordrow"><span class="coord">${fcoord(s)}</span><button class="icobtn" type="button" data-copy="${fcoord(s)}" title="Koordinaten kopieren" aria-label="Koordinaten kopieren">${ICON_COPY}</button></span></div>`;
-    h += `<div class="sbtns"><a class="btn small" href="${dir}" target="_blank" rel="noopener">🧭 ${from ? 'Vom Platz hin' : 'Navigation'}</a>
+    h += `<div class="sbtns"><a class="btn small" href="${dir}" target="_blank" rel="noopener">${from ? 'Vom Platz hin' : 'Navigation'}</a>
       <a class="btn small" href="${esc(`https://www.google.com/maps/search/${encodeURIComponent(shortLabel(s.label))}/@${(+s.lat).toFixed(5)},${(+s.lon).toFixed(5)},12z`)}" target="_blank" rel="noopener">Google Maps</a></div>`;
     return `<div class="tl-body">${h}</div>`;
   }
-  h += `<div><span class="k">Adresse</span> ${esc(inf.addr || g?.addr || s.label)}</div>`;
+  h += `<div><span class="k">Adresse</span> ${esc(inf.addr || g?.addr || cleanLabel(s.label))}</div>`;
   // Öffnungszeiten: OSM, Website-Recherche, Google (diese Woche)
   if (inf.oh) h += `<div><span class="k">Öffnungszeiten</span> ${esc(inf.oh)} <span class="muted">(OpenStreetMap)</span></div>`;
   if (r && r.hoursS) h += `<div class="rz"><b>Öffnungszeiten (Website)${r.hoursS.text ? ': ' + esc(r.hoursS.text) : ''}</b>${snipLink(r.hoursS)}</div>`;
   if (g) h += gHoursHtml(g.oh, g.open);
   // Preise: Website-Recherche, sonst OSM
-  if (r && r.price) h += `<div class="rz"><b>Preise (Website)${r.price.text ? ': ' + esc(r.price.text) : ''}</b>${snipLink(r.price)}</div>`;
+  if (r && r.price) h += `<div class="rz"><b>Preise (Website)${r.price.text ? ': ' + euroText(r.price, s) : ''}</b>${snipLink(r.price)}</div>`;
   else if (inf.charge) h += `<div><span class="k">Eintritt</span> ${esc(inf.charge)} <span class="muted">(OpenStreetMap)</span></div>`;
   else if (inf.fee === 'no') h += `<div><span class="k">Eintritt</span> frei <span class="muted">(OpenStreetMap)</span></div>`;
-  else if (g && g.price) h += `<div><span class="k">Preise</span> ${esc(g.price)} <span class="muted">(Preisspanne laut Google)</span></div>`;
+  else if (g && g.price) h += `<div><span class="k">Preise</span> ${euroText({ text:g.price }, s)} <span class="muted">(Preisspanne laut Google)</span></div>`;
   // Stand der Website-Recherche
   if (web && !r) h += `<div class="rz none">Öffnungszeiten und Preise von der Website: ${ghOn() ? (state.tourId ? 'werden gesucht (1–2 Min. nach dem Speichern) …' : 'werden nach dem Speichern der Tour gesucht.') : 'Suche braucht den Online-Speicher (⚙︎).'}</div>`;
   else if (r && !r.hoursS && !r.price) h += `<div class="rz none">Öffnungszeiten/Preise: ${r.status === 'error' ? 'Website nicht erreichbar' : 'auf der Website nicht gefunden'} – <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">selbst nachsehen</a>.</div>`;
@@ -1147,13 +1152,50 @@ function sightBodyHtml(x, from){
   if (inf.phone) h += `<div><span class="k">Telefon</span> <a href="tel:${esc(inf.phone.replace(/[^+\d]/g, ''))}">${esc(inf.phone)}</a></div>`;
   if (g && g.r != null) h += `<div><span class="k">Google</span> <a class="stars" href="${esc(g.uri)}" target="_blank" rel="noopener">★ ${g.r.toLocaleString('de-DE', { minimumFractionDigits:1 })} <span>(${g.n.toLocaleString('de-DE')})</span></a></div>`;
   h += `<div><span class="k">Koordinaten</span> <span class="coordrow"><span class="coord">${fcoord(s)}</span><button class="icobtn" type="button" data-copy="${fcoord(s)}" title="Koordinaten kopieren" aria-label="Koordinaten kopieren">${ICON_COPY}</button></span></div>`;
-  h += `<div class="sbtns"><a class="btn small" href="${dir}" target="_blank" rel="noopener">🧭 ${from ? 'Vom Platz hin' : 'Navigation'}</a>
+  h += `<div class="sbtns"><a class="btn small" href="${dir}" target="_blank" rel="noopener">${from ? 'Vom Platz hin' : 'Navigation'}</a>
     <a class="btn small" href="${esc(g?.uri || `https://www.google.com/maps/search/${encodeURIComponent(shortLabel(s.label))}/@${(+s.lat).toFixed(5)},${(+s.lon).toFixed(5)},15z`)}" target="_blank" rel="noopener">Google Maps</a></div>`;
   return `<div class="tl-body">${h}</div>`;
 }
 
 /* ---------- Preis pro Nacht (Campingplatz): Website-Recherche des GitHub-Helfers, sonst OSM `charge` ----------
    Für Plätze in Vorschlagslisten fragt die App den Helfer über `anfragen.json` im Online-Speicher an (max. 15 je Liste). */
+/* Währung → Euro: Kurse der EZB (frankfurter.app, 1× täglich, im Browser gemerkt), sonst Richtwerte */
+let fx = (() => { try { const j = JSON.parse(localStorage.getItem('gp.fx') || 'null'); return j && Date.now() - j.at < 864e5 * 7 ? j : null; } catch(e){ return null; } })();
+const FX0 = { SEK:11.4, NOK:11.7, DKK:7.46, CHF:0.94, GBP:0.85, PLN:4.3, CZK:25, HUF:400 };
+const fxRate = cur => (fx && fx.rates && fx.rates[cur]) || FX0[cur];
+async function loadFx(){
+  if (fx && Date.now() - fx.at < 864e5) return;
+  try { const r = await fetch('https://api.frankfurter.app/latest?from=EUR'); if (!r.ok) return;
+    const j = await r.json(); fx = { at:Date.now(), rates:j.rates }; try { localStorage.setItem('gp.fx', JSON.stringify(fx)); } catch(e){} } catch(e){}
+}
+// „kr“ / „:-“ ohne Währungscode: Land aus Website-Endung, sonst grob aus der Lage
+function krCur(c, url){
+  const tld = (String(url || '') + ' ' + (webOf(c) || '')).match(/\.(se|no|dk)(\/|\s|$)/i);
+  if (tld) return { se:'SEK', no:'NOK', dk:'DKK' }[tld[1].toLowerCase()];
+  if (c && c.lat < 57.8 && c.lat > 54.5 && c.lon > 8 && c.lon < 12.65) return 'DKK';
+  if (c && ((c.lat > 58.9 && c.lon < 11.3) || (c.lat > 61.5 && c.lon < 12.2) || (c.lat > 65 && c.lon < 14.5))) return 'NOK';
+  return 'SEK';
+}
+function toEuro(text, c, url){
+  const t = String(text || ''); if (!t) return null;
+  const m = t.match(/(\d{1,3}(?:[ .]\d{3})+|\d+)(?:[.,](\d{1,2}))?/); if (!m) return null;
+  const val = +(m[1].replace(/[ .]/g, '') + (m[2] ? '.' + m[2] : ''));
+  let cur = /€|eur/i.test(t) ? 'EUR' : /sek|kronor/i.test(t) ? 'SEK' : /nok/i.test(t) ? 'NOK' : /dkk/i.test(t) ? 'DKK' : /chf/i.test(t) ? 'CHF' : /£|gbp/i.test(t) ? 'GBP'
+    : /pln|zł/i.test(t) ? 'PLN' : /czk|kč/i.test(t) ? 'CZK' : /kr|:-|,-/i.test(t) ? krCur(c, url) : 'EUR';
+  if (cur === 'EUR') return { eur:val, orig:null };
+  const rate = fxRate(cur); if (!rate) return null;
+  return { eur:val / rate, orig:`${Math.round(val).toLocaleString('de-DE')} ${cur}` };
+}
+// Preistext in Euro, z. B. „≈ 36 €  (415 kr (SEK))“; Spannen „SEK 300–450“ → „≈ 26–39 €“
+function euroText(p, c){
+  if (!p || !p.text) return '';
+  const range = String(p.text).match(/^(\D*)(\d[\d .]*)\s*[–-]\s*(\d[\d .]*)(\D*)$/);
+  if (range){ const a = toEuro(range[1] + range[2] + range[4], c, p.url), b = toEuro(range[1] + range[3] + range[4], c, p.url);
+    if (a && b) return `${a.orig ? '≈ ' : ''}${Math.round(a.eur)}–${Math.round(b.eur)} €${a.orig ? ` <span class="muted">(${esc(p.text)})</span>` : ''}`; }
+  const e = toEuro(p.text, c, p.url); if (!e) return esc(p.text);
+  return e.orig ? `≈ ${Math.round(e.eur)} € <span class="muted">(${esc(e.orig)})</span>` : `${e.eur.toLocaleString('de-DE', e.eur % 1 ? { minimumFractionDigits:2, maximumFractionDigits:2 } : {})} €`;
+}
+const euroPlain = (p, c) => euroText(p, c).replace(/<[^>]+>/g, '');
 function priceOf(c){
   const r = rzData[c.id], web = webOf(c);
   if (r && r.price && web && r.website === web) return { ...r.price, src:'web' };
@@ -1166,11 +1208,11 @@ const priceReq = new Map();      // camp id → Zeitpunkt der Anfrage
 function priceHtml(c, compact){
   const p = priceOf(c);
   const srcName = { web:'Website', osm:'OSM', google:'Google' };
-  if (p && compact) return `<div class="price">💶 ${esc(p.text || 'Preise')} <span class="muted">· ${p.url ? `<a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener" title="${esc(p.snippet || '')}">${srcName[p.src]}</a>` : srcName[p.src]}</span></div>`;
-  if (p) return `<div class="rz"><b>Preis${p.text ? ': ' + esc(p.text) : ''}</b> <span class="muted">${p.src === 'web' ? '(Website, bitte für Wohnwagen + Personen prüfen)' : p.src === 'google' ? '(Preisspanne laut Google)' : '(OpenStreetMap)'}</span>${p.snippet ? snipLink(p) : ''}</div>`;
+  if (p && compact) return `<div class="price">Preis ${euroText(p, c) || 'siehe Website'} <span class="muted">· ${p.url ? `<a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener" title="${esc(p.snippet || '')}">${srcName[p.src]}</a>` : srcName[p.src]}</span></div>`;
+  if (p) return `<div class="rz"><b>Preis${p.text ? ': ' + euroText(p, c) : ''}</b> <span class="muted">${p.src === 'web' ? '(Website, bitte für Wohnwagen + Personen prüfen)' : p.src === 'google' ? '(Preisspanne laut Google)' : '(OpenStreetMap)'}</span>${p.snippet ? snipLink(p) : ''}</div>`;
   const r = rzData[c.id], web = webOf(c);
   if (r && web && r.website === web && r.v >= 3) return compact ? '' : `<div class="rz none">Preis: auf der Website nicht gefunden – <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">selbst nachsehen</a>.</div>`;
-  if (web && priceReq.has(c.id) && Date.now() - priceReq.get(c.id) < 8 * 60000) return `<div class="muted price">💶 Preis wird auf der Website gesucht …</div>`;
+  if (web && priceReq.has(c.id) && Date.now() - priceReq.get(c.id) < 8 * 60000) return `<div class="muted price">Preis wird auf der Website gesucht …</div>`;
   return '';
 }
 let priceQueue = new Map(), priceTimer = null, pricePoll = [];
@@ -1946,11 +1988,13 @@ const lyr = { route:L.layerGroup().addTo(map), corridor:L.layerGroup().addTo(map
 function pinIcon(text, cls){
   return L.divIcon({ className:'', html:`<div class="pin ${cls||''}"><span>${esc(text)}</span></div>`, iconSize:[28,28], iconAnchor:[14,30], popupAnchor:[0,-28] });
 }
+// park4night hat keine verlässlichen Direktlinks (Kartensuche bleibt leer) → Websuche nach dem Platz auf park4night.com
+const p4nUrl = c => `https://www.google.com/search?q=${encodeURIComponent('site:park4night.com ' + (c.tags?.name || c.label || ''))}`;
 function campInfo(c, mode){
   const t = c.tags || {}, name = t.name || 'Campingplatz ohne Namen';
   const web = t.website || t['contact:website'] || t.url, phone = t.phone || t['contact:phone'];
   const ok = isOk(c);
-  const p4n = `https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14`;
+  const p4n = `${p4nUrl(c)}`;
   return `<div class="ci"><b data-cn="${esc(String(c.id))}">${nameHtml(c)}</b>${settings.gkey ? `<span class="gname-slot" data-gn="${esc(String(c.id))}" hidden></span>` : ''}${mode === 'cand' || mode === 'split' ? prevBadge(c) : ''}
     ${priceHtml(c, true)}
     ${mode === 'alt' && c.air != null ? `<div>${fkm1(c.air)} vom bisherigen Platz (Luftlinie)</div>` : ''}
@@ -1988,7 +2032,7 @@ function nearSights(c){
   return state.via.filter(v => v.kind === 'stay').flatMap(v => [v, ...(v.sights || [])])
     .map(x => ({ x, d:hav([x.lat, x.lon], [c.lat, c.lon]) })).filter(o => o.d <= 60000).sort((a, b) => a.d - b.d).slice(0, 3).map(o => o.x);
 }
-const sightLine = (x, r) => `★ ${esc(shortLabel(x.label))}: <b>${fkm1(r.d)}</b> / ${fdur(r.t)} <span class="muted">(ohne Wohnwagen)</span>`;
+const sightLine = (x, r) => `★ ${esc(shortLabel(x.label))}: <b>${fkm1(r.d)}</b> / ${fdur(r.t)}`;
 async function sightLines(c){
   const S = nearSights(c); if (!S.length) return '';
   const r = await roadPairs(S, c);
@@ -2011,7 +2055,7 @@ async function popDist(c, mode){
   if (p && p.mode === 'anchor'){
     const S = p.sights && p.sights.length ? p.sights : [p.sight];
     const r = c.sightD ? c.sightD.map(x => x && { d:x.d, t:x.t }) : await roadPairs(S, c);
-    return S.map((x, i) => r[i] && r[i].d != null ? `★ ${esc(shortLabel(x.label))}: <b>${fkm1(r[i].d)}</b> / ${fdur(r[i].t)} (Straße, ohne Wohnwagen)` : '').filter(Boolean).join('<br>');
+    return S.map((x, i) => r[i] && r[i].d != null ? `★ ${esc(shortLabel(x.label))}: <b>${fkm1(r[i].d)}</b> / ${fdur(r[i].t)}` : '').filter(Boolean).join('<br>');
   }
   if (p){
     const [r] = await roadPairs([p.from], c);
@@ -2172,9 +2216,9 @@ function followCamp(c){
 function sightPopHtml(v){
   const s = sightSrc(v) || v, inf = s.info || {}, g = gSight.get(sightKey(s));
   const gUrl = g?.uri || `https://www.google.com/maps/search/${encodeURIComponent(shortLabel(s.label))}/@${(+s.lat).toFixed(5)},${(+s.lon).toFixed(5)},15z`;
-  return `<div class="ci"><b>${esc(s.label)}</b>
+  return `<div class="ci"><b>${esc(cleanLabel(s.label))}</b>
     ${inf.web ? `<div><a href="${esc(safeUrl(inf.web))}" target="_blank" rel="noopener">${esc(shortUrl(inf.web))}</a></div>` : ''}
-    <div><a href="${navUrl(s)}" target="_blank" rel="noopener">🧭 Navigation</a> · <a href="${esc(gUrl)}" target="_blank" rel="noopener">Google-Eintrag</a></div></div>`;
+    <div><a href="${navUrl(s)}" target="_blank" rel="noopener">Navigation</a> · <a href="${esc(gUrl)}" target="_blank" rel="noopener">Google-Eintrag</a></div></div>`;
 }
 function sheetPad(){
   const mobile = window.innerWidth < 900, hidden = $('#panel').classList.contains('hide');
@@ -2242,7 +2286,7 @@ function detailsHtml(s, i){
     ${t.opening_hours ? `<div><span class="k">Geöffnet (OSM)</span> ${esc(t.opening_hours)}</div>` : ''}
     ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
     ${web ? `<div><span class="k">Website</span> <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">${esc(shortUrl(web))}</a></div>` : ''}
-    <div><a href="${esc(gEntryUrl(c))}" target="_blank" rel="noopener">Google-Eintrag</a> · <a href="https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14" target="_blank" rel="noopener">park4night</a></div>
+    <div><a href="${esc(gEntryUrl(c))}" target="_blank" rel="noopener">Google-Eintrag</a> · <a href="${p4nUrl(c)}" target="_blank" rel="noopener">park4night</a></div>
     <div class="memo">
       <input type="text" data-memo="${i}" placeholder="Notiz (z. B. Preis, Ankunft bis …)" value="${esc(s.memo?.text || '')}">
       <label class="check"><input type="checkbox" data-res="${i}" ${s.memo?.res ? 'checked' : ''}><span>reserviert</span></label>
@@ -2265,7 +2309,7 @@ function altHtml(i){
       <div class="muted">${fkm1(c.air)} Luftlinie${phoneOf(c) ? ' · ' + esc(phoneOf(c)) : ''}</div></div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <button class="btn small primary" type="button" data-altpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Übernehmen</button>
-        <a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navi</a></div></li>`;
+        <a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">Navi</a></div></li>`;
   });
   return h + '</ul></div>';
 }
@@ -2283,7 +2327,7 @@ function splitHtml(i){
       <div class="muted">${fkm(c.stageKm)} + ${fkm(c.after)} · ${fkm1(c.detour.d)} / ${fdur(c.detour.t)} von der Route bis zum Platz</div></div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <button class="btn small primary" type="button" data-splitpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Einfügen</button>
-        <a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navi</a></div></li>`;
+        <a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">Navi</a></div></li>`;
   });
   return h + `</ul>${addCampHtml('split')}<div class="muted" style="margin-top:6px">Ein anderer Platz? Auf der Karte reinzoomen und dort „Als Zwischenstopp einfügen“ wählen.</div></div>`;
 }
@@ -2359,13 +2403,13 @@ function renderPanel(){
         ${camp && !(state.done && i === state.stages.length - 1) ? `<button class="btn small" type="button" data-edit="${i}" ${busy ? 'disabled' : ''} title="Ab hier neu planen (anderen Platz im Korridor wählen)">Platz ändern</button>` : ''}</div>
         ${s.to.sights && s.to.sights.length > 1
           ? `<div class="sightinfo">★ Basislager: ${s.to.sights.map(x => `${esc(shortLabel(x.label))} ${x.d != null ? (x.est ? '≈' : '') + fkm1(x.d) : ''}`).join(' · ')}</div>`
-          : s.to.near ? `<div class="sightinfo">★ ${esc(shortLabel(s.to.near.label))} · ${s.to.near.d != null ? `${fkm1(s.to.near.d)} / ${fdur(s.to.near.t)} (ohne Wohnwagen)` : `${fkm1(s.to.near.air || 0)} Luftlinie`}</div>` : ''}
+          : s.to.near ? `<div class="sightinfo">★ ${esc(shortLabel(s.to.near.label))} · ${s.to.near.d != null ? `${fkm1(s.to.near.d)} / ${fdur(s.to.near.t)}` : `${fkm1(s.to.near.air || 0)} Luftlinie`}</div>` : ''}
         ${s.vias && s.vias.length ? `<div class="muted">unterwegs: ${visitsOf(s).map(v => `${esc(shortLabel(v.label))} (≈ ${fhours(v.hours)} · <a href="${parkUrl(v)}" target="_blank" rel="noopener">Parken fürs Gespann</a>)`).join(', ')}
           · Tag gesamt ≈ ${fdur(s.dur + visitsOf(s).reduce((a, v) => a + (+v.hours || 2) * 3600, 0))}</div>` : ''}
         ${i < state.stages.length - 1 || !state.done ? `<div class="nstep">Nächte hier <button type="button" data-nstep="${i}" data-d="-1" aria-label="eine Nacht weniger" ${(s.nights || 1) <= 1 ? 'disabled' : ''}>−</button><b>${s.nights || 1}</b><button type="button" data-nstep="${i}" data-d="1" aria-label="eine Nacht mehr">+</button>${(s.nights || 1) > 1 ? ` · ${(s.nights || 1) - 1} ${(s.nights || 1) === 2 ? 'freier Tag' : 'freie Tage'}` : ''}</div>` : ''}
         ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
         <div class="sbtns">
-          <a class="btn" href="${navUrl(s.to)}" target="_blank" rel="noopener">🧭 Navigation</a>
+          <a class="btn" href="${navUrl(s.to)}" target="_blank" rel="noopener">Navigation</a>
           ${camp ? `<button class="btn${open ? ' on' : ''}" type="button" data-det="${i}">Details ${open ? '▴' : '▾'}</button>
           <button class="btn${altOpen ? ' on' : ''}" type="button" data-alt="${i}" ${busy ? 'disabled' : ''}>Ausweichplatz</button>` : ''}
           <button class="btn${splitOpen ? ' on' : ''}" type="button" data-split="${i}" ${busy ? 'disabled' : ''} title="Campingplatz etwa auf halbem Weg dieser Etappe einfügen">+ Zwischenstopp</button>
@@ -2419,8 +2463,8 @@ function renderPanel(){
       h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
         <div class="body" data-show="${esc(c.id)}"><div class="name">${nameHtml(c)}${amenHtml(c)}${c === best0 ? ' <span class="badge best">am nächsten</span>' : ''}${prevBadge(c)}${rateHtml(c)}</div>${priceHtml(c, true)}
         ${c.sightD && c.sightD.length > 1
-          ? `<div class="sightinfo">${c.sightD.map(x => x ? `★ ${esc(shortLabel(x.label))} ${fkm1(x.d)} / ${fdur(x.t)}` : '').filter(Boolean).join('<br>')}</div><div class="muted">ohne Wohnwagen · Ø ${fkm1(c.sight.d)}</div>`
-          : `<div class="sightinfo">${c.sight ? `${fkm1(c.sight.d)} / ${fdur(c.sight.t)} ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit (ohne Wohnwagen)'}` : `${fkm1(c.air)} Luftlinie ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit'}`}</div>`}</div>
+          ? `<div class="sightinfo">${c.sightD.map(x => x ? `★ ${esc(shortLabel(x.label))} ${fkm1(x.d)} / ${fdur(x.t)}` : '').filter(Boolean).join('<br>')}</div><div class="muted">Ø ${fkm1(c.sight.d)}</div>`
+          : `<div class="sightinfo">${c.sight ? `${fkm1(c.sight.d)} / ${fdur(c.sight.t)} ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit'}` : `${fkm1(c.air)} Luftlinie ${g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit'}`}</div>`}</div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
     });
     h += `</ul>${addCampHtml('pending')}<div class="muted" style="margin-top:8px">Sortiert nach ${p.sights && p.sights.length > 1 ? 'mittlerer Entfernung zu allen Sehenswürdigkeiten' : 'Entfernung ' + (g.rest ? 'zum Ort' : 'zur Sehenswürdigkeit')}. Weitere Plätze erscheinen auf der Karte beim Reinzoomen.</div>`;
@@ -2689,7 +2733,7 @@ function renderVia(){
     <button type="button" class="vgrip" data-vgrip="${i}" aria-label="${esc(v.label)} verschieben (ziehen oder Pfeiltasten)" title="ziehen zum Verschieben">
       <svg viewBox="0 0 12 20" width="12" height="20" aria-hidden="true" fill="currentColor"><circle cx="3" cy="4" r="1.6"/><circle cx="9" cy="4" r="1.6"/><circle cx="3" cy="10" r="1.6"/><circle cx="9" cy="10" r="1.6"/><circle cx="3" cy="16" r="1.6"/><circle cx="9" cy="16" r="1.6"/></svg></button>
     <span class="vn">${i + 1}</span>
-    <div class="vt"><b>${esc(v.label)}</b><div class="vopts">
+    <div class="vt"><b>${esc(cleanLabel(v.label))}</b><div class="vopts">
       <select data-vkind="${i}" aria-label="Art des Zwischenziels"><option value="stay"${v.kind === 'stay' || !v.kind ? ' selected' : ''}>★ Übernachten in der Nähe</option><option value="rest"${v.kind === 'rest' ? ' selected' : ''}>Pause / freie Tage (nur Campingplatz)</option><option value="visit"${v.kind === 'visit' ? ' selected' : ''}>Besuch unterwegs</option></select>
       ${v.kind !== 'visit' ? `<label><input type="number" min="1" max="30" data-vnights="${i}" value="${Math.max(1, +v.nights || 1)}"> Nächte</label>`
         : `<label><input type="number" min="0.5" max="12" step="0.5" data-vhours="${i}" value="${+v.hours || 2}"> h Besuch</label>`}</div>
@@ -3287,14 +3331,14 @@ function xlsxRows(){
     const row = [i + 1, camp ? 'Campingplatz' : (i === last && home ? 'Zuhause' : 'Ziel'), day(ds && ds[i]), ds && i < last ? day(addDays(ds[i], n)) : '',
       i < last ? n : '', c.label, c.addr && c.addr !== 'unbekannt' ? c.addr : '', fcoord(c), c.detour ? `${fkm1(c.detour.d)} von der Route` : '',
       Math.round(s.dist / 1000), fdur(s.dur), okR ? (r.hours || '') : '', okR ? (r.checkin?.text || '') : '', okR ? (r.checkout?.text || '') : '',
-      web || '', camp ? (phoneOf(c) || '') : '', 'Route', s.memo?.text || '', s.memo?.res ? 'ja' : '', camp && priceOf(c) ? priceOf(c).text || '' : ''];
+      web || '', camp ? (phoneOf(c) || '') : '', 'Route', s.memo?.text || '', s.memo?.res ? 'ja' : '', camp && priceOf(c) ? euroPlain(priceOf(c), c) : ''];
     rows.push(row);
     if (web) links.push({ r:rows.length - 1, c:14, url:safeUrl(web) });
     links.push({ r:rows.length - 1, c:16, url:navUrl(c) });
     stopSights(c).forEach(x => { const src = sightSrc(x) || x, inf = src.info || {}, rr = inf.web ? rzData['web:' + inf.web] : null;
       const oh = inf.town ? '' : [inf.oh, rr?.hoursS?.text].filter(Boolean).join(' / '), pr = inf.town ? '' : rr?.price?.text || inf.charge || '';
       rows.push([i + 1, 'Sehenswürdigkeit', '', '', '', x.label, inf.addr || '', x.lat != null ? fcoord(x) : '',
-        x.d != null ? `${x.est ? '≈ ' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} vom Platz (ohne Wohnwagen)` : x.air != null ? `${fkm1(x.air)} Luftlinie` : '', '', '',
+        x.d != null ? `${x.est ? '≈ ' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} vom Platz` : x.air != null ? `${fkm1(x.air)} Luftlinie` : '', '', '',
         oh ? 'Geöffnet: ' + oh : '', '', '', inf.web || '', inf.phone || '', '', pr ? 'Preise: ' + pr : '', '']);
       if (inf.web) links.push({ r:rows.length - 1, c:14, url:safeUrl(inf.web) }); });
   });
@@ -3400,7 +3444,7 @@ function timelineHtml(ia){
       x.d != null ? ` <span class="muted">· ${x.est ? '≈' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''}</span>` : '')).join('')}</div>` : '';
     const body = `<div class="tl-body">${stopBodyHtml(s, i)}
       ${ia && !isLast ? `<div class="nstep">Nächte hier <button type="button" data-tlnight="${i}" data-d="-1" aria-label="eine Nacht weniger" ${n <= 1 ? 'disabled' : ''}>−</button><b>${n}</b><button type="button" data-tlnight="${i}" data-d="1" aria-label="eine Nacht mehr">+</button></div>` : ''}
-      ${ia ? `<div class="sbtns"><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation</a>
+      ${ia ? `<div class="sbtns"><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">Navigation</a>
         <button class="btn small" type="button" data-share="${i}">📤 Teilen</button>
         <button class="btn small" type="button" data-tledit="${i}">Bearbeiten</button></div>` : ''}</div>`;
     h += `<li class="tl-stop${i === cur ? ' cur' : ''}">${ia ? `<details data-tl="${i}"${open ? ' open' : ''}><summary>${sum}</summary>${body}</details>${sights}` : `<details open><summary>${sum}</summary>${body}</details>`}</li>`;
@@ -3491,7 +3535,7 @@ function renderSummary(){
         ${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<div><span class="k">Aufenthalt</span> ${s.nights} Nächte</div>` : ''}
         ${s.memo?.text || s.memo?.res ? `<div><span class="k">Notiz</span> ${s.memo.res ? 'reserviert ✓ ' : ''}${esc(s.memo.text || '')}</div>` : ''}` : ''}
         <div><span class="k">Unterwegs</span> ${landHtml(s, true)}</div>
-        <div class="sbtns"><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation starten</a>
+        <div class="sbtns"><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">Navigation starten</a>
           <button class="btn small" type="button" data-share="${i}">📤 Teilen</button></div>
       </div></details>`;
   });
@@ -3553,7 +3597,7 @@ async function printTour(){
     rows += `<tr><td>${i + 1}</td><td>${ds ? fdate(ds[i]) : ''}</td>
       <td>${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}${s.vias && s.vias.length ? `<br><span class="sm">unterwegs: ${visitsOf(s).map(v => esc(shortLabel(v.label))).join(', ')}</span>` : ''}${c.near ? `<br><span class="sm">★ ${esc(shortLabel(c.near.label))} ${c.near.d != null ? fkm1(c.near.d) : ''}</span>` : ''}</td>
       <td>${fkm(s.dist)}<br><span class="sm">${fdur(s.dur)}${extra ? '<br>' + esc(extra) : ''}</span></td>
-      <td><b>${esc(camp ? nameText(c) : c.label)}</b>${camp && priceOf(c) ? `<br><span class="sm">${esc(priceOf(c).text || '')}</span>` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
+      <td><b>${esc(camp ? nameText(c) : c.label)}</b>${camp && priceOf(c) ? `<br><span class="sm">${esc(euroPlain(priceOf(c), c))}</span>` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
       <td>${camp ? esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–') : esc(c.label)}<br><span class="sm">${fcoord(c)}</span></td>
       <td>${camp ? rz : ''}</td>
       <td>${web ? `<a href="${esc(safeUrl(web))}">${esc(shortUrl(web))}</a><br>` : ''}${phone ? `<a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a><br>` : ''}<a href="${esc(gEntryUrl(c))}">Google-Eintrag</a></td></tr>`;
@@ -3641,7 +3685,7 @@ $('#importIn').addEventListener('change', e => { const f = e.target.files[0]; e.
 
 /* ---------- Start ---------- */
 $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end;
-renderVia(); renderAll(); popupPad();
+renderVia(); renderAll(); popupPad(); loadFx().then(() => renderAll());
 if (!settings.key && !ghOn()) setStatus('Willkommen! Trag zuerst unter ⚙︎ deinen kostenlosen OpenRouteService-Schlüssel ein.');
 syncAndReport();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
