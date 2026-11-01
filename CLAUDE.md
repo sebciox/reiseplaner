@@ -3,6 +3,8 @@
 Privater Etappenplaner (PWA) für eine Reise mit **Wohnwagen-Gespann**. Nutzer: Sebastian (nur für sich selbst,
 nicht öffentlich vertrieben). Sprache der App und der Kommunikation: **Deutsch**. Sebastian will wenig Rückfragen –
 Absicht erschließen und liefern.
+**Fragen immer als Auswahl stellen:** Wenn Entscheidungen oder Vorschläge zur Wahl stehen, diese über den
+Auswahl-Dialog (AskUserQuestion, mit Optionen und Empfehlung) stellen – nicht als Fließtext-Liste.
 
 Live: https://sebciox.github.io/gespann-etappen/ (GitHub Pages, Branch `main`, Root). Jeder Push auf `main`
 wird automatisch veröffentlicht. Kein Build-Schritt, kein Backend.
