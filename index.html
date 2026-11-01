@@ -39,7 +39,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 /* Griff: großer Bereich zum Ziehen/Antippen; ziehen geht auch an der Kopfzeile */
 #handle{border:0;background:none;padding:12px 0 8px;width:100%;cursor:grab;flex:none;touch-action:none}
 #handle span{display:block;width:44px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
-#scroll{overflow:auto;flex:1;padding:0 16px 20px;-webkit-overflow-scrolling:touch}
+#scroll{overflow:auto;flex:1;padding:0 16px 20px;-webkit-overflow-scrolling:touch;scroll-padding-top:var(--stick-h,110px)}
 @media (min-width:900px){
   #panel{top:0;bottom:0;right:auto;width:var(--pw,410px);height:auto !important;border-radius:0;
     box-shadow:2px 0 18px rgba(0,0,0,.12)}
@@ -93,6 +93,40 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
   padding:9px 10px;border-radius:8px;cursor:pointer}
 .sugg button:hover,.sugg button:focus{background:var(--brand-soft)}
 #status:empty{display:none}
+.sticky{position:sticky;top:0;z-index:4;background:var(--panel);margin:0 -16px 8px;padding:6px 16px 6px;border-bottom:1px solid var(--line)}
+.tabs{display:flex;gap:4px}
+.tabs button{flex:1;font:inherit;font-size:14px;padding:8px 4px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tabs button.on{background:var(--brand);border-color:var(--brand);color:#1c2420;font-weight:700}
+.tabs button .cnt{font-weight:400;font-size:12px;opacity:.8}
+#tripBar:empty{display:none}
+#tripBar .trip{margin:6px 0 0;padding:6px 10px;font-size:13px}
+[hidden]{display:none !important}
+.tlhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.tl{list-style:none;margin:6px 0 0 6px;padding:0 0 0 16px;border-left:2px solid var(--brand);display:grid;gap:8px}
+.tl>li{position:relative}
+.tl>li::before{content:'';position:absolute;left:-24px;top:10px;width:10px;height:10px;border-radius:50%;background:var(--panel);border:2px solid var(--brand)}
+.tl>li.tl-stop::before{background:var(--brand)}
+.tl>li.cur::before{background:var(--accent);border-color:var(--accent)}
+.tl-drive,.tl-pt{padding:4px 2px;font-size:14px}
+.tl-drive b,.tl-pt b{font-weight:600}
+.tl-drive .cv{width:26px;height:15px;vertical-align:-2px;margin-right:4px;color:var(--brand-ink)}
+.tl-visit{font-size:13px;color:var(--accent);margin-top:2px}
+.tl-stop details{border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--panel)}
+.tl-stop.cur details{border-color:var(--accent)}
+.tl-stop summary{cursor:pointer;list-style:none;display:block;position:relative;padding-right:20px}
+.tl-stop summary::-webkit-details-marker{display:none}
+.tl-stop summary::after{content:'▾';position:absolute;right:0;top:0;color:var(--muted)}
+.tl-stop details[open] summary::after{content:'▴'}
+.tl-name{font-weight:700;overflow-wrap:anywhere}
+.tl-sights{margin-top:4px;font-size:13px;color:var(--accent)}
+.tl-body{margin-top:8px;display:grid;gap:4px;font-size:14px;overflow-wrap:anywhere}
+.tl-body .k{color:var(--muted);font-size:12px;display:inline-block;min-width:90px}
+.tl-actions{margin-top:14px}
+.gname{margin:3px 0;font-size:13px;padding:4px 8px;border-radius:8px;background:var(--warn-soft)}
+#toast{position:fixed;z-index:1100;bottom:24px;left:50%;transform:translateX(-50%);max-width:min(86vw,520px);padding:10px 16px;border-radius:12px;
+  background:#2d3b33;color:#fff;font-size:14px;box-shadow:0 4px 18px rgba(0,0,0,.25);text-align:center}
+@media (max-width:899px){ #toast{bottom:calc(var(--sheet-h,0px) + 14px)} }
+@media (min-width:900px){ #toast{left:calc(var(--pw,410px) + (100vw - var(--pw,410px)) / 2)} }
 #mapBusy{position:fixed;z-index:1100;top:14px;left:50%;transform:translateX(-50%);max-width:min(86vw,520px);display:flex;align-items:center;gap:10px;
   padding:10px 16px;border-radius:99px;background:var(--panel);color:var(--text);box-shadow:0 4px 18px rgba(0,0,0,.22);font-size:14px;font-weight:600}
 #mapBusy[hidden]{display:none}
@@ -327,6 +361,7 @@ a{color:var(--brand-ink)}
 <body>
 <div id="map" aria-label="Karte"></div>
 <div id="mapBusy" role="status" aria-live="polite" hidden></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
 <div id="fabs">
   <button class="fab" id="fabMenu" type="button" aria-label="Menü ein- oder ausblenden" title="Menü ein-/ausblenden">☰</button>
   <button class="fab" id="fabSum" type="button" aria-label="Tourübersicht" title="Tourübersicht" hidden>📋</button>
@@ -339,11 +374,19 @@ a{color:var(--brand-ink)}
     <header class="top">
       <div class="brand"><svg class="logo" viewBox="0 0 72 40" width="40" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M37 30 H58 V20 C57 12 51 6 43 6 H14 a6 6 0 0 0 -6 6 V30 H25 A6 6 0 0 1 37 30"/><path d="M8 23 H14 M23 23 H58"/><rect x="14" y="11" width="9" height="16" rx="2.5"/><path d="M16.5 19 v1.5"/><path d="M35 11 H50 C52.5 11 54 13 54.5 18 H35 Z"/><path d="M44 11 V18"/><path d="M58 28 H70"/><circle cx="31" cy="31" r="4"/></svg><h1>Reiseplaner</h1></div>
       <div>
-        <button class="btn ghost" id="sumBtn" type="button" hidden>Übersicht</button>
+        <button class="btn ghost" id="sumBtn" type="button" hidden>Reiseplan</button>
         <button class="btn ghost" id="toursBtn" type="button">Touren</button>
         <button class="btn ghost icon" id="settingsBtn" type="button" aria-label="Einstellungen" title="Einstellungen">⚙︎</button>
       </div>
     </header>
+    <div class="sticky" id="stickyHead">
+      <nav class="tabs" id="tabs" role="tablist" aria-label="Planungsschritte">
+        <button type="button" role="tab" data-tabbtn="goals">1 Ziele</button>
+        <button type="button" role="tab" data-tabbtn="plan">2 Plätze</button>
+        <button type="button" role="tab" data-tabbtn="trip">3 Reiseplan</button>
+      </nav>
+      <div id="tripBar"></div>
+    </div>
     <div id="status" role="status" aria-live="polite"></div>
     <div id="fbNote" class="note" hidden>Ersatzdienst aktiv (OSRM/Photon statt OpenRouteService) – Fahrzeiten sind Schätzungen. <button class="linkbtn" type="button" id="fbOff">zurück zu ORS</button></div>
     <form id="planForm" autocomplete="off">
@@ -374,6 +417,7 @@ a{color:var(--brand-ink)}
       <button class="btn primary wide" id="planBtn" type="submit">Strecke berechnen</button>
     </form>
     <section id="result"></section>
+    <section id="tripView" hidden></section>
   </div>
 </aside>
 
@@ -925,6 +969,37 @@ async function gFetch(c){
   const best = (j.places || []).map(p => ({ p, d: p.location ? hav([c.lat, c.lon], [p.location.latitude, p.location.longitude]) : 1e9 }))
     .filter(x => x.d < 2000).sort((a, b) => a.d - b.d)[0];
   return best && best.p.rating != null ? { r:best.p.rating, n:best.p.userRatingCount || 0, uri:best.p.googleMapsUri } : null;
+}
+/* Abgleich mit Google: Campingplatz an derselben Stelle (≤ 400 m) mit anderem Namen → „bei Google: …“
+   (OSM-Namen sind manchmal veraltet). Nur live/im Arbeitsspeicher wie die Bewertungen. */
+const gNames = new Map();          // camp id → { name, uri } | null (gleich/nichts gefunden)
+const NAME_STOP = new Set(['camping', 'campingplatz', 'campsite', 'camp', 'camper', 'caravan', 'caravaning', 'stugby', 'stugor', 'park', 'plads', 'platz',
+  'resort', 'holiday', 'ferienpark', 'vandrarhem', 'family', 'familie', 'och', 'and', 'und', 'with', 'the', 'der', 'die', 'das']);
+const nameTokens = n => (n || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !NAME_STOP.has(w));
+function namesDiffer(a, b){
+  const A = nameTokens(a), B = nameTokens(b);
+  if (!B.length) return false;
+  if (!A.length) return true;                       // OSM ohne (sprechenden) Namen
+  return !A.some(x => B.some(y => x === y || (x.length >= 5 && y.length >= 5 && x.slice(0, 5) === y.slice(0, 5))));
+}
+async function loadGName(c){
+  if (!settings.gkey || !c || c.id == null || gNames.has(c.id)) return;
+  gNames.set(c.id, null);
+  try {
+    const res = await fetch('https://places.googleapis.com/v1/places:searchNearby', { method:'POST',
+      headers:{ 'Content-Type':'application/json', 'X-Goog-Api-Key':settings.gkey, 'X-Goog-FieldMask':'places.displayName,places.location,places.googleMapsUri' },
+      body: JSON.stringify({ includedTypes:['campground', 'rv_park'], maxResultCount:5, rankPreference:'DISTANCE', languageCode:'de',
+        locationRestriction:{ circle:{ center:{ latitude:c.lat, longitude:c.lon }, radius:400 } } }) });
+    if (!res.ok) return;
+    const j = await res.json(), osm = c.tags?.name || '';
+    const near = (j.places || []).map(p => ({ p, d:p.location ? hav([c.lat, c.lon], [p.location.latitude, p.location.longitude]) : 1e9 })).sort((a, b) => a.d - b.d)[0];
+    const gn = near && near.p.displayName?.text;
+    if (gn && near.d <= 400 && namesDiffer(osm, gn)) gNames.set(c.id, { name:gn, uri:near.p.googleMapsUri, d:near.d });
+  } catch(e){ console.warn(e); }
+}
+function gNameHtml(c){
+  const g = gNames.get(c.id);
+  return g ? `<div class="gname">bei Google: <a href="${esc(g.uri)}" target="_blank" rel="noopener"><b>${esc(g.name)}</b></a> <span class="muted">– Name in OpenStreetMap evtl. veraltet</span></div>` : '';
 }
 // lädt Bewertungen für die ersten (sichtbaren) Plätze einer Liste – max. 20 je Liste, um das Google-Kontingent zu schonen
 async function loadRatings(list){
@@ -1590,7 +1665,7 @@ function campInfo(c, mode){
   const web = t.website || t['contact:website'] || t.url, phone = t.phone || t['contact:phone'];
   const ok = isOk(c);
   const p4n = `https://park4night.com/de/search?lat=${c.lat.toFixed(5)}&lng=${c.lon.toFixed(5)}&z=14`;
-  return `<div class="ci"><b>${esc(name)}</b>${mode === 'cand' || mode === 'split' ? prevBadge(c) : ''}
+  return `<div class="ci"><b>${esc(name)}</b>${settings.gkey ? `<div class="gname-slot" data-gn="${esc(String(c.id))}">${gNameHtml(c)}</div>` : ''}${mode === 'cand' || mode === 'split' ? prevBadge(c) : ''}
     <div><span class="badge ${ok ? 'ok' : 'unk'}">${ok ? 'Wohnwagen erlaubt' : 'Wohnwagen: keine Angabe'}</span></div>
     ${amenList(c).length ? `<div>${amenList(c).map(a => a.i + ' ' + a.t).join(' · ')}</div>` : ''}
     ${mode === 'alt' && c.air != null ? `<div>${fkm1(c.air)} vom bisherigen Platz (Luftlinie)</div>` : ''}
@@ -1674,6 +1749,8 @@ function afterText(c){
 }
 map.on('popupclose', e => { lastClosed = { src:e.popup._source, t:Date.now() }; });
 map.on('popupopen', e => {
+  e.popup.getElement().querySelectorAll('[data-gn]').forEach(el => { const c = campIndex.get(el.dataset.gn) || state.stages.map(s => s.to).find(t => String(t.id) === el.dataset.gn);
+    if (c) loadGName(c).then(() => { el.innerHTML = gNameHtml(c); e.popup.update(); }); });
   e.popup.getElement().querySelectorAll('[data-pd]').forEach(el => { const c = campIndex.get(el.dataset.pd); if (c) fillPopDist(el, c); });
   e.popup.getElement().querySelectorAll('[data-pick]').forEach(b => {
     b.onclick = () => { const c = campIndex.get(b.dataset.pick); map.closePopup(); if (c) run(() => selectCamp(c)); };
@@ -1814,6 +1891,7 @@ function detailsHtml(s, i){
     ${rzHtml(c)}
     <div><span class="k">Wohnwagen</span> ${isOk(c) ? '<span class="badge ok">erlaubt</span>' : '<span class="badge unk">keine Angabe</span>'}${am.length ? ' · ' + am.map(a => a.i + ' ' + a.t).join(', ') : ''}</div>
     ${settings.gkey && gRate.has(c.id) ? `<div><span class="k">Google</span>${rateHtml(c)}</div>` : ''}
+    ${gNameHtml(c)}
     <div><span class="k">Adresse</span> ${c.addr ? esc(c.addr) : '<span class="muted">wird ermittelt …</span>'}</div>
     <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
     <div><span class="k">Strecke</span>${landHtml(s)}</div>
@@ -1885,7 +1963,7 @@ function renderSegAsk(){
   const nights = segs.reduce((a, g) => a + (g.n - 1) + (g.kind === 'sight' ? g.nights : 0), 0);
   let h = `<div class="total"><div class="muted">${state.round ? 'Rundreise ab' : 'Reise'} ${esc(shortLabel(state.start.label))} · ${segs.length} Abschnitte</div>
     <div class="big">${fkm(o.dist)}</div><div>ca. ${fdur(o.dur)} reine Fahrzeit · ${n} Etappen · ${nights} Übernachtungen</div></div>
-    ${tripHtml()}<h3>Abschnitte</h3><ol class="segs">`;
+    <h3>Abschnitte</h3><ol class="segs">`;
   let from = state.start;
   segs.forEach((g, k) => {
     const name = g.kind === 'sight' ? (g.rest ? '⛺ ' : '★ ') + shortLabel(g.to.label) : g.kind === 'home' ? 'zurück nach ' + shortLabel(g.to.label) : shortLabel(g.to.label);
@@ -1927,11 +2005,10 @@ function renderPanel(){
   let h = askingN() ? renderAsk() : '';
   if (state.stages.length){
     const ds = stageDates(), cur = currentStage();
-    h += tripHtml();
     h += '<h3>Etappen</h3><ol class="stages">';
     state.stages.forEach((s, i) => {
       const camp = s.to.kind === 'camp', open = state.openDet.has(i), altOpen = state.alt && state.alt.i === i, splitOpen = state.split && state.split.i === i;
-      h += `<li class="stage"><div class="num">Etappe ${i + 1}${ds ? ' · ' + fdate(ds[i]) : ''}${i === cur ? ' <span class="badge best">heute/nächste</span>' : ''}</div>
+      h += `<li class="stage" data-stagecard="${i}"><div class="num">Etappe ${i + 1}${ds ? ' · ' + fdate(ds[i]) : ''}${i === cur ? ' <span class="badge best">heute/nächste</span>' : ''}</div>
         <div class="route">${esc(shortLabel(s.from.label))} → ${esc(shortLabel(s.to.label))}${camp ? amenHtml(s.to) : ''}${s.memo?.res ? '<span class="badge res">reserviert ✓</span>' : ''}</div>
         <div class="row"><span class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${s.to.detour ? ` · ${fkm1(s.to.detour.d)} / ${fdur(s.to.detour.t)} von der Route bis zum Platz` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? ` · ${s.nights} Nächte` : ''}</span>
         ${camp && !(state.done && i === state.stages.length - 1) ? `<button class="btn small" type="button" data-edit="${i}" ${busy ? 'disabled' : ''} title="Ab hier neu planen (anderen Platz im Korridor wählen)">Platz ändern</button>` : ''}</div>
@@ -2034,7 +2111,14 @@ function renderPanel(){
       <button class="btn" type="button" id="gpxBtn">GPX</button>
       <button class="btn ghost" type="button" id="newBtn" ${busy ? 'disabled' : ''}>Neue Tour</button></div>`;
   }
+  if (!h) h = `<div class="muted" style="margin:10px 0">Noch keine Strecke berechnet. Unter <button class="linkbtn" type="button" data-goto="goals">1 Ziele</button> Start, Zwischenziele und Ziel eingeben und „Strecke berechnen“ drücken.</div>`;
+  else if (state.done) h += `<button class="btn primary wide" type="button" data-goto="trip" style="margin-top:10px">Zum Reiseplan →</button>`;
   el.innerHTML = h;
+  const fin = planFinished();
+  if (fin && !prevDone) uiTab = 'trip';     // alle Plätze inkl. Zielplatz gewählt → Reiseplan zeigen
+  prevDone = fin;
+  applyTab();
+  el.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => setTab(b.dataset.goto));
   el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => {
     const i = +b.dataset.edit, from = state.stages[i].from;
     if (state.stages.length - i > 1 && !confirm(`Ab Etappe ${i + 1} neu planen? Die folgenden Etappen werden dabei neu gewählt.`)) return;
@@ -2044,7 +2128,7 @@ function renderPanel(){
   el.querySelectorAll('[data-det]').forEach(b => b.onclick = () => {
     const i = +b.dataset.det;
     if (state.openDet.has(i)) state.openDet.delete(i);
-    else { state.openDet.add(i); ensureOneAddr(i); ensureCountries([i]); if (settings.gkey) loadRatings([state.stages[i].to]); }
+    else { state.openDet.add(i); ensureOneAddr(i); ensureCountries([i]); if (settings.gkey){ loadRatings([state.stages[i].to]); loadGName(state.stages[i].to).then(renderPanel); } }
     renderPanel();
   });
   el.querySelectorAll('form.addcamp').forEach(f => f.onsubmit = e => { e.preventDefault(); if (!state.busy) searchAddCamp(f); });
@@ -2118,12 +2202,40 @@ function renderPanel(){
     Object.assign(state, { stages:[], pending:null, done:false, n:null, endCands:[] }); applyKeep(kp); setStatus(''); renderAll(); fitAll(); };
   const esb = $('#endSearchBtn'); if (esb) esb.onclick = () => run(loadEndCands);
   const cb = $('#contBtn'); if (cb) cb.onclick = () => run(() => computeNext(state.stages.length ? state.stages[state.stages.length - 1].to : state.start));
-  const sb = $('#saveBtn'); if (sb) sb.onclick = saveTour;
+  const sb = $('#saveBtn'); if (sb) sb.onclick = () => saveTour();
   const gb = $('#gpxBtn'); if (gb) gb.onclick = exportGpx;
   const xb = $('#expBtn'); if (xb) xb.onclick = exportTour;
   const nb = $('#newBtn'); if (nb) nb.onclick = resetTour;
 }
 function renderAll(){ renderPanel(); renderMap(); }
+/* Reiter „1 Ziele · 2 Plätze · 3 Reiseplan“. window.__allTabs (nur Tests) zeigt alles wie früher untereinander. */
+let uiTab = 'goals', prevDone = false;
+// fertig geplant: alle Etappen + Zielplatz gewählt (oder Rundreise zu Hause / keine Plätze am Ziel)
+function planFinished(){
+  const l = state.stages[state.stages.length - 1]; if (!state.done || !l) return false;
+  const home = state.segs && state.segs[state.segs.length - 1].kind === 'home';
+  return home || l.to.kind === 'camp' || (state.endSearched && !state.endCands.length);
+}
+function setTab(t){
+  if (uiTab !== t){ uiTab = t; $('#scroll').scrollTop = 0; }
+  applyTab();
+}
+function applyTab(){
+  const all = !!window.__allTabs;
+  $('#planForm').hidden = !all && uiTab !== 'goals';
+  $('#result').hidden = !all && uiTab !== 'plan';
+  $('#tripView').hidden = !all && uiTab !== 'trip';
+  const total = state.segs ? state.segs.reduce((a, g) => a + g.n, 0) : state.n;
+  const cnt = { goals: state.via.length ? ` <span class="cnt">(${state.via.length})</span>` : '',
+    plan: state.stages.length ? ` <span class="cnt">(${state.stages.length}${total && !state.done ? '/' + total : ''})</span>` : '', trip:'' };
+  const lab = { goals:'1 Ziele', plan:'2 Plätze', trip:'3 Reiseplan' };
+  document.querySelectorAll('[data-tabbtn]').forEach(b => { const t = b.dataset.tabbtn, on = t === uiTab;
+    b.classList.toggle('on', on); b.setAttribute('aria-selected', on); b.innerHTML = lab[t] + cnt[t]; });
+  $('#tripBar').innerHTML = state.stages.length || state.overview ? tripHtml() : '';
+  document.documentElement.style.setProperty('--stick-h', ($('#stickyHead').offsetHeight + 8) + 'px');   // Platz unter der festen Kopfzeile beim Scrollen
+  if (uiTab === 'trip' || all) renderTrip();
+}
+document.querySelectorAll('[data-tabbtn]').forEach(b => b.onclick = () => setTab(b.dataset.tabbtn));
 
 /* Bottom-Sheet am Handy */
 const SHEET = ['min', 'half', 'full'];
@@ -2425,6 +2537,7 @@ $('#planForm').addEventListener('submit', e => {
   }
   if (!settings.key){ useFallback = true; renderFallbackNote(); }
   const keep = snapshotKeep();
+  setTab('plan');
   run(async () => {
     setStatus('Orte werden gesucht …', 'busy');
     if (!state.start) state.start = await geocodeFirst($('#startIn').value);
@@ -2632,6 +2745,8 @@ function storeTour(tour){
 }
 function flash(msg){
   setStatus(msg);
+  // zusätzlich kurz als Hinweis über der Karte (die Statuszeile im Menü ist oft weggescrollt)
+  const t = $('#toast'); if (t){ t.textContent = msg; t.hidden = false; clearTimeout(flash._t); flash._t = setTimeout(() => { t.hidden = true; }, 3200); }
   setTimeout(() => { if ($('#status').textContent === msg) setStatus(''); }, 2500);
 }
 const normName = n => String(n || '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -2642,19 +2757,28 @@ function deleteTourLocal(id){
   const m = syncMeta();
   if (m.known[id] && !m.deleted.includes(id)){ m.deleted.push(id); saveSyncMeta(m); }
 }
-function saveTour(){
+function saveTour(asCopy){
   if (!state.stages.length) return;
   const tours = loadTours(), old = tours.find(t => t.id === state.tourId);
-  let name = old ? old.name : defaultName(), targetId = state.tourId;
+  if (old && !asCopy){                                   // schon gespeichert → ohne Rückfrage aktualisieren, nur Hinweis
+    const tour = buildTour(old.name, old.id);
+    try { storeTour(tour); } catch(e){ setStatus('Speicher voll – bitte alte Touren löschen.', 'error'); return; }
+    renderPanel();
+    if (ghOn()){ setStatus(`Tour „${old.name}“ aktualisiert – wird online gesichert …`, 'busy');
+      syncAndReport(`Tour „${old.name}“ aktualisiert · online gesichert`, `Tour „${old.name}“ aktualisiert – aber nur in diesem Browser. `); }
+    else flash(`Tour „${old.name}“ aktualisiert ✓`);
+    return;
+  }
+  let name = old ? (asCopy ? `${old.name} (Kopie)` : old.name) : defaultName(), targetId = asCopy ? Date.now() : state.tourId;
   // Gleicher Name wie eine andere Tour → Warnung: überschreiben oder anderen Namen wählen
   for (;;){
     name = prompt('Name der Tour', name);
     if (name === null) return;
     name = name.trim() || defaultName();
-    const twin = tours.find(t => t.id !== state.tourId && normName(t.name) === normName(name));
+    const twin = tours.find(t => (asCopy || t.id !== state.tourId) && normName(t.name) === normName(name));
     if (!twin){ break; }
     if (confirm(`Es gibt schon eine Tour „${twin.name}“ (gespeichert ${fstamp(twin.savedAt)}).\n\nOK = diese Tour damit überschreiben\nAbbrechen = anderen Namen wählen`)){
-      if (state.tourId && state.tourId !== twin.id && old) deleteTourLocal(state.tourId);   // bisherigen eigenen Eintrag entfernen
+      if (!asCopy && state.tourId && state.tourId !== twin.id && old) deleteTourLocal(state.tourId);   // bisherigen eigenen Eintrag entfernen
       targetId = twin.id; break;
     }
     let k = 2; while (tours.some(t => normName(t.name) === normName(`${name} (${k})`))) k++;
@@ -2663,6 +2787,7 @@ function saveTour(){
   const tour = buildTour(name, targetId);
   try { storeTour(tour); state.tourId = tour.id; }
   catch(e){ setStatus('Speicher voll – bitte alte Touren löschen.', 'error'); return; }
+  renderPanel();
   if (ghOn()){ setStatus('Tour gespeichert – wird online gesichert …', 'busy');
     syncAndReport('Tour gespeichert · online gesichert', 'Tour gespeichert – aber nur in diesem Browser. '); }
   else flash('Tour gespeichert.');
@@ -2717,9 +2842,20 @@ function openTours(fromButton){
     const km = t.stages.reduce((a, s) => a + s.dist, 0);
     return `<li><div class="t"><b>${esc(t.name)}</b><div class="muted">${t.stages.length} Etappen${t.done ? '' : ' (unvollständig)'} · ${fkm(km)} · ${fstamp(t.savedAt)}</div></div>
       <button class="btn small primary" type="button" data-load="${t.id}">Laden</button>
+      <button class="btn small" type="button" data-ren="${t.id}" aria-label="Umbenennen" title="Umbenennen">✎</button>
       <button class="btn small" type="button" data-del="${t.id}" aria-label="Löschen">✕</button></li>`;
   }).join('') : '<li class="muted">Noch keine Touren gespeichert.</li>';
   ul.querySelectorAll('[data-load]').forEach(b => b.onclick = () => { $('#toursDlg').close(); loadTour(+b.dataset.load); });
+  ul.querySelectorAll('[data-ren]').forEach(b => b.onclick = () => {
+    const t = tours.find(x => x.id === +b.dataset.ren); if (!t) return;
+    let name = prompt('Neuer Name der Tour', t.name); if (name === null) return;
+    name = name.trim(); if (!name || name === t.name) return;
+    const twin = tours.find(x => x.id !== t.id && normName(x.name) === normName(name));
+    if (twin && !confirm(`Es gibt schon eine Tour „${twin.name}“. Trotzdem so nennen?`)) return;
+    storeTour({ ...t, name, savedAt:new Date().toISOString() });
+    openTours(); renderPanel();
+    if (ghOn()) syncAndReport(`Tour „${name}“ umbenannt · online gesichert`, 'Umbenannt – aber nur in diesem Browser. '); else flash(`Tour heißt jetzt „${name}“.`);
+  });
   ul.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
     const t = tours.find(x => x.id === +b.dataset.del);
     if (t && confirm(`„${t.name}“ löschen?`)){
@@ -2733,6 +2869,7 @@ function openTours(fromButton){
 }
 function loadTour(id, given){
   const t = given || loadTours().find(x => x.id === id); if (!t || state.busy) return;
+  uiTab = t.done ? 'trip' : 'plan'; prevDone = !!t.done;     // fertige Tour → gleich der Reiseplan
   Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id,
     endCands: (t.endCands || []).map(c => ({ ...c })), endSearched: !!t.endCands,
     n: t.n || (t.done ? t.stages.length : null), overview:null, date: t.date || null, alt:null, split:null, prevPicks:null, keepEnd:null, openDet:new Set(), showEndList:false,
@@ -2753,7 +2890,51 @@ function resetTour(){
   Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null, endCands:[], n:null, overview:null,
     date:null, alt:null, split:null, prevPicks:null, keepEnd:null, openDet:new Set(), showEndList:false, via:[], round:false, segs:null, endSearched:false, ret:null });
   $('#startIn').value = DEMO.start; $('#endIn').value = DEMO.end; renderVia();
-  setStatus(''); renderAll();
+  uiTab = 'goals'; prevDone = false; setStatus(''); renderAll();
+}
+async function loadXlsx(){
+  if (window.XLSX) return window.XLSX;
+  await new Promise((res, rej) => { const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = res;
+    sc.onerror = () => rej(new Error('Excel-Export braucht einmal Internet (Bibliothek konnte nicht geladen werden).')); document.head.appendChild(sc); });
+  return window.XLSX;
+}
+/* Ein Blatt: je Etappe Fahrt-Besuche, Campingplatz/Ziel, darunter seine Sehenswürdigkeiten (Spalte „Typ“) */
+function xlsxRows(){
+  const ds = stageDates(), st = state.stages, last = st.length - 1, home = state.segs && state.segs[state.segs.length - 1].kind === 'home';
+  const H = ['Etappe', 'Typ', 'Datum', 'Bis', 'Nächte', 'Name', 'Adresse', 'Koordinaten', 'Entfernung', 'Fahrt km', 'Fahrzeit', 'Rezeption', 'Check-in', 'Check-out', 'Website', 'Telefon', 'Navigation', 'Notiz', 'Reserviert'];
+  const rows = [H], links = [];
+  const day = d => d ? new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) : '';
+  st.forEach((s, i) => {
+    const c = s.to, camp = c.kind === 'camp', n = Math.max(1, +s.nights || 1), web = camp ? webOf(c) : '', r = camp && rzData[c.id];
+    const okR = r && web && r.website === web && (r.status === 'ok' || r.status === 'partial');
+    visitsOf(s).forEach(v => rows.push([i + 1, 'Besuch unterwegs', day(ds && ds[i]), '', '', v.label, '', fcoord(v), '', '', '', '', '', '', '', '', '', `≈ ${fhours(v.hours)} Besuch`, '']));
+    const row = [i + 1, camp ? 'Campingplatz' : (i === last && home ? 'Zuhause' : 'Ziel'), day(ds && ds[i]), ds && i < last ? day(addDays(ds[i], n)) : '',
+      i < last ? n : '', c.label, c.addr && c.addr !== 'unbekannt' ? c.addr : '', fcoord(c), c.detour ? `${fkm1(c.detour.d)} von der Route` : '',
+      Math.round(s.dist / 1000), fdur(s.dur), okR ? (r.hours || '') : '', okR ? (r.checkin?.text || '') : '', okR ? (r.checkout?.text || '') : '',
+      web || '', camp ? (phoneOf(c) || '') : '', 'Route', s.memo?.text || '', s.memo?.res ? 'ja' : ''];
+    rows.push(row);
+    if (web) links.push({ r:rows.length - 1, c:14, url:safeUrl(web) });
+    links.push({ r:rows.length - 1, c:16, url:navUrl(c) });
+    stopSights(c).forEach(x => rows.push([i + 1, 'Sehenswürdigkeit', '', '', '', x.label, '', x.lat != null ? fcoord(x) : '',
+      x.d != null ? `${x.est ? '≈ ' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} vom Platz (ohne Wohnwagen)` : x.air != null ? `${fkm1(x.air)} Luftlinie` : '', '', '', '', '', '', '', '', '', '', '']));
+  });
+  return { rows, links };
+}
+async function exportXlsx(){
+  if (!state.stages.length) return;
+  setStatus('Excel-Datei wird erstellt …', 'busy');
+  try {
+    await ensureAddrs();
+    const X = await loadXlsx(), { rows, links } = xlsxRows();
+    const ws = X.utils.aoa_to_sheet(rows, { cellDates:true, dateNF:'ddd dd"."mm"."yyyy' });
+    links.forEach(l => { const a = X.utils.encode_cell({ r:l.r, c:l.c }); if (ws[a]) ws[a].l = { Target:l.url }; });
+    ws['!cols'] = [6, 16, 14, 14, 7, 34, 34, 20, 26, 8, 9, 22, 18, 18, 28, 16, 11, 28, 9].map(w => ({ wch:w }));
+    ws['!autofilter'] = { ref: X.utils.encode_range({ s:{ r:0, c:0 }, e:{ r:rows.length - 1, c:rows[0].length - 1 } }) };
+    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Reiseplan');
+    X.writeFile(wb, fileBase(tourTitle()) + '.xlsx');
+    flash('Excel-Datei erstellt.');
+  } catch(e){ setStatus(e.message || String(e), 'error'); }
 }
 function exportGpx(){
   if (!state.stages.length) return;
@@ -2782,78 +2963,97 @@ ${pts.map(p => `    <trkpt lat="${p[0].toFixed(6)}" lon="${p[1].toFixed(6)}"/>`)
 }
 
 /* ---------- Übersicht (Harmonika) ---------- */
-function tourTitle(){ return state.start && state.end ? `${shortLabel(state.start.label)} → ${shortLabel(state.end.label)}` : 'Tour'; }
+function tourTitle(){
+  const t = state.tourId && loadTours().find(x => x.id === state.tourId);
+  return t ? t.name : state.start && (state.end || state.round) ? defaultName() : 'Tour';
+}
 function totalsText(){
   const km = state.stages.reduce((a, s) => a + s.dist, 0), t = state.stages.reduce((a, s) => a + s.dur, 0);
   const ds = stageDates(), n = state.stages.length;
   return `${n} ${n === 1 ? 'Etappe' : 'Etappen'} · ${fkm(km)} · ${fdur(t)} Fahrzeit${ds ? ` · ${fdate(ds[0])} – ${fdate(ds[ds.length - 1])}` : ''}${state.done ? '' : ' · noch nicht fertig geplant'}`;
 }
-/* Tagesplan: je Etappe ein Fahrtag (mit Besuchen unterwegs), danach je weitere Nacht ein Tag am Platz – mit
-   Ausflügen zu den Sehenswürdigkeiten des Basislagers oder frei. Zuordnung Sehenswürdigkeit → Tag in stage.dayPlan
-   (0 = Ankunftstag, 1 … Nächte−1 = volle Tage); ohne Zuordnung gleichmäßig auf die vollen Tage verteilt. */
-function dayPlan(){
-  const ds = stageDates(), days = [];
-  const addD = (d, n) => { if (!d) return null; const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-  state.stages.forEach((s, i) => {
-    days.push({ date: ds ? ds[i] : null, kind:'drive', i, s, visits:visitsOf(s), after:[] });
-    if (i === state.stages.length - 1 && state.done) return;
-    const N = Math.max(1, +s.nights || 1), sights = s.to.sights || [], plan = s.dayPlan || {};
-    const assign = sights.map((x, q) => plan[x.uid] != null ? Math.min(plan[x.uid], N - 1) : (N > 1 ? 1 + Math.floor(q * (N - 1) / sights.length) : 0));
-    days[days.length - 1].after = sights.filter((_, q) => assign[q] === 0);
-    for (let j = 1; j < N; j++){
-      const it = sights.filter((_, q) => assign[q] === j);
-      days.push({ date:addD(ds ? ds[i] : null, j), kind: it.length ? 'trip' : 'free', i, j, s, items:it });
-    }
-  });
-  return days;
-}
 const CARAVAN = '<svg class="cv" viewBox="0 0 72 40" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M37 30 H58 V20 C57 12 51 6 43 6 H14 a6 6 0 0 0 -6 6 V30 H25 A6 6 0 0 1 37 30"/><path d="M8 23 H14 M23 23 H58"/><rect x="14" y="11" width="9" height="16" rx="2.5"/><path d="M35 11 H50 C52.5 11 54 13 54.5 18 H35 Z"/><path d="M58 28 H70"/><circle cx="31" cy="31" r="4"/></svg>';
-const sightLine = (x, j, i) => `★ ${esc(shortLabel(x.label))}${x.d != null ? ` · ${x.est ? '≈' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''}` : ''}`;
-function daySelect(s, i, x){
-  const N = Math.max(1, +s.nights || 1), ds = stageDates(), cur = (s.dayPlan || {})[x.uid];
-  const days = dayPlan().filter(d => d.i === i && (d.kind !== 'drive' || true));
-  const val = cur != null ? Math.min(cur, N - 1) : (N > 1 ? null : 0);
-  let o = `<select data-dpl="${i}|${esc(x.uid)}" aria-label="Tag für ${esc(shortLabel(x.label))}">`;
-  for (let j = 0; j < N; j++){
-    const d = ds ? (() => { const y = new Date(ds[i]); y.setDate(y.getDate() + j); return fdate(y); })() : `Tag ${j + 1} dort`;
-    const auto = val == null && j === 1 + Math.floor((s.to.sights.indexOf(x)) * (N - 1) / s.to.sights.length);
-    o += `<option value="${j}"${val === j || auto ? ' selected' : ''}>${j === 0 ? 'Ankunftstag' : d}</option>`;
-  }
-  return o + '</select>';
+/* ---------- Reiseplan: Zeitleiste (Fahrt → Campingplatz mit untergeordneten Sehenswürdigkeiten) ---------- */
+const tlOpen = new Set();
+const addDays = (d, n) => { if (!d) return null; const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+function stopSights(c){ return c.sights && c.sights.length ? c.sights : c.near ? [c.near] : []; }
+function stopBodyHtml(s, i){
+  const c = s.to, camp = c.kind === 'camp', web = camp && webOf(c), phone = camp && phoneOf(c), sg = stopSights(c);
+  return `${sg.length ? `<div><span class="k">Sehenswürdigkeiten</span> ${sg.map(x => esc(shortLabel(x.label)) + (x.d != null ? ` · ${x.est ? '≈' : ''}${fkm1(x.d)}${x.t ? ' / ' + fdur(x.t) : ''} ohne Wohnwagen` : x.air != null ? ` · ${fkm1(x.air)} Luftlinie` : '')).join('<br>')}</div>` : ''}
+    ${camp ? `<div><span class="k">Wohnwagen</span> ${isOk(c) ? '<span class="badge ok">erlaubt</span>' : '<span class="badge unk">keine Angabe</span>'}${amenHtml(c)}${rateHtml(c)}</div>
+    ${gNameHtml(c)}
+    <div><span class="k">Adresse</span> ${esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–')}</div>
+    <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
+    ${rzHtml(c, true) || ''}
+    ${web ? `<div><span class="k">Website</span> <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">${esc(shortUrl(web))}</a></div>` : ''}
+    ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
+    ${s.memo?.text || s.memo?.res ? `<div><span class="k">Notiz</span> ${s.memo.res ? 'reserviert ✓ ' : ''}${esc(s.memo.text || '')}</div>` : ''}` : ''}`;
 }
-function renderDayPlan(){
-  const days = dayPlan(), today = dayKey(new Date());
-  let h = '<ol class="days">';
-  days.forEach((d, k) => {
-    const now = d.date && dayKey(d.date) === today, date = d.date ? fdate(d.date) : `Tag ${k + 1}`;
-    if (d.kind === 'drive'){
-      const s = d.s;
-      h += `<li class="day drive${now ? ' now' : ''}"><span class="dd">${date}</span><div class="dt"><b>${CARAVAN} Fahrt ${esc(shortLabel(s.from.label))} → ${esc(shortLabel(s.to.label))}</b>
-        <div class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${d.visits.length ? ' · unterwegs: ' + d.visits.map(v => `${esc(shortLabel(v.label))} (≈ ${fhours(v.hours)})`).join(', ') : ''}</div>
-        ${d.after.length ? `<div class="sightinfo">nach Ankunft: ${d.after.map(x => sightLine(x)).join(' · ')}</div>` : ''}</div></li>`;
-    } else {
-      h += `<li class="day ${d.kind}${now ? ' now' : ''}"><span class="dd">${date}</span><div class="dt"><b>${d.kind === 'trip' ? 'Ausflug ohne Wohnwagen' : 'Freier Tag'}</b>
-        <span class="muted"> · ${esc(shortLabel(d.s.to.label))}</span>
-        ${d.items && d.items.length ? `<div class="sightinfo">${d.items.map(x => sightLine(x)).join('<br>')}</div>` : ''}</div></li>`;
-    }
+function timelineHtml(ia){
+  const ds = stageDates(), cur = currentStage(), st = state.stages, last = st.length - 1;
+  const home = state.segs && state.segs[state.segs.length - 1].kind === 'home';
+  let h = `<div class="tlhead"><h3 style="margin:6px 0">${esc(tourTitle())}</h3>${ia ? `<span class="muted"><button class="linkbtn" type="button" data-tlall="1">alle auf</button> · <button class="linkbtn" type="button" data-tlall="0">alle zu</button></span>` : ''}</div>
+    <div class="muted">${esc(totalsText())}</div><ol class="tl">
+    <li class="tl-pt"><b>Start: ${esc(shortLabel(state.start.label))}</b>${ds ? ` <span class="muted">· ${fdate(ds[0])}</span>` : ''}</li>`;
+  st.forEach((s, i) => {
+    const vs = visitsOf(s), c = s.to;
+    h += `<li class="tl-drive"><b>${CARAVAN}${ds ? fdate(ds[i]) + ' · ' : ''}Fahrt nach ${esc(shortLabel(c.label))}</b>
+      <div class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${vs.length ? ` · Tag gesamt ≈ ${fdur(s.dur + vs.reduce((a, v) => a + (+v.hours || 2) * 3600, 0))}` : ''}${s.ex && s.ex.ferry > 500 ? ' · ⛴ Fähre' : ''}</div>
+      ${vs.map(v => `<div class="tl-visit">◆ unterwegs: ${esc(shortLabel(v.label))} (≈ ${fhours(v.hours)})${ia ? ` · <a href="${parkUrl(v)}" target="_blank" rel="noopener">Parken fürs Gespann</a>` : ''}</div>`).join('')}</li>`;
+    if (i === last && c.kind !== 'camp'){ h += `<li class="tl-pt"><b>${home ? 'Zurück in' : 'Ziel:'} ${esc(shortLabel(c.label))}</b></li>`; return; }
+    const n = Math.max(1, +s.nights || 1), sg = stopSights(c), isLast = i === last;
+    const when = ds ? (isLast ? `ab ${fdate(ds[i])}` : `${fdate(ds[i])} – ${fdate(addDays(ds[i], n))}`) : '';
+    const stay = isLast ? 'Endpunkt' : `${n} ${n === 1 ? 'Nacht' : 'Nächte'}${n > 1 ? ` · ${n - 1} ${n === 2 ? 'Tag' : 'Tage'} vor Ort` : ''}`;
+    const open = !ia || tlOpen.has(i) || (i === cur && !tlOpen.has(-1));
+    const sum = `<div class="tl-name">⛺ ${esc(c.label)}${s.memo?.res ? ' <span class="badge res">reserviert ✓</span>' : ''}${i === cur ? ' <span class="badge best">heute/nächste</span>' : ''}</div>
+      <div class="muted">${when ? when + ' · ' : ''}${stay}</div>
+      ${sg.length ? `<div class="tl-sights">${sg.map(x => '★ ' + esc(shortLabel(x.label))).join(' · ')}</div>` : ''}`;
+    const body = `<div class="tl-body">${stopBodyHtml(s, i)}
+      ${ia && !isLast ? `<div class="nstep">Nächte hier <button type="button" data-tlnight="${i}" data-d="-1" aria-label="eine Nacht weniger" ${n <= 1 ? 'disabled' : ''}>−</button><b>${n}</b><button type="button" data-tlnight="${i}" data-d="1" aria-label="eine Nacht mehr">+</button></div>` : ''}
+      ${ia ? `<div class="sbtns"><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation</a>
+        <button class="btn small" type="button" data-share="${i}">📤 Teilen</button>
+        <button class="btn small" type="button" data-tledit="${i}">Bearbeiten</button></div>` : ''}</div>`;
+    h += `<li class="tl-stop${i === cur ? ' cur' : ''}">${ia ? `<details data-tl="${i}"${open ? ' open' : ''}><summary>${sum}</summary>${body}</details>` : `<details open><summary>${sum}</summary>${body}</details>`}</li>`;
   });
-  h += '</ol>';
-  // Zuordnung ändern
-  const bases = state.stages.map((s, i) => ({ s, i })).filter(o => (o.s.to.sights || []).length && (+o.s.nights || 1) > 1);
-  if (bases.length){
-    h += '<h3>Sehenswürdigkeiten auf Tage verteilen</h3>';
-    bases.forEach(({ s, i }) => {
-      h += `<div class="dplan"><b>${esc(shortLabel(s.to.near ? s.to.near.label : s.to.label))}</b> (${s.nights} Nächte)`;
-      s.to.sights.forEach(x => { h += `<label>${esc(shortLabel(x.label))} ${daySelect(s, i, x)}</label>`; });
-      h += '</div>';
-    });
-  }
-  return h;
+  return h + '</ol>';
 }
+function renderTrip(){
+  const el = $('#tripView'); if (!el) return;
+  if (!state.stages.length){
+    el.innerHTML = `<div class="muted" style="margin:10px 0">Noch kein Reiseplan. Erst unter <button class="linkbtn" type="button" data-goto="goals">1 Ziele</button> die Strecke berechnen, dann unter <button class="linkbtn" type="button" data-goto="plan">2 Plätze</button> die Campingplätze wählen.</div>`;
+  } else {
+    const saved = state.tourId && loadTours().some(t => t.id === state.tourId);
+    el.innerHTML = timelineHtml(true) + (!state.done ? `<div class="note" style="margin-top:8px">Noch nicht alle Plätze gewählt – weiter unter <button class="linkbtn" type="button" data-goto="plan">2 Plätze</button>.</div>` : '')
+      + `<div class="actions tl-actions">
+        <button class="btn primary" type="button" data-act="print">Drucken / PDF</button>
+        <button class="btn" type="button" data-act="xlsx">Excel</button>
+        <button class="btn" type="button" data-act="gpx">GPX</button>
+        <button class="btn" type="button" data-act="file">Tour-Datei</button>
+        <button class="btn" type="button" data-act="save" ${state.busy ? 'disabled' : ''}>${saved ? 'Speichern' : 'Tour speichern'}</button>
+        ${saved ? '<button class="btn" type="button" data-act="copy">Kopie speichern</button>' : ''}</div>
+      <div class="muted" style="margin-top:6px">${saved ? 'Änderungen (Nächte, Notizen …) werden automatisch gespeichert. ' : ''}<button class="linkbtn" type="button" data-act="offline">Etappenziele für unterwegs laden</button> (Karte offline)</div>`;
+  }
+  el.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => setTab(b.dataset.goto));
+  el.querySelectorAll('details[data-tl]').forEach(d => d.addEventListener('toggle', () => {
+    const i = +d.dataset.tl; tlOpen.add(-1);            // -1: Nutzer hat selbst auf-/zugeklappt
+    if (d.open){ tlOpen.add(i); ensureOneAddr(i); if (settings.gkey){ loadRatings([state.stages[i].to]); loadGName(state.stages[i].to); } } else tlOpen.delete(i); }));
+  el.querySelectorAll('[data-tlall]').forEach(b => b.onclick = () => { tlOpen.clear(); tlOpen.add(-1);
+    if (b.dataset.tlall === '1') state.stages.forEach((_, i) => tlOpen.add(i)); renderTrip(); if (b.dataset.tlall === '1') ensureAddrs().then(ch => ch && renderTrip()); });
+  el.querySelectorAll('[data-tlnight]').forEach(b => b.onclick = () => {
+    const s = state.stages[+b.dataset.tlnight]; s.nights = Math.max(1, Math.min(30, (+s.nights || 1) + +b.dataset.d)); touch(); renderPanel(); });
+  el.querySelectorAll('[data-tledit]').forEach(b => b.onclick = () => { const i = +b.dataset.tledit;
+    state.openDet.add(i); setTab('plan'); renderPanel(); ensureOneAddr(i);
+    setTimeout(() => document.querySelector(`[data-stagecard="${i}"]`)?.scrollIntoView({ block:'start', behavior:'smooth' }), 30); });
+  el.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy, b));
+  el.querySelectorAll('[data-share]').forEach(b => b.onclick = () => shareStage(+b.dataset.share));
+  const act = { print:() => printTour(), xlsx:() => exportXlsx(), gpx:() => exportGpx(), file:() => exportTour(), save:() => saveTour(), copy:() => saveTour(true), offline:() => prefetchStops() };
+  el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => act[b.dataset.act]());
+}
+
 let sumTab = 'stages';
 function renderSummary(){
   if (sumTab === 'days'){
-    $('#sumBody').innerHTML = `${tripHtml().includes('warn') ? tripHtml() : ''}<div class="sumtabs"><button type="button" data-tab="stages">Etappen</button><button type="button" data-tab="days" class="on">Tagesplan</button></div>` + renderDayPlan();
+    $('#sumBody').innerHTML = `${tripHtml().includes('warn') ? tripHtml() : ''}<div class="sumtabs"><button type="button" data-tab="stages">Etappen</button><button type="button" data-tab="days" class="on">Tagesplan</button></div>` + timelineHtml(false);
     bindSummary(); return;
   }
   const ds = stageDates(), cur = currentStage();
@@ -2893,10 +3093,6 @@ function bindSummary(){
   B.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy, b));
   B.querySelectorAll('[data-share]').forEach(b => b.onclick = () => shareStage(+b.dataset.share));
   B.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { sumTab = b.dataset.tab; renderSummary(); });
-  B.querySelectorAll('[data-dpl]').forEach(sel => sel.onchange = () => {
-    const [i, uid] = sel.dataset.dpl.split('|'), s = state.stages[+i];
-    s.dayPlan = { ...(s.dayPlan || {}), [uid]: +sel.value }; touch(); renderSummary();
-  });
   const ob = $('#offBtn'); if (ob) ob.onclick = () => { $('#sumDlg').close(); prefetchStops(); };
 }
 async function openSummary(){
@@ -2905,20 +3101,29 @@ async function openSummary(){
   if (await ensureAddrs()) renderSummary();
   ensureCountries(state.stages.map((_, i) => i));
 }
-$('#sumBtn').onclick = $('#fabSum').onclick = openSummary;
+$('#sumBtn').onclick = $('#fabSum').onclick = () => {
+  if (window.__allTabs) return openSummary();
+  setTab('trip'); if (isMobile()) setSheet('full');
+  ensureAddrs().then(ch => ch && renderTrip()); ensureCountries(state.stages.map((_, i) => i));
+};
 $('#fbOff').onclick = () => { useFallback = false; renderFallbackNote(); };
 $('#sumX').onclick = $('#sumClose').onclick = () => $('#sumDlg').close();
 
 /* ---------- Druck / PDF: A4 quer, Übersichtskarte + Tabelle ---------- */
 let printMap = null;
 function printDays(){
-  const days = dayPlan(); if (days.length <= state.stages.length) return '';   // nur Fahrtage → Tabelle oben reicht
-  return `<h2 class="pbreak">Tagesplan</h2><table class="dtab"><colgroup><col style="width:22mm"><col style="width:40mm"><col><col style="width:60mm"></colgroup>
-    <thead><tr><th>Datum</th><th>Art</th><th>Programm</th><th>Übernachtung</th></tr></thead><tbody>${days.map((d, k) => {
-      const date = d.date ? fdate(d.date) : 'Tag ' + (k + 1);
-      if (d.kind === 'drive') return `<tr><td>${date}</td><td>Fahrt</td><td>${esc(shortLabel(d.s.from.label))} → ${esc(shortLabel(d.s.to.label))} · ${fkm(d.s.dist)} · ${fdur(d.s.dur)}${d.visits.length ? '<br><span class="sm">unterwegs: ' + d.visits.map(v => esc(shortLabel(v.label)) + ' (≈ ' + fhours(v.hours) + ')').join(', ') + '</span>' : ''}${d.after.length ? '<br><span class="sm">nach Ankunft: ' + d.after.map(x => esc(shortLabel(x.label))).join(', ') + '</span>' : ''}</td><td>${esc(d.s.to.label)}</td></tr>`;
-      return `<tr><td>${date}</td><td>${d.kind === 'trip' ? 'Ausflug' : 'Freier Tag'}</td><td>${(d.items || []).map(x => '★ ' + esc(shortLabel(x.label)) + (x.d != null ? ' · ' + fkm1(x.d) : '')).join('<br>') || '–'}</td><td>${esc(d.s.to.label)}</td></tr>`;
-    }).join('')}</tbody></table>`;
+  // Reiseplan-Seite: Fahrten und Aufenthalte (Sehenswürdigkeiten unter dem Platz), nur wenn es mehr als reine Fahrtage gibt
+  const st = state.stages, ds = stageDates(), last = st.length - 1;
+  if (!st.some((s, i) => (i < last && (+s.nights || 1) > 1) || stopSights(s.to).length || visitsOf(s).length)) return '';
+  let rows = '';
+  st.forEach((s, i) => {
+    const c = s.to, n = Math.max(1, +s.nights || 1), vs = visitsOf(s), sg = stopSights(c);
+    rows += `<tr><td>${ds ? fdate(ds[i]) : 'Etappe ' + (i + 1)}</td><td>Fahrt</td><td>${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))} · ${fkm(s.dist)} · ${fdur(s.dur)}${vs.length ? '<br><span class="sm">unterwegs: ' + vs.map(v => esc(shortLabel(v.label)) + ' (≈ ' + fhours(v.hours) + ')').join(', ') + '</span>' : ''}</td><td>${esc(c.label)}</td></tr>`;
+    if (i < last || c.kind === 'camp')
+      rows += `<tr><td>${ds ? fdate(ds[i]) + (i < last ? '<br>– ' + fdate(addDays(ds[i], n)) : '') : ''}</td><td>${i < last ? `${n} ${n === 1 ? 'Nacht' : 'Nächte'}` : 'Ende'}</td><td>${sg.map(x => '★ ' + esc(shortLabel(x.label)) + (x.d != null ? ' · ' + fkm1(x.d) : '')).join('<br>') || (n > 1 ? 'freie Tage' : '–')}</td><td>${esc(c.label)}</td></tr>`;
+  });
+  return `<h2 class="pbreak">Reiseplan</h2><table class="dtab"><colgroup><col style="width:26mm"><col style="width:22mm"><col><col style="width:60mm"></colgroup>
+    <thead><tr><th>Datum</th><th>Art</th><th>Programm</th><th>Übernachtung</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function printTour(){
   if (!state.stages.length) return;
