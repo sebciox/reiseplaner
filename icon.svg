@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="112" fill="#9cbca2"/>
   <!-- Wohnwagen (Linien-Icon): Front mit waagerechter Deichsel rechts, Radkasten und Rad getrennt -->
-  <g transform="translate(46 140) scale(5.8)" fill="none" stroke="#1c2420" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M38.5 30 H58 V20 C57 12 51 6 43 6 H14 a6 6 0 0 0 -6 6 V30 H23.5 A7.5 7.5 0 0 1 38.5 30"/>
+  <g transform="translate(46 140) scale(5.8)" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M37 30 H58 V20 C57 12 51 6 43 6 H14 a6 6 0 0 0 -6 6 V30 H25 A6 6 0 0 1 37 30"/>
     <path d="M8 23 H14 M23 23 H58"/>
     <rect x="14" y="11" width="9" height="16" rx="2.5"/>
     <path d="M16.5 19 v1.5"/>
     <path d="M35 11 H50 C52.5 11 54 13 54.5 18 H35 Z"/>
     <path d="M44 11 V18"/>
     <path d="M58 28 H70"/>
-    <circle cx="31" cy="31.5" r="4.6"/>
-    <circle cx="31" cy="31.5" r="1.4"/>
+    <circle cx="31" cy="31" r="4"/>
+    <circle cx="31" cy="31" r="1.2"/>
   </g>
 </svg>

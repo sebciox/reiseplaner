@@ -41,20 +41,25 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 #handle span{display:block;width:44px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
 #scroll{overflow:auto;flex:1;padding:0 16px 20px;-webkit-overflow-scrolling:touch}
 @media (min-width:900px){
-  #panel{top:0;bottom:0;right:auto;width:410px;height:auto !important;border-radius:0;
+  #panel{top:0;bottom:0;right:auto;width:var(--pw,410px);height:auto !important;border-radius:0;
     box-shadow:2px 0 18px rgba(0,0,0,.12)}
   #handle{display:none}
   #scroll{padding-top:14px}
-  #map{left:410px}
+  #map{left:var(--pw,410px)}
+  /* Seitenleiste in der Breite ziehbar (Rand rechts) */
+  #resizer{display:block;position:absolute;top:0;bottom:0;right:-5px;width:10px;cursor:col-resize;z-index:2;touch-action:none}
+  #resizer::after{content:'';position:absolute;top:50%;left:3px;width:4px;height:44px;margin-top:-22px;border-radius:2px;background:var(--line)}
+  #resizer:hover::after,#resizer.on::after{background:var(--brand)}
 }
 .top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .top>div:last-child{display:flex;align-items:center;flex:none}
 .brand{display:flex;align-items:center;gap:8px;min-width:0}
+.brand .logo{flex:none;color:#6a9a74}
 h1{font-size:18px;margin:0;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:899px){
   .top{touch-action:none}
   h1{font-size:17px}
-  .brand img{width:24px;height:24px}
+  .brand .logo{width:36px;height:20px}
   .leaflet-control-attribution{font-size:10px;line-height:1.3;max-width:70vw}
 }
 h2{font-size:17px;margin:0 0 10px}
@@ -179,6 +184,17 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .vialist .vopts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:13px;color:var(--muted)}
 .vialist select{width:100%;max-width:260px;min-width:0}
 .vialist .vbtns{flex:none}
+.vialist li{position:relative;touch-action:pan-y;align-items:center}
+.vgrip{flex:none;width:28px;height:40px;margin:-4px -2px -4px -6px;border:0;background:transparent;color:var(--muted);cursor:grab;
+  display:flex;align-items:center;justify-content:center;border-radius:8px;touch-action:none}
+.vgrip:hover,.vgrip:focus-visible{background:var(--brand-soft);color:var(--brand-ink)}
+.vialist li.dragging{z-index:5;box-shadow:0 6px 20px rgba(0,0,0,.18);background:var(--panel);cursor:grabbing;transition:none}
+.vialist li.drop-before{box-shadow:0 -3px 0 var(--brand)}
+.vialist.drop-end li:last-child{box-shadow:0 3px 0 var(--brand)}
+.vialist .pin-on{font-size:13px}
+#scroll{overflow-x:hidden}
+#scroll form,#scroll section,.field{min-width:0;max-width:100%}
+@media (max-width:899px){ #resizer{display:none} }
 .vialist .vopts{min-width:0}
 .vialist select,.segrow select{font:inherit;font-size:13px;padding:3px 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
 .vialist input[type=number]{width:56px;min-height:30px;padding:3px 6px;font-size:13px}
@@ -272,10 +288,11 @@ a{color:var(--brand-ink)}
 </div>
 
 <aside id="panel" class="half">
+  <div id="resizer" role="separator" aria-orientation="vertical" aria-label="Breite der Seitenleiste ändern" tabindex="0" title="ziehen: Breite ändern"></div>
   <button id="handle" type="button" aria-label="Bereich vergrößern oder verkleinern"><span></span></button>
   <div id="scroll">
     <header class="top">
-      <div class="brand"><img src="icon.svg" alt="" width="28" height="28"><h1>Gespann-Etappen</h1></div>
+      <div class="brand"><svg class="logo" viewBox="0 0 72 40" width="40" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M37 30 H58 V20 C57 12 51 6 43 6 H14 a6 6 0 0 0 -6 6 V30 H25 A6 6 0 0 1 37 30"/><path d="M8 23 H14 M23 23 H58"/><rect x="14" y="11" width="9" height="16" rx="2.5"/><path d="M16.5 19 v1.5"/><path d="M35 11 H50 C52.5 11 54 13 54.5 18 H35 Z"/><path d="M44 11 V18"/><path d="M58 28 H70"/><circle cx="31" cy="31" r="4"/></svg><h1>Gespann-Etappen</h1></div>
       <div>
         <button class="btn ghost" id="sumBtn" type="button" hidden>Übersicht</button>
         <button class="btn ghost" id="toursBtn" type="button">Touren</button>
@@ -1718,6 +1735,20 @@ const sheetHidden = () => $('#panel').classList.contains('hide');
 function popupPad(){ L.Popup.prototype.options.autoPanPaddingBottomRight = [20, isMobile() && !sheetHidden() ? $('#panel').offsetHeight + 12 : 20]; }
 const curSheet = () => [...SHEET, 'hide'].find(x => $('#panel').classList.contains(x)) || 'half';
 $('#fabMenu').onclick = () => setSheet(sheetHidden() ? lastSheet : 'hide');
+// Breite der Seitenleiste (Laptop): am rechten Rand ziehen oder mit Pfeiltasten; wird gemerkt
+(function(){
+  const rz = $('#resizer'), root = document.documentElement;
+  const setW = w => { w = Math.max(320, Math.min(Math.round(window.innerWidth * 0.7), 760, w)); root.style.setProperty('--pw', w + 'px');
+    try { localStorage.setItem('gp.ui.pw', w); } catch(e){} return w; };
+  try { const w = +localStorage.getItem('gp.ui.pw'); if (w) root.style.setProperty('--pw', Math.max(320, Math.min(760, w)) + 'px'); } catch(e){}
+  let drag = false;
+  rz.addEventListener('pointerdown', e => { drag = true; rz.classList.add('on'); rz.setPointerCapture(e.pointerId); e.preventDefault(); });
+  rz.addEventListener('pointermove', e => { if (drag) setW(e.clientX); });
+  const end = () => { if (!drag) return; drag = false; rz.classList.remove('on'); map.invalidateSize(); };
+  rz.addEventListener('pointerup', end); rz.addEventListener('pointercancel', end);
+  rz.addEventListener('keydown', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight'){ e.preventDefault();
+    setW($('#panel').offsetWidth + (e.key === 'ArrowRight' ? 30 : -30)); map.invalidateSize(); } });
+})();
 let sheetDragged = false;
 $('#handle').onclick = () => { if (sheetDragged) return; setSheet(SHEET[(SHEET.indexOf(curSheet()) + 1) % 3]); };
 // Ziehen am Griff oder an der Kopfzeile: Höhe folgt dem Finger, beim Loslassen auf min/halb/voll einrasten
@@ -1764,11 +1795,14 @@ $('#handle').onclick = () => { if (sheetDragged) return; setSheet(SHEET[(SHEET.i
 let viaSeq = Date.now() % 1e6;
 function renderVia(){
   const ul = $('#viaList');
-  ul.innerHTML = state.via.map((v, i) => `<li class="${v.kind === 'visit' ? 'visit' : ''}"><span class="vn">${i + 1}</span>
+  ul.innerHTML = state.via.map((v, i) => `<li class="${v.kind === 'visit' ? 'visit' : ''}" data-vi="${i}">
+    <button type="button" class="vgrip" data-vgrip="${i}" aria-label="${esc(v.label)} verschieben (ziehen oder Pfeiltasten)" title="ziehen zum Verschieben">
+      <svg viewBox="0 0 12 20" width="12" height="20" aria-hidden="true" fill="currentColor"><circle cx="3" cy="4" r="1.6"/><circle cx="9" cy="4" r="1.6"/><circle cx="3" cy="10" r="1.6"/><circle cx="9" cy="10" r="1.6"/><circle cx="3" cy="16" r="1.6"/><circle cx="9" cy="16" r="1.6"/></svg></button>
+    <span class="vn">${i + 1}</span>
     <div class="vt"><b>${esc(v.label)}</b><div class="vopts">
       <select data-vkind="${i}" aria-label="Art des Zwischenziels"><option value="stay"${v.kind === 'stay' || !v.kind ? ' selected' : ''}>★ Übernachten in der Nähe</option><option value="rest"${v.kind === 'rest' ? ' selected' : ''}>Pause / freie Tage (nur Campingplatz)</option><option value="visit"${v.kind === 'visit' ? ' selected' : ''}>Besuch unterwegs</option></select>
       ${v.kind !== 'visit' ? `<label><input type="number" min="1" max="30" data-vnights="${i}" value="${Math.max(1, +v.nights || 1)}"> Nächte</label>` : ''}</div></div>
-    <div class="vbtns"><button type="button" data-vup="${i}" aria-label="nach oben" ${i === 0 ? 'disabled' : ''}>▲</button><button type="button" data-vdown="${i}" aria-label="nach unten" ${i === state.via.length - 1 ? 'disabled' : ''}>▼</button><button type="button" data-vdel="${i}" aria-label="entfernen">✕</button></div></li>`).join('');
+    <div class="vbtns">${v.pin ? `<button type="button" data-vpin="${i}" class="pin-on" title="Platz festgelegt – Antippen löst die Festlegung" aria-label="Festlegung lösen">📌</button>` : ''}<button type="button" data-vdel="${i}" aria-label="entfernen" title="entfernen">✕</button></div></li>`).join('');
   $('#viaTools').hidden = state.via.length < 2;
   $('#roundIn').checked = !!state.round;
   $('#retLbl').textContent = state.round ? 'Zurück spätestens' : 'Ankunft spätestens';
@@ -1778,9 +1812,46 @@ function renderVia(){
   const ch = () => { renderVia(); renderMap(); };
   ul.querySelectorAll('[data-vkind]').forEach(b => b.onchange = () => { state.via[+b.dataset.vkind].kind = b.value; ch(); });
   ul.querySelectorAll('[data-vnights]').forEach(b => b.onchange = () => { state.via[+b.dataset.vnights].nights = Math.max(1, Math.round(+b.value) || 1); });
-  ul.querySelectorAll('[data-vup]').forEach(b => b.onclick = () => { const i = +b.dataset.vup; [state.via[i - 1], state.via[i]] = [state.via[i], state.via[i - 1]]; ch(); });
-  ul.querySelectorAll('[data-vdown]').forEach(b => b.onclick = () => { const i = +b.dataset.vdown; [state.via[i + 1], state.via[i]] = [state.via[i], state.via[i + 1]]; ch(); });
+  ul.querySelectorAll('[data-vpin]').forEach(b => b.onclick = () => { delete state.via[+b.dataset.vpin].pin; ch(); });
+  ul.querySelectorAll('[data-vgrip]').forEach(g => {
+    // Tastatur: Pfeil hoch/runter verschiebt (für alle ohne Maus/Finger)
+    g.onkeydown = e => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault(); const i = +g.dataset.vgrip, j = i + (e.key === 'ArrowUp' ? -1 : 1);
+      if (j < 0 || j >= state.via.length) return;
+      moveVia(i, j); setTimeout(() => $(`[data-vgrip="${j}"]`)?.focus(), 0);
+    };
+    g.onpointerdown = e => startViaDrag(e, g);
+  });
   ul.querySelectorAll('[data-vdel]').forEach(b => b.onclick = () => { state.via.splice(+b.dataset.vdel, 1); ch(); });
+}
+// Ziel von Position i nach j verschieben; das verschobene Ziel behält beim Optimieren seinen Platz (📌)
+function moveVia(i, j){
+  if (i === j) return;
+  const [v] = state.via.splice(i, 1); state.via.splice(j, 0, v); v.pin = true;
+  renderVia(); renderMap();
+}
+// Drag & Drop am Griff (Maus und Finger): Eintrag folgt dem Zeiger, beim Loslassen einsortieren
+function startViaDrag(e, grip){
+  const ul = $('#viaList'), li = grip.closest('li'), i = +grip.dataset.vgrip;
+  const items = [...ul.children], mids = items.map(x => { const r = x.getBoundingClientRect(); return r.top + r.height / 2; });
+  const y0 = e.clientY; let target = i, moved = false;
+  grip.setPointerCapture(e.pointerId); e.preventDefault();
+  const move = ev => {
+    const dy = ev.clientY - y0; if (Math.abs(dy) > 4) moved = true;
+    li.classList.add('dragging'); li.style.transform = `translateY(${dy}px)`;
+    const y = mids[i] + dy;
+    target = mids.filter((m, k) => k !== i && m < y).length;
+    items.forEach((x, k) => x.classList.toggle('drop-before', k !== i && k === (target >= i ? target + 1 : target)));
+    ul.classList.toggle('drop-end', target === items.length - 1 && target !== i);
+  };
+  const up = () => {
+    grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up);
+    items.forEach(x => x.classList.remove('drop-before')); ul.classList.remove('drop-end');
+    li.classList.remove('dragging'); li.style.transform = '';
+    if (moved) moveVia(i, target);
+  };
+  grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
 }
 function addVia(g){
   if (!g) return;
@@ -1799,20 +1870,25 @@ async function optimizeVia(){
   const S = state.start, E = state.round ? S : state.end;
   const d = (a, b) => a && b ? hav([a.lat, a.lon], [b.lat, b.lon]) : 0;
   const cost = o => { let c = d(S, P[o[0]]); for (let i = 1; i < o.length; i++) c += d(P[o[i - 1]], P[o[i]]); return c + d(P[o[o.length - 1]], E); };
-  let best = P.map((_, i) => i), bc = cost(best);
-  if (P.length <= 8){
-    const perm = (arr, l) => { if (l === arr.length){ const c = cost(arr); if (c < bc){ bc = c; best = arr.slice(); } return; }
+  // Manuell verschobene Ziele (📌) bleiben an ihrer Position, nur die übrigen werden auf die freien Plätze verteilt
+  const free = P.map((v, i) => v.pin ? -1 : i).filter(i => i >= 0);
+  const slots = free.slice();
+  const build = arr => { const o = P.map((_, i) => i); slots.forEach((sl, k) => { o[sl] = arr[k]; }); return o; };
+  let bestF = free.slice(), bc = cost(build(bestF));
+  if (free.length <= 8){
+    const perm = (arr, l) => { if (l === arr.length){ const c = cost(build(arr)); if (c < bc){ bc = c; bestF = arr.slice(); } return; }
       for (let i = l; i < arr.length; i++){ [arr[l], arr[i]] = [arr[i], arr[l]]; perm(arr, l + 1); [arr[l], arr[i]] = [arr[i], arr[l]]; } };
-    perm(P.map((_, i) => i), 0);
+    perm(free.slice(), 0);
   } else {
     let improved = true;
     while (improved){ improved = false;
-      for (let i = 0; i < best.length - 1; i++) for (let j = i + 1; j < best.length; j++){
-        const o = best.slice(0, i).concat(best.slice(i, j + 1).reverse(), best.slice(j + 1)), c = cost(o);
-        if (c < bc - 1){ best = o; bc = c; improved = true; } } }
+      for (let i = 0; i < bestF.length - 1; i++) for (let j = i + 1; j < bestF.length; j++){
+        const a = bestF.slice(); [a[i], a[j]] = [a[j], a[i]]; const c = cost(build(a));
+        if (c < bc - 1){ bestF = a; bc = c; improved = true; } } }
   }
-  state.via = best.map(i => P[i]);
-  renderVia(); renderMap(); flash('Reihenfolge optimiert (kürzeste Gesamtstrecke, Luftlinie).');
+  state.via = build(bestF).map(i => P[i]);
+  const np = P.filter(v => v.pin).length;
+  renderVia(); renderMap(); flash('Reihenfolge optimiert (kürzeste Gesamtstrecke, Luftlinie)' + (np ? ` – ${np} festgelegte${np === 1 ? 's Ziel bleibt' : ' Ziele bleiben'} an ${np === 1 ? 'seinem' : 'ihrem'} Platz.` : '.'));
 }
 (function(){
   const inp = $('#viaIn'), list = $('#viaSugg'); let last = [];
