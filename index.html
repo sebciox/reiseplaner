@@ -1154,6 +1154,7 @@ function sightFacts(s, compact){
   if (g && g.oh && g.oh.length) h += gHoursHtml(g.oh, g.open);
   if (r && r.hoursS && r.hoursS.text) h += compact ? `<div>Öffnungszeiten laut Website: ${linkA(safeUrl(r.hoursS.url), r.hoursS.text)}</div>` : `<div class="rz"><b>Öffnungszeiten laut Website: ${esc(r.hoursS.text)}</b>${snipLink(r.hoursS)}</div>`;
   else if (r && r.hoursUrl) h += `<div>${linkA(safeUrl(r.hoursUrl), 'Öffnungszeiten auf der Website')}</div>`;
+  if (r && r.season) h += `<div>Saison laut Website: „${esc(r.season.snippet)}“${r.season.url ? ' – ' + linkA(safeUrl(r.season.url), 'Quelle') : ''}</div>`;
   if (inf.oh && !(g && g.oh && g.oh.length)) h += `<div>Öffnungszeiten (OSM): ${esc(inf.oh)}</div>`;
   const ageP = p => p && (p.adult || p.child) ? [p.adult && 'Erwachsene ' + euroAb(p.adult, s), p.child && 'Kinder ' + euroAb(p.child, s)].filter(Boolean).join(' · ') : '';
   if (r && r.price && ageP(r.price)) h += compact ? `<div class="price">${ageP(r.price)}</div>` : `<div class="rz"><b>${ageP(r.price)}</b> <span class="muted">(Website)</span>${snipLink(r.price)}</div>`;
@@ -1184,7 +1185,7 @@ function sightBodyHtml(x, from){
   // Stand der Website-Recherche
   const r = web && (rzData['web:' + web]?.v || 0) >= 2 ? rzData['web:' + web] : null;
   if (web && !r) h += `<div class="rz none">Öffnungszeiten und Preise von der Website: ${ghOn() ? (state.tourId ? 'werden gesucht (1–2 Min. nach dem Speichern) …' : 'werden nach dem Speichern der Tour gesucht.') : 'Suche braucht den Online-Speicher (⚙︎).'}</div>`;
-  else if (r && !r.hoursS?.text && !r.price && !r.hoursUrl && !r.priceUrl) h += `<div class="rz none">Öffnungszeiten/Preise: ${r.status === 'error' ? 'Website nicht erreichbar' : 'auf der Website nicht gefunden'} – ${linkA(safeUrl(web), 'selbst nachsehen')}.</div>`;
+  else if (r && !r.hoursS?.text && !r.price && !r.season && !r.hoursUrl && !r.priceUrl) h += `<div class="rz none">Öffnungszeiten/Preise: ${r.status === 'error' ? 'Website nicht erreichbar' : 'auf der Website nicht gefunden'} – ${linkA(safeUrl(web), 'selbst nachsehen')}.</div>`;
   h += `<div><span class="k">Adresse</span> ${esc(g?.addr || inf.addr || cleanLabel(s.label))}</div>`;
   if (!web && (s.info || g)) h += `<form class="sweb" data-sweb="${k}"><input name="w" type="text" inputmode="url" autocomplete="url" placeholder="Website eintragen – dann werden Öffnungszeiten/Preise gesucht" aria-label="Website der Sehenswürdigkeit" value="${g && g.web ? esc(g.web) : ''}"><button class="btn small" type="submit">Merken</button></form>`;
   if (inf.phone) h += `<div><span class="k">Telefon</span> <a href="tel:${esc(inf.phone.replace(/[^+\d]/g, ''))}">${esc(inf.phone)}</a></div>`;
