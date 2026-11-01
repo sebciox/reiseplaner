@@ -156,6 +156,11 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .chip.on{background:var(--brand);border-color:var(--brand);color:#fff}
 .daterow{display:flex;align-items:center;gap:8px;margin:10px 0 2px;font-size:14px}
 .daterow input{width:auto;min-height:38px;padding:6px 10px}
+.stars{font-size:13px;color:#b7791f;text-decoration:none;white-space:nowrap;margin-left:4px}
+.stars span{color:var(--muted)} .stars.none{color:var(--muted)}
+.coord{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.det .sbtns,.det .coord{vertical-align:middle}
+.land > div{margin-top:2px}
 .endsel{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-top:8px}
 /* Schwebende Knöpfe am Handy: Menü ein/aus, Übersicht */
 #fabs{position:fixed;left:12px;top:calc(12px + env(safe-area-inset-top));z-index:1001;display:flex;flex-direction:column;gap:8px}
@@ -240,6 +245,7 @@ a{color:var(--brand)}
       </div>
     </header>
     <div id="status" role="status" aria-live="polite"></div>
+    <div id="fbNote" class="note" hidden>Ersatzdienst aktiv (OSRM/Photon statt OpenRouteService) – Fahrzeiten sind Schätzungen. <button class="linkbtn" type="button" id="fbOff">zurück zu ORS</button></div>
     <form id="planForm" autocomplete="off">
       <div class="field">
         <label for="startIn">Start</label>
@@ -278,6 +284,9 @@ a{color:var(--brand)}
     <label class="check"><input id="sToll" type="checkbox"><span>Maut meiden
       <small>Mautstraßen umfahren (z.&nbsp;B. Autobahnen in Frankreich, Italien, Spanien).</small></span></label>
     <div class="muted" style="margin-top:10px">Umweg = Strecke auf der Straße von der Route zum Platz, einfache Richtung. OpenRouteService rechnet mit mindestens 80 km/h.</div>
+    <div class="field" style="margin-top:14px"><label for="sGkey">Google-API-Schlüssel (für Bewertungen)</label>
+      <input id="sGkey" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="AIza…">
+      <div class="muted">Optional. Zeigt Google-Sterne bei den Campingplätzen (Places API). Leer = nur Link zu Google Maps.</div></div>
     <h3 style="margin:18px 0 6px">Online-Speicher (privates GitHub-Repo)</h3>
     <div class="muted" style="margin-bottom:8px">Touren und Einstellungen (inkl. ORS-Schlüssel) werden dort gespeichert – so hast du sie auf Handy und Laptop. Der Token bleibt nur in diesem Browser.</div>
     <div class="field"><label for="sRepo">Repo (Besitzer/Name)</label>
@@ -323,7 +332,7 @@ a{color:var(--brand)}
 const COL = { brand:'#1f6b52', pending:'#6f7a85', corridor:'#e07b24', ok:'#2e8b57', unk:'#8a8f98' };
 const DEF = { key:'', speed:80, cmin:350, cmax:450, detour:10, highway:true, noToll:false,
               ghRepo:'sebciox/touren', ghToken:'', savedAt:null,
-              altRadius:10, filters:{ caravan:false, dog:false, power:false } };
+              altRadius:10, filters:{ caravan:false, dog:false, power:false }, gkey:'', sortBy:'stage' };
 const ORS = 'https://api.openrouteservice.org';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
                   'https://overpass.private.coffee/api/interpreter'];
@@ -394,30 +403,82 @@ function thin(line, minM = 60){
 }
 
 /* ---------- APIs ---------- */
+// Fehler, bei denen ein Ersatzdienst hilft: kein/ungültiger Schlüssel, Limit, Server/Netz weg
+function orsErr(msg, status){ const e = new Error('OpenRouteService: ' + msg); e.fallback = !status || [401, 403, 429].includes(status) || status >= 500; return e; }
 async function orsPost(path, body){
-  if (!settings.key) throw new Error('Kein OpenRouteService-Schlüssel – bitte in den Einstellungen eintragen.');
+  if (!settings.key) throw orsErr('kein Schlüssel eingetragen (⚙︎).');
   let res;
   try {
     res = await fetch(ORS + path, { method:'POST',
       headers:{ 'Authorization': settings.key, 'Content-Type':'application/json', 'Accept':'application/json, application/geo+json' },
       body: JSON.stringify(body) });
-  } catch(e){ throw new Error('OpenRouteService nicht erreichbar (Netzwerk).'); }
+  } catch(e){ throw orsErr('nicht erreichbar (Netzwerk).'); }
   if (!res.ok){
     let msg = 'Fehler ' + res.status;
     try { const j = await res.json(); msg = (j.error && (j.error.message || j.error)) || j.message || msg; } catch(e){}
     if (res.status === 401 || res.status === 403) msg = 'Schlüssel ungültig oder nicht freigeschaltet.';
-    if (res.status === 429) msg = 'Anfragelimit erreicht – bitte eine Minute warten.';
-    throw new Error('OpenRouteService: ' + msg);
+    if (res.status === 429) msg = 'Anfragelimit erreicht.';
+    throw orsErr(msg, res.status);
   }
   return res.json();
 }
-async function geocode(text, size, auto){
-  if (!settings.key) throw new Error('Kein OpenRouteService-Schlüssel – bitte in den Einstellungen eintragen.');
+async function orsGeocode(text, size, auto){
+  if (!settings.key) throw orsErr('kein Schlüssel eingetragen (⚙︎).');
   const url = `${ORS}/geocode/${auto ? 'autocomplete' : 'search'}?api_key=${encodeURIComponent(settings.key)}&text=${encodeURIComponent(text)}&size=${size}&lang=de`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Ortssuche fehlgeschlagen (' + res.status + ').');
+  let res; try { res = await fetch(url); } catch(e){ throw orsErr('Ortssuche nicht erreichbar (Netzwerk).'); }
+  if (!res.ok) throw orsErr('Ortssuche fehlgeschlagen (' + res.status + ').', res.status);
   const j = await res.json();
   return (j.features || []).map(f => ({ lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], label:f.properties.label }));
+}
+
+/* ---------- Ersatzdienste ohne Schlüssel (nur nach Rückfrage): OSRM (Route, Umwege), Photon (Ortssuche) ---------- */
+const OSRM = 'https://router.project-osrm.org', PHOTON = 'https://photon.komoot.io';
+let useFallback = false;
+async function getJson(url, what){
+  let r; try { r = await fetch(url); } catch(e){ throw new Error(what + ' nicht erreichbar (Netzwerk).'); }
+  if (!r.ok) throw new Error(what + ': Fehler ' + r.status);
+  return r.json();
+}
+const photonLabel = p => [p.name, [p.postcode, p.city || p.town || p.village].filter(Boolean).join(' '), p.state, p.country]
+  .filter((x, i, a) => x && a.indexOf(x) === i).join(', ');
+async function photonGeocode(text, size){
+  const j = await getJson(`${PHOTON}/api/?q=${encodeURIComponent(text)}&limit=${size}&lang=de`, 'Ersatz-Ortssuche (Photon)');
+  return (j.features || []).map(f => ({ lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], label:photonLabel(f.properties) }));
+}
+async function photonReverse(p){
+  const j = await getJson(`${PHOTON}/reverse?lon=${p.lon}&lat=${p.lat}&lang=de`, 'Photon');
+  return j.features?.[0]?.properties || null;
+}
+async function osrmRoute(a, b, vmax){
+  const base = `${OSRM}/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson&steps=true`;
+  let j = await getJson(base + (settings.noToll ? '&exclude=toll' : ''), 'Ersatz-Routing (OSRM)');
+  if (j.code !== 'Ok' && settings.noToll) j = await getJson(base, 'Ersatz-Routing (OSRM)');
+  if (j.code !== 'Ok' || !j.routes?.length) throw new Error('Ersatz-Routing: keine Route gefunden.');
+  const r = j.routes[0], steps = r.legs.flatMap(l => l.steps || []);
+  const ferry = steps.filter(x => x.mode === 'ferry').reduce((a, x) => a + x.distance, 0);
+  return { line: r.geometry.coordinates.map(c => [c[1], c[0]]), dist:r.distance,
+           dur: cappedDuration([{ steps }], r.distance, r.duration, vmax), ex:{ ferry, toll:null, src:'osrm' } };
+}
+async function osrmTable(body){
+  const L = body.locations.map(l => l.join(',')).join(';');
+  const j = await getJson(`${OSRM}/table/v1/driving/${L}?sources=${body.sources.join(';')}&destinations=${body.destinations.join(';')}&annotations=distance,duration`, 'Ersatz-Umwege (OSRM)');
+  if (j.code !== 'Ok') throw new Error('Ersatz-Umwege: ' + (j.message || j.code));
+  return { distances:j.distances, durations:j.durations };
+}
+// ORS versuchen; bei Ausfall einmal fragen, ob für diese Sitzung der Ersatzdienst genutzt werden soll
+async function withFallback(primary, alt, silent){
+  if (useFallback) return alt();
+  try { return await primary(); }
+  catch(e){
+    if (!e.fallback || silent) throw e;
+    if (!confirm(`${e.message}\n\nKostenlosen Ersatzdienst ohne Schlüssel (OSRM für Route/Umwege, Photon für die Ortssuche) für diese Sitzung verwenden?`)) throw e;
+    useFallback = true; renderFallbackNote();
+    return alt();
+  }
+}
+function renderFallbackNote(){ const n = $('#fbNote'); if (n) n.hidden = !useFallback; }
+async function geocode(text, size, auto){
+  return withFallback(() => orsGeocode(text, size, auto), () => photonGeocode(text, size), auto);
 }
 async function geocodeFirst(text){
   text = text.trim();
@@ -428,22 +489,27 @@ async function geocodeFirst(text){
 }
 async function route(a, b){
   const vmax = Math.max(80, +settings.speed || 80);
-  const body = { coordinates: [[a.lon, a.lat], [b.lon, b.lat]], radiuses: [-1, -1] };
+  const body = { coordinates: [[a.lon, a.lat], [b.lon, b.lat]], radiuses: [-1, -1], extra_info: ['waycategory', 'tollways'] };
   // Mit Tempolimit 80 sind Landstraßen für den Router oft genauso schnell wie die Autobahn → er nimmt die kürzere
   // Landstraße. „Autobahn bevorzugen“: Route mit normalen Pkw-Geschwindigkeiten berechnen und die Fahrzeit
   // anschließend je Abschnitt auf vmax deckeln (dafür braucht es die Schritte → instructions an).
   if (settings.highway){ body.preference = 'fastest'; body.instructions = true; body.instructions_format = 'text'; }
   else { body.instructions = false; body.maximum_speed = vmax; }
   if (settings.noToll) body.options = { avoid_features: ['tollways'] };
-  const ck = hashStr(JSON.stringify(body));
+  const ck = hashStr(JSON.stringify(body) + (useFallback ? 'osrm' : ''));
   if (routeMem.has(ck)) return routeMem.get(ck);
-  const j = await orsPost('/v2/directions/driving-car/geojson', body);
-  const f = j.features && j.features[0];
-  if (!f) throw new Error('Keine Route gefunden.');
-  const dist = f.properties.summary.distance || 0;
-  let dur = f.properties.summary.duration || 0;
-  if (settings.highway) dur = cappedDuration(f.properties.segments, dist, dur, vmax);
-  const res = { line: f.geometry.coordinates.map(c => [c[1], c[0]]), dist, dur };
+  const res = await withFallback(async () => {
+    const j = await orsPost('/v2/directions/driving-car/geojson', body);
+    const f = j.features && j.features[0];
+    if (!f) throw new Error('Keine Route gefunden.');
+    const dist = f.properties.summary.distance || 0;
+    let dur = f.properties.summary.duration || 0;
+    if (settings.highway) dur = cappedDuration(f.properties.segments, dist, dur, vmax);
+    // Extras: Fähre (waycategory Bit 4) und Mautstrecken in Metern
+    const sum = (k, test) => (f.properties.extras?.[k]?.summary || []).filter(x => test(x.value)).reduce((a, x) => a + (x.distance || 0), 0);
+    const ex = f.properties.extras ? { ferry: sum('waycategory', v => v & 4), toll: sum('tollways', v => v === 1) } : null;
+    return { line: f.geometry.coordinates.map(c => [c[1], c[0]]), dist, dur, ex };
+  }, () => osrmRoute(a, b, vmax));
   routeMem.set(ck, res);
   if (routeMem.size > 30) routeMem.delete(routeMem.keys().next().value);
   return res;
@@ -554,7 +620,7 @@ async function matrix(body){
   const k = hashStr(JSON.stringify(body));
   const hit = mxCache.find(e => e.k === k);
   if (hit) return { distances:hit.d, durations:hit.u };
-  const j = await orsPost('/v2/matrix/driving-car', body);
+  const j = await withFallback(() => orsPost('/v2/matrix/driving-car', body), () => osrmTable(body));
   const rnd = m => (m || []).map(row => row.map(v => v == null ? null : Math.round(v)));
   const e = { t:Date.now(), k, d:rnd(j.distances), u:rnd(j.durations) };
   mxCache = cacheSave(CK.mx, [...mxCache.filter(x => x.k !== k), e], 500000);
@@ -623,6 +689,7 @@ function addrFromTags(t = {}){
   return [st, city].filter(Boolean).join(', ') || null;
 }
 async function reverseAddr(p){
+  if (useFallback || !settings.key){ const q = await photonReverse(p); return q ? photonLabel(q) : null; }
   const url = `${ORS}/geocode/reverse?api_key=${encodeURIComponent(settings.key)}&point.lon=${p.lon}&point.lat=${p.lat}&size=1&lang=de`;
   const r = await fetch(url); if (!r.ok) throw new Error('Adresse: ' + r.status);
   const j = await r.json(); return j.features?.[0]?.properties?.label || null;
@@ -642,17 +709,147 @@ async function ensureAddrs(){
 
 /* Rezeptionszeiten (vom GitHub-Helfer im Online-Speicher, Datei rezeption.json) */
 let rzData = (() => { try { return JSON.parse(localStorage.getItem('gp.rezeption') || '{}'); } catch(e){ return {}; } })();
+function cioHtml(r, compact){
+  return ['checkin', 'checkout'].filter(k => r[k]).map(k => `<div><b>${k === 'checkin' ? 'Check-in' : 'Check-out'}: ${esc(r[k].text)}</b>
+    ${compact ? '' : `<div class="snip">„${esc(r[k].snippet)}“ – <a href="${esc(safeUrl(r[k].url))}" target="_blank" rel="noopener">Quelle</a></div>`}</div>`).join('');
+}
 function rzHtml(c, compact){
   if (c.kind !== 'camp') return '';
   const r = rzData[c.id], web = webOf(c);
-  if (r && r.status === 'ok' && web && r.website === web)
-    return `<div class="rz"><b>Rezeption: ${esc(r.hours || 'siehe Text')}</b>${compact ? '' : `<div class="snip">„${esc(r.snippet)}“</div>`}
-      <div><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener">Quelle: ${esc(shortUrl(r.url))}</a> <span class="muted">· geprüft ${new Date(r.checkedAt).toLocaleDateString('de-DE')}</span></div></div>`;
+  if (r && (r.status === 'ok' || r.status === 'partial') && web && r.website === web)
+    return `<div class="rz">${r.status === 'ok' ? `<b>Rezeption: ${esc(r.hours || 'siehe Text')}</b>${compact ? '' : `<div class="snip">„${esc(r.snippet)}“</div>`}` : ''}
+      ${cioHtml(r, compact)}
+      ${r.url ? `<div><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener">Quelle: ${esc(shortUrl(r.url))}</a> <span class="muted">· geprüft ${new Date(r.checkedAt).toLocaleDateString('de-DE')}</span></div>` : ''}</div>`;
   if (r && web && r.website === web)
     return `<div class="rz none">Rezeptionszeiten: ${r.status === 'none' ? 'auf der Website nicht gefunden' : 'Website nicht erreichbar'}${compact ? '' : ` – bitte <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">selbst nachsehen</a>`}.</div>`;
   if (!web) return compact ? '' : `<div class="rz none">Keine Website in OpenStreetMap – <a href="https://www.google.com/search?q=${encodeURIComponent((c.tags?.name || c.label) + ' ' + (c.addr || ''))}" target="_blank" rel="noopener">im Web suchen</a>.</div>`;
   if (compact) return '';
   return `<div class="rz none">Rezeptionszeiten: ${ghOn() ? (state.tourId ? 'werden gesucht (1–2 Min. nach dem Speichern) …' : 'werden nach dem Speichern der Tour gesucht.') : 'Suche braucht den Online-Speicher (⚙︎).'}</div>`;
+}
+
+/* ---------- Google-Bewertungen (Places API New, Text Search; nur live, nicht dauerhaft gespeichert) ---------- */
+const gRate = new Map();           // camp id → { r, n, uri } | null (nicht gefunden)
+let gErr = null, gBusy = false;
+async function gFetch(c){
+  const res = await fetch('https://places.googleapis.com/v1/places:searchText', { method:'POST',
+    headers:{ 'Content-Type':'application/json', 'X-Goog-Api-Key':settings.gkey,
+              'X-Goog-FieldMask':'places.id,places.displayName,places.rating,places.userRatingCount,places.googleMapsUri,places.location' },
+    body: JSON.stringify({ textQuery: c.tags?.name ? c.tags.name : 'Campingplatz', languageCode:'de', maxResultCount:3,
+      locationBias:{ circle:{ center:{ latitude:c.lat, longitude:c.lon }, radius:1500 } } }) });
+  if (!res.ok){ let m = ''; try { m = (await res.json()).error?.message || ''; } catch(e){} throw new Error(`Google ${res.status}${m ? ': ' + m : ''}`); }
+  const j = await res.json();
+  const best = (j.places || []).map(p => ({ p, d: p.location ? hav([c.lat, c.lon], [p.location.latitude, p.location.longitude]) : 1e9 }))
+    .filter(x => x.d < 2000).sort((a, b) => a.d - b.d)[0];
+  return best && best.p.rating != null ? { r:best.p.rating, n:best.p.userRatingCount || 0, uri:best.p.googleMapsUri } : null;
+}
+// lädt Bewertungen für die ersten (sichtbaren) Plätze einer Liste – max. 20 je Liste, um das Google-Kontingent zu schonen
+async function loadRatings(list){
+  if (!settings.gkey || gBusy) return;
+  const todo = list.filter(c => !gRate.has(c.id)).slice(0, 20); if (!todo.length) return;
+  gBusy = true;
+  try {
+    for (let i = 0; i < todo.length; i += 4){
+      await Promise.all(todo.slice(i, i + 4).map(async c => { try { gRate.set(c.id, await gFetch(c)); gErr = null; } catch(e){ gErr = e.message; } }));
+      if (gErr) break;
+    }
+  } finally { gBusy = false; renderPanel(); }
+}
+function rateHtml(c){
+  const g = gRate.get(c.id);
+  if (g) return ` <a class="stars" href="${esc(g.uri)}" target="_blank" rel="noopener" title="${g.n} Google-Bewertungen">★ ${g.r.toLocaleString('de-DE', { minimumFractionDigits:1 })} <span>(${g.n.toLocaleString('de-DE')})</span></a>`;
+  if (g === null) return ' <span class="stars none">★ –</span>';
+  return '';
+}
+// Sortierung nach Bewertung: gewichtet (wenige Bewertungen zählen weniger), unbewertet ans Ende
+const rateScore = c => { const g = gRate.get(c.id); return g ? (g.r * g.n + 4 * 10) / (g.n + 10) : -1; };
+function sortRows(list){ return settings.sortBy === 'rating' ? list.slice().sort((a, b) => rateScore(b) - rateScore(a)) : list; }
+function sortHtml(list){
+  const top = list.filter(passFilter).slice(0, 20);    // nur die ersten 20 (Reihenfolge der Etappen-Empfehlung)
+  if (settings.gkey && !gErr && !gBusy && top.some(c => !gRate.has(c.id))) setTimeout(() => loadRatings(top), 0);
+  return `<div class="chips"><span class="muted">Sortierung:</span>
+    <button type="button" class="chip${settings.sortBy !== 'rating' ? ' on' : ''}" data-sort="stage">Entfernung/Etappe</button>
+    <button type="button" class="chip${settings.sortBy === 'rating' ? ' on' : ''}" data-sort="rating" ${settings.gkey ? '' : 'title="Google-API-Schlüssel unter ⚙︎ eintragen"'}>★ Google-Bewertung</button>
+    ${settings.gkey ? (gBusy ? '<span class="muted">lädt …</span>' : gErr ? `<span class="muted" style="color:var(--danger)">${esc(gErr)}</span>` : '<span class="muted">Bewertungen: Google</span>') : ''}</div>`;
+}
+
+/* ---------- Koordinaten ---------- */
+const fcoord = p => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
+const nearUrl = p => `https://www.google.com/maps/search/camping/@${p.lat.toFixed(5)},${p.lon.toFixed(5)},12z`;
+function coordHtml(p){
+  return `<span class="coord">${fcoord(p)}</span> <button class="btn small" type="button" data-copy="${fcoord(p)}">Kopieren</button>
+    <a class="btn small" href="${nearUrl(p)}" target="_blank" rel="noopener">Camping in der Nähe</a>`;
+}
+async function copyText(t){
+  try { await navigator.clipboard.writeText(t); }
+  catch(e){ const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch(x){} a.remove(); }
+  flash('Kopiert: ' + (t.length > 40 ? t.slice(0, 40) + '…' : t));
+}
+
+/* ---------- Länder, Tempo für Gespanne, Maut/Vignette, Fähre ---------- */
+// Richtwerte für Pkw + Wohnwagen bis 3,5 t – ohne Gewähr, vor der Reise prüfen
+const LAND = {
+  DE:['Deutschland', '80 km/h (100 mit Tempo-100-Zulassung)', 'keine Pkw-Maut'],
+  NL:['Niederlande', '80 außerorts, 90 Autobahn', 'keine Autobahnmaut (einzelne Tunnel)'],
+  BE:['Belgien', 'regional unterschiedlich – vorher prüfen', 'keine Pkw-Maut (Liefkenshoek-Tunnel mautpflichtig)'],
+  LU:['Luxemburg', 'vorher prüfen', 'keine Maut'],
+  FR:['Frankreich', 'bis 3,5 t wie Pkw (80/90 Landstraße, 110 Schnellstraße, 130 Autobahn; bei Regen weniger)', 'Autobahnen meist mautpflichtig (Gespann = Klasse 2)'],
+  ES:['Spanien', '80 außerorts, 90 Autobahn', 'einzelne Autobahnen (AP) mautpflichtig'],
+  PT:['Portugal', '70–80 außerorts, 100 Autobahn', 'Autobahnen mautpflichtig (teils nur elektronisch)'],
+  IT:['Italien', '70 außerorts, 80 Autobahn', 'Autobahnen mautpflichtig'],
+  AT:['Österreich', '80 Landstraße, 100 Autobahn', 'Vignette für das Zugfahrzeug Pflicht'],
+  CH:['Schweiz', '80 überall', 'Vignette für Zugfahrzeug UND Anhänger Pflicht'],
+  DK:['Dänemark', '80 km/h', 'Storebælt-Brücke mautpflichtig'],
+  SE:['Schweden', '80 km/h (gebremster Anhänger)', 'Øresund-Brücke mautpflichtig; Staugebühr Stockholm/Göteborg'],
+  NO:['Norwegen', '80 km/h', 'viele elektronische Mautstationen (AutoPASS)'],
+  PL:['Polen', '70 außerorts, 80 Autobahn', 'Autobahnabschnitte mautpflichtig'],
+  CZ:['Tschechien', '80 km/h', 'E-Vignette Pflicht'],
+  SI:['Slowenien', '80 km/h', 'E-Vignette Pflicht'],
+  HR:['Kroatien', '80 außerorts, 90 Autobahn', 'Autobahnen mautpflichtig']
+};
+// Länder einer Etappe: Punkte alle ~60 km per Photon (ohne Schlüssel) zuordnen, Ergebnis in der Etappe speichern
+async function stageCountries(s){
+  if (s.countries) return s.countries;
+  const cum = cumul(s.line), L = cum[cum.length - 1], n = Math.min(14, Math.max(2, Math.ceil(L / 60000)));
+  const codes = [];
+  for (const o of sample(s.line, cum, 0, L, n)){
+    try { const q = await photonReverse({ lat:o.p[0], lon:o.p[1] }); const cc = q?.countrycode?.toUpperCase(); if (cc && codes[codes.length - 1] !== cc) codes.push(cc); } catch(e){ return null; }
+  }
+  s.countries = codes;
+  return codes;
+}
+function landHtml(s, compact){
+  const ex = s.ex || {}, parts = [];
+  if (ex.ferry > 200) parts.push(`⛴ Fähre auf der Strecke (${fkm(ex.ferry)})`);
+  if (ex.toll > 1000) parts.push(`💶 Mautstrecke ca. ${fkm(ex.toll)}`);
+  if (!s.countries) return (parts.length ? `<div>${parts.join(' · ')}</div>` : '') + (compact ? '' : '<div class="muted">Länder werden ermittelt …</div>');
+  const lines = s.countries.map(cc => { const l = LAND[cc]; return l ? `<div><b>${esc(l[0])}</b>: ${esc(l[1])} · ${esc(l[2])}</div>` : `<div><b>${esc(cc)}</b></div>`; });
+  return `<div class="land">${parts.length ? `<div>${parts.join(' · ')}</div>` : ''}${compact ? `<div>${s.countries.join(' → ')}</div>` : lines.join('') +
+    '<div class="muted">Richtwerte für Pkw + Wohnwagen bis 3,5 t, ohne Gewähr – vor der Reise prüfen (z. B. ADAC).</div>'}</div>`;
+}
+async function ensureCountries(idx){
+  let changed = false;
+  for (const i of idx){ const s = state.stages[i]; if (s && !s.countries){ if (await stageCountries(s)) changed = true; } }
+  if (changed){ touch(); renderPanel(); if ($('#sumDlg').open) renderSummary(); }
+}
+
+/* ---------- Etappe teilen ---------- */
+function shareText(i){
+  const s = state.stages[i], c = s.to, ds = stageDates(), r = rzData[c.id];
+  return [`Etappe ${i + 1}${ds ? ' · ' + fdate(ds[i]) : ''}: ${shortLabel(s.from.label)} → ${c.label}`,
+    `${fkm(s.dist)} · ${fdur(s.dur)}`,
+    c.addr && c.addr !== 'unbekannt' ? 'Adresse: ' + c.addr : '',
+    'Koordinaten: ' + fcoord(c),
+    r && r.status === 'ok' && r.hours ? 'Rezeption: ' + r.hours : '',
+    r && r.checkin ? 'Check-in: ' + r.checkin.text : '', r && r.checkout ? 'Check-out: ' + r.checkout.text : '',
+    phoneOf(c) ? 'Telefon: ' + phoneOf(c) : '', webOf(c) ? 'Website: ' + safeUrl(webOf(c)) : '',
+    'Navigation: ' + navUrl(c), s.memo?.text ? 'Notiz: ' + s.memo.text : ''].filter(Boolean).join('\n');
+}
+async function shareStage(i){
+  const c = state.stages[i].to;
+  if (c.kind === 'camp' && !c.addr) await ensureOneAddr(i);
+  const text = shareText(i);
+  if (navigator.share){ try { await navigator.share({ title:`Etappe ${i + 1}: ${c.label}`, text }); return; } catch(e){ if (e.name === 'AbortError') return; } }
+  copyText(text);
 }
 
 /* Änderungen an einer gespeicherten Tour (Notiz, Datum, Adresse, Ausweichplatz) automatisch sichern */
@@ -761,7 +958,7 @@ async function computeNext(from){
   if (!state.n) state.n = plan(r.dist).n + state.stages.length;
   const left = state.n - state.stages.length;            // noch zu fahrende Etappen inkl. dieser
   if (left <= 1){
-    state.stages.push({ from, to:{ ...state.end, kind:'end' }, line:r.line, dist:r.dist, dur:r.dur, note:null });
+    state.stages.push({ from, to:{ ...state.end, kind:'end' }, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, note:null });
     state.done = true; state.pending = null;
     renderAll(); fitAll();
     await loadEndCands();
@@ -811,7 +1008,7 @@ async function selectEnd(c){
   setStatus('Letzte Etappe wird neu berechnet …', 'busy');
   const to = campPoint(c); to.air = c.air;
   const r = await route(s.from, to);
-  state.stages[i] = { from:s.from, to, line:r.line, dist:r.dist, dur:r.dur, note:null };
+  state.stages[i] = { from:s.from, to, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, note:null };
   state.showEndList = false; state.alt = null; touch();
   renderAll(); fitAll();
 }
@@ -837,9 +1034,9 @@ async function replaceStop(i, c){
   const to = campPoint(c);
   setStatus('Etappe wird neu berechnet …', 'busy');
   const r = await route(s.from, to);
-  state.stages[i] = { ...s, to, line:r.line, dist:r.dist, dur:r.dur, note:null, memo:undefined };
+  state.stages[i] = { ...s, to, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, countries:undefined, note:null, memo:undefined };
   const nx = state.stages[i + 1];
-  if (nx){ const r2 = await route(to, nx.to); state.stages[i + 1] = { ...nx, from:to, line:r2.line, dist:r2.dist, dur:r2.dur }; }
+  if (nx){ const r2 = await route(to, nx.to); state.stages[i + 1] = { ...nx, from:to, line:r2.line, dist:r2.dist, dur:r2.dur, ex:r2.ex, countries:undefined }; }
   state.alt = null; state.openDet.add(i);
   if (!state.done && i === state.stages.length - 1){ await computeNext(to); }
   touch(); renderAll(); fitAll();
@@ -850,7 +1047,7 @@ async function selectCamp(c){
   const to = campPoint(c);
   setStatus('Etappe wird berechnet …', 'busy');
   const r = await route(p.from, to);
-  state.stages.push({ from:p.from, to, line:r.line, dist:r.dist, dur:r.dur, note:p.note });
+  state.stages.push({ from:p.from, to, line:r.line, dist:r.dist, dur:r.dur, ex:r.ex, note:p.note });
   state.pending = null;
   await computeNext(to);
 }
@@ -873,7 +1070,7 @@ function setStatus(text, kind){
 const map = L.map('map', { zoomControl:false, attributionControl:false }).setView([51.2, 10.4], 6);
 L.control.zoom({ position:'topright' }).addTo(map);
 L.control.attribution({ position:'topright', prefix:false }).addTo(map);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19,
+const tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, crossOrigin:'anonymous',
   attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Routing © openrouteservice.org' }).addTo(map);
 const lyr = { route:L.layerGroup().addTo(map), corridor:L.layerGroup().addTo(map), area:L.layerGroup().addTo(map),
               cands:L.layerGroup().addTo(map), pins:L.layerGroup().addTo(map) };
@@ -1014,7 +1211,10 @@ function detailsHtml(s, i){
   return `<div class="det">
     ${rzHtml(c)}
     <div><span class="k">Wohnwagen</span> ${isOk(c) ? '<span class="badge ok">erlaubt</span>' : '<span class="badge unk">keine Angabe</span>'}${am.length ? ' · ' + am.map(a => a.i + ' ' + a.t).join(', ') : ''}</div>
+    ${settings.gkey && gRate.has(c.id) ? `<div><span class="k">Google</span>${rateHtml(c)}</div>` : ''}
     <div><span class="k">Adresse</span> ${c.addr ? esc(c.addr) : '<span class="muted">wird ermittelt …</span>'}</div>
+    <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
+    <div><span class="k">Strecke</span>${landHtml(s)}</div>
     ${t.opening_hours ? `<div><span class="k">Geöffnet (OSM)</span> ${esc(t.opening_hours)}</div>` : ''}
     ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
     ${web ? `<div><span class="k">Website</span> <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">${esc(shortUrl(web))}</a></div>` : ''}
@@ -1034,10 +1234,10 @@ function altHtml(i){
     um ${esc(shortLabel(state.stages[i].to.label))}</div>`;
   if (!a.list) return h + '<div class="muted" style="margin-top:6px">Suche läuft …</div></div>';
   if (!a.list.length) return h + '<div class="muted" style="margin-top:6px">Keine anderen Campingplätze in diesem Umkreis – Umkreis vergrößern.</div></div>';
-  h += chipsHtml(a.list) + '<ul class="cands">';
-  a.list.filter(passFilter).forEach(c => {
+  h += chipsHtml(a.list) + sortHtml(a.list) + '<ul class="cands">';
+  sortRows(a.list.filter(passFilter)).forEach(c => {
     h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}</div>
+      <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${rateHtml(c)}</div>
       <div class="muted">${fkm1(c.air)} Luftlinie${phoneOf(c) ? ' · ' + esc(phoneOf(c)) : ''}</div></div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <button class="btn small primary" type="button" data-altpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Übernehmen</button>
@@ -1099,6 +1299,7 @@ function renderPanel(){
           <a class="btn" href="${navUrl(s.to)}" target="_blank" rel="noopener">🧭 Navigation</a>
           ${camp ? `<button class="btn${open ? ' on' : ''}" type="button" data-det="${i}">Details ${open ? '▴' : '▾'}</button>
           <button class="btn${altOpen ? ' on' : ''}" type="button" data-alt="${i}" ${busy ? 'disabled' : ''}>Ausweichplatz</button>` : ''}
+          <button class="btn" type="button" data-share="${i}">📤 Teilen</button>
         </div>
         ${camp && open ? detailsHtml(s, i) : ''}
         ${altOpen ? altHtml(i) : ''}</li>`;
@@ -1119,11 +1320,11 @@ function renderPanel(){
       const last = lastS;
       h += `<h3>Campingplatz am Ziel</h3>
         <div class="muted">Plätze im Umkreis von ${Math.max(10, +settings.detour)} km um ${esc(shortLabel(state.end.label))} – wähle einen als Endpunkt.</div>
-        ${chipsHtml(state.endCands)}<ul class="cands">`;
-      state.endCands.filter(passFilter).forEach(c => {
+        ${chipsHtml(state.endCands)}${sortHtml(state.endCands)}<ul class="cands">`;
+      sortRows(state.endCands.filter(passFilter)).forEach(c => {
         const chosen = last.to.kind === 'camp' && last.to.id === c.id;
         h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-          <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}</div>
+          <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${rateHtml(c)}</div>
           <div class="muted">${fkm1(c.air)} vom Zielort</div></div>
           ${chosen ? '<span class="muted">✓ Ziel</span>' : `<button class="btn small primary" type="button" data-endpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Als Ziel</button>`}</li>`;
       });
@@ -1133,14 +1334,17 @@ function renderPanel(){
   if (p){
     h += `<h3>Etappe ${state.stages.length + 1} von ${state.n}: Platz wählen</h3>
       <div class="ideal">Ideal: noch <b>${p.plan.n} Etappen à ~${fkm(p.plan.len)}</b>
-        ${state.overview && !busy ? ` · <button class="linkbtn" type="button" id="nChange">Anzahl ändern</button>` : ''}</div>
+        ${state.overview && !busy ? ` · <button class="linkbtn" type="button" id="nChange">Anzahl ändern</button>` : ''}
+        ${(() => { const q = pointAt(p.line, p.cum, p.plan.len); return `<div class="sbtns" style="margin-top:4px"><span class="muted">Idealpunkt:</span> ${coordHtml({ lat:q[0], lon:q[1] })}</div>`; })()}</div>
       <div class="muted">Bis zum Ziel noch ${fkm(p.remain)} · Korridor ${p.cmin}–${p.cmax} km · Umweg bis ${p.detour} km${p.info ? '<br>' + esc(p.info) : ''}</div>
       ${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}
       <div class="legend"><span><i style="background:${COL.ok}"></i>Wohnwagen erlaubt</span><span><i style="background:${COL.unk}"></i>keine Angabe</span></div>
-      ${chipsHtml(p.cands)}<ul class="cands">`;
-    p.cands.filter(passFilter).forEach((c, k) => {
+      ${chipsHtml(p.cands)}${sortHtml(p.cands)}<ul class="cands">`;
+    const best0 = p.cands.filter(passFilter)[0];
+    sortRows(p.cands.filter(passFilter)).forEach(c => {
+      const k = c === best0 ? 0 : 1;
       h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${k === 0 ? ' <span class="badge best">Empfehlung</span>' : ''}</div>
+        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${amenHtml(c)}${k === 0 ? ' <span class="badge best">Empfehlung</span>' : ''}${rateHtml(c)}</div>
         <div class="muted">bei km ${fkm(c.stageKm)} · Umweg ${fkm1(c.detour.d)} · ${fdur(c.detour.t)}</div>
         <div class="after">${afterText(c)}</div></div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
@@ -1166,7 +1370,8 @@ function renderPanel(){
   });
   el.querySelectorAll('[data-det]').forEach(b => b.onclick = () => {
     const i = +b.dataset.det;
-    if (state.openDet.has(i)) state.openDet.delete(i); else { state.openDet.add(i); ensureOneAddr(i); }
+    if (state.openDet.has(i)) state.openDet.delete(i);
+    else { state.openDet.add(i); ensureOneAddr(i); ensureCountries([i]); if (settings.gkey) loadRatings([state.stages[i].to]); }
     renderPanel();
   });
   el.querySelectorAll('[data-alt]').forEach(b => b.onclick = () => {
@@ -1193,6 +1398,12 @@ function renderPanel(){
   });
   el.querySelectorAll('[data-nights]').forEach(b => b.onchange = () => {
     const s = state.stages[+b.dataset.nights]; s.nights = Math.max(1, Math.min(30, Math.round(+b.value) || 1)); touch(); renderPanel();
+  });
+  el.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy));
+  el.querySelectorAll('[data-share]').forEach(b => b.onclick = () => shareStage(+b.dataset.share));
+  el.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => {
+    if (b.dataset.sort === 'rating' && !settings.gkey){ flash('Für Google-Bewertungen bitte unter ⚙︎ einen Google-API-Schlüssel eintragen.'); return; }
+    settings.sortBy = b.dataset.sort; saveSettings(); renderPanel();
   });
   const di = $('#dateIn'); if (di) di.onchange = () => { state.date = di.value || null; touch(); renderPanel(); };
   const elb = $('#endListBtn'); if (elb) elb.onclick = () => {
@@ -1287,7 +1498,7 @@ $('#handle').onclick = () => { if (sheetDragged) return; setSheet(SHEET[(SHEET.i
 function setupGeoInput(inp, list, key){
   const search = debounce(async () => {
     const t = inp.value.trim();
-    if (t.length < 3 || !settings.key){ list.innerHTML = ''; return; }
+    if (t.length < 3 || (!settings.key && !useFallback)){ list.innerHTML = ''; return; }
     try {
       const r = await geocode(t, 6, true);
       if (inp.value.trim() !== t || document.activeElement !== inp) return;
@@ -1305,7 +1516,10 @@ setupGeoInput($('#endIn'), $('#endSugg'), 'end');
 
 $('#planForm').addEventListener('submit', e => {
   e.preventDefault();
-  if (!settings.key){ openSettings(); setStatus('Bitte zuerst den OpenRouteService-Schlüssel eintragen.', 'error'); return; }
+  if (!settings.key && !useFallback && !confirm('Kein OpenRouteService-Schlüssel eingetragen.\n\nOK = kostenlosen Ersatzdienst (OSRM/Photon) für diese Sitzung verwenden\nAbbrechen = Schlüssel eintragen')){
+    openSettings(); return;
+  }
+  if (!settings.key){ useFallback = true; renderFallbackNote(); }
   run(async () => {
     setStatus('Orte werden gesucht …', 'busy');
     if (!state.start) state.start = await geocodeFirst($('#startIn').value);
@@ -1320,7 +1534,7 @@ $('#planForm').addEventListener('submit', e => {
    Dateien: einstellungen.json (ohne Token) und touren/<id>.json (Format wie die Tour-Datei).
    gp.sync merkt sich je Tour den zuletzt abgeglichenen Stand { sha, at } und ausstehende Löschungen. */
 const GH = 'https://api.github.com';
-const SYNC_KEYS = ['key', 'speed', 'detour', 'cmin', 'cmax', 'highway', 'noToll', 'altRadius', 'filters'];
+const SYNC_KEYS = ['key', 'speed', 'detour', 'cmin', 'cmax', 'highway', 'noToll', 'altRadius', 'filters', 'gkey', 'sortBy'];
 const ghOn = () => !!(settings.ghToken && /^[\w.-]+\/[\w.-]+$/.test(settings.ghRepo || ''));
 function syncMeta(){
   try { return { known:{}, deleted:[], ...JSON.parse(localStorage.getItem('gp.sync') || '{}') }; } catch(e){ return { known:{}, deleted:[] }; }
@@ -1490,6 +1704,7 @@ function buildTour(name, id){
   return { id: id || state.tourId || Date.now(), name: (name || '').trim() || defaultName(), savedAt: new Date().toISOString(),
     start: slimPoint(state.start), end: slimPoint(state.end), done: state.done, n: state.n, date: state.date || undefined,
     stages: state.stages.map(s => ({ from:slimPoint(s.from), to:slimPoint(s.to), dist:s.dist, dur:s.dur, note:s.note, line:thin(s.line),
+      ex: s.ex || undefined, countries: s.countries || undefined,
       memo: s.memo && (s.memo.res || s.memo.text) ? s.memo : undefined, nights: s.nights > 1 ? s.nights : undefined })),
     endCands: state.endSearched ? state.endCands.map(c => ({ id:c.id, lat:c.lat, lon:c.lon, tags:c.tags, air:Math.round(c.air) })) : undefined };
 }
@@ -1647,23 +1862,33 @@ function renderSummary(){
         <div><span class="k">Strecke</span> ${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}</div>
         ${camp ? `<div><span class="k">Campingplatz</span> ${esc(c.label)} ${isOk(c) ? '<span class="badge ok">Wohnwagen ✓</span>' : ''}${amenHtml(c)}</div>
         <div><span class="k">Adresse</span> ${esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–')}</div>
+        <div><span class="k">Koordinaten</span> ${coordHtml(c)}</div>
         ${rzHtml(c, true) || ''}
         ${c.tags?.opening_hours ? `<div><span class="k">Geöffnet (OSM)</span> ${esc(c.tags.opening_hours)}</div>` : ''}
         ${web ? `<div><span class="k">Website</span> <a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">${esc(shortUrl(web))}</a></div>` : ''}
         ${phone ? `<div><span class="k">Telefon</span> <a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
         ${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<div><span class="k">Aufenthalt</span> ${s.nights} Nächte</div>` : ''}
         ${s.memo?.text || s.memo?.res ? `<div><span class="k">Notiz</span> ${s.memo.res ? 'reserviert ✓ ' : ''}${esc(s.memo.text || '')}</div>` : ''}` : ''}
-        <div><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation starten</a></div>
+        <div><span class="k">Unterwegs</span> ${landHtml(s, true)}</div>
+        <div class="sbtns"><a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">🧭 Navigation starten</a>
+          <button class="btn small" type="button" data-share="${i}">📤 Teilen</button></div>
       </div></details>`;
   });
+  h += `<div class="muted" style="margin-top:6px">Offline: Angesehene Kartenausschnitte bleiben gespeichert.
+    <button class="linkbtn" type="button" id="offBtn">Etappenziele jetzt für unterwegs laden</button></div>`;
   $('#sumBody').innerHTML = h;
+  $('#sumBody').querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy));
+  $('#sumBody').querySelectorAll('[data-share]').forEach(b => b.onclick = () => shareStage(+b.dataset.share));
+  $('#offBtn').onclick = () => { $('#sumDlg').close(); prefetchStops(); };
 }
 async function openSummary(){
   if (!state.stages.length) return;
   renderSummary(); $('#sumDlg').showModal();
   if (await ensureAddrs()) renderSummary();
+  ensureCountries(state.stages.map((_, i) => i));
 }
 $('#sumBtn').onclick = $('#fabSum').onclick = openSummary;
+$('#fbOff').onclick = () => { useFallback = false; renderFallbackNote(); };
 $('#sumX').onclick = $('#sumClose').onclick = () => $('#sumDlg').close();
 
 /* ---------- Druck / PDF: A4 quer, Übersichtskarte + Tabelle ---------- */
@@ -1672,29 +1897,32 @@ async function printTour(){
   if (!state.stages.length) return;
   setStatus('Druckansicht wird vorbereitet …', 'busy');
   await ensureAddrs();
+  await ensureCountries(state.stages.map((_, i) => i));
   const ds = stageDates(), el = $('#print');
   let rows = '';
   state.stages.forEach((s, i) => {
     const c = s.to, camp = c.kind === 'camp', web = camp && webOf(c), phone = camp && phoneOf(c), r = camp && rzData[c.id];
-    const rz = r && r.status === 'ok' && web && r.website === web
-      ? `${esc(r.hours || 'siehe Website')}<br><a class="sm" href="${esc(safeUrl(r.url))}">Quelle</a>` : '<span class="sm">–</span>';
+    const okR = r && web && r.website === web && (r.status === 'ok' || r.status === 'partial');
+    const rz = okR ? [r.status === 'ok' ? esc(r.hours || 'siehe Website') : '', r.checkin ? 'Check-in ' + esc(r.checkin.text) : '',
+      r.checkout ? 'Check-out ' + esc(r.checkout.text) : '', r.url ? `<a class="sm" href="${esc(safeUrl(r.url))}">Quelle</a>` : ''].filter(Boolean).join('<br>') : '<span class="sm">–</span>';
+    const extra = [s.countries && s.countries.length ? s.countries.join(' → ') : '', s.ex?.ferry > 200 ? 'Fähre' : '', s.ex?.toll > 1000 ? 'Maut ~' + fkm(s.ex.toll) : ''].filter(Boolean).join(' · ');
     rows += `<tr><td>${i + 1}</td><td>${ds ? fdate(ds[i]) : ''}</td>
       <td>${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}</td>
-      <td>${fkm(s.dist)}<br><span class="sm">${fdur(s.dur)}</span></td>
+      <td>${fkm(s.dist)}<br><span class="sm">${fdur(s.dur)}${extra ? '<br>' + esc(extra) : ''}</span></td>
       <td><b>${esc(c.label)}</b>${camp && isOk(c) ? '<br><span class="sm">Wohnwagen ✓</span>' : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
-      <td>${camp ? esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–') : esc(c.label)}</td>
+      <td>${camp ? esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–') : esc(c.label)}<br><span class="sm">${fcoord(c)}</span></td>
       <td>${camp ? rz : ''}</td>
       <td>${web ? `<a href="${esc(safeUrl(web))}">${esc(shortUrl(web))}</a><br>` : ''}${phone ? `<a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a><br>` : ''}<a href="${mapsUrl(c)}">Google Maps</a></td></tr>`;
   });
   el.innerHTML = `<h1>${esc(tourTitle())}</h1><div class="sub">${esc(totalsText())}</div><div class="pmap"></div>
-    <table><colgroup><col style="width:9mm"><col style="width:19mm"><col style="width:38mm"><col style="width:18mm"><col style="width:46mm"><col style="width:52mm"><col style="width:36mm"><col></colgroup>
+    <table><colgroup><col style="width:9mm"><col style="width:18mm"><col style="width:34mm"><col style="width:27mm"><col style="width:42mm"><col style="width:50mm"><col style="width:36mm"><col></colgroup>
     <thead><tr><th>Nr.</th><th>Datum</th><th>Von → Nach</th><th>Strecke</th><th>Campingplatz</th><th>Adresse</th><th>Rezeption</th><th>Website / Kontakt</th></tr></thead>
     <tbody>${rows}</tbody></table>
     <div class="foot">Kartendaten © OpenStreetMap-Mitwirkende · Routing openrouteservice.org · erstellt mit Gespann-Etappen am ${new Date().toLocaleDateString('de-DE')}. Angaben ohne Gewähr.</div>`;
   // Übersichtskarte
   if (printMap){ printMap.remove(); printMap = null; }
   printMap = L.map(el.querySelector('.pmap'), { zoomControl:false, attributionControl:false, fadeAnimation:false, zoomAnimation:false, inertia:false });
-  const tl = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18 }).addTo(printMap);
+  const tl = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18, crossOrigin:'anonymous' }).addTo(printMap);
   const pts = [];
   state.stages.forEach((s, i) => {
     L.polyline(s.line, { color:COL.brand, weight:4 }).addTo(printMap); pts.push(...s.line);
@@ -1708,12 +1936,30 @@ async function printTour(){
 }
 $('#printBtn').onclick = () => { $('#sumDlg').close(); printTour(); };
 
+/* Offline-Karte: Kartenausschnitte rund um die Etappenziele einmal ansehen → der Service Worker speichert sie.
+   (Bewusst nur wenige Ausschnitte: Die OSM-Kachelregeln verbieten das massenhafte Vorabladen.) */
+async function prefetchStops(){
+  if (state.busy || !state.stages.length) return;
+  state.busy = true; renderPanel();
+  const stops = state.stages.map(s => s.to), zooms = [10, 13, 15];
+  try {
+    for (let k = 0; k < stops.length; k++){
+      for (const z of zooms){
+        setStatus(`Karte für unterwegs: Ziel ${k + 1} von ${stops.length} (Zoom ${z}) …`, 'busy');
+        map.setView([stops[k].lat, stops[k].lon], z, { animate:false });
+        await new Promise(res => { let done = false; const f = () => { if (!done){ done = true; res(); } }; tileLayer.once('load', f); setTimeout(f, 5000); });
+      }
+    }
+    flash('Karten rund um die Etappenziele sind für unterwegs gespeichert.');
+  } finally { state.busy = false; renderPanel(); fitAll(); }
+}
+
 /* ---------- Dialoge ---------- */
 function openSettings(){
   $('#sKey').value = settings.key; $('#sSpeed').value = settings.speed; $('#sDetour').value = settings.detour;
   $('#sMin').value = settings.cmin; $('#sMax').value = settings.cmax;
   $('#sHighway').checked = !!settings.highway; $('#sToll').checked = !!settings.noToll;
-  $('#sRepo').value = settings.ghRepo || ''; $('#sToken').value = settings.ghToken || '';
+  $('#sRepo').value = settings.ghRepo || ''; $('#sToken').value = settings.ghToken || ''; $('#sGkey').value = settings.gkey || '';
   $('#settingsDlg').returnValue = '';   // sonst würde Esc/Zurück nach einem früheren „Speichern“ erneut speichern
   $('#settingsDlg').showModal();
 }
@@ -1726,7 +1972,7 @@ $('#settingsDlg').addEventListener('close', () => {
   const newConn = ghToken && (ghToken !== settings.ghToken || ghRepo !== settings.ghRepo);
   settings = { ...settings, key: $('#sKey').value.trim(), speed: Math.max(80, n($('#sSpeed').value, DEF.speed)),
     detour: Math.max(1, n($('#sDetour').value, DEF.detour)), cmin, cmax,
-    highway: $('#sHighway').checked, noToll: $('#sToll').checked, ghRepo, ghToken };
+    highway: $('#sHighway').checked, noToll: $('#sToll').checked, ghRepo, ghToken, gkey: $('#sGkey').value.trim() };
   if (newConn){ try { localStorage.removeItem('gp.sync'); } catch(e){} }   // neue Verbindung: Online-Einstellungen haben Vorrang
   else settings.savedAt = new Date().toISOString();
   saveSettings();

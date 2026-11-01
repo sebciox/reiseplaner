@@ -42,10 +42,16 @@ der höchstens ~10 km von der Route entfernt liegt.
 | Zielplatz-Liste | nach Auswahl eingeklappt („Zielplatz: … ✓ Ändern“) |
 | Etappe | Knöpfe: 🧭 Navigation (Google Maps, `dir/?api=1&destination=`), Details (Rezeption, Wohnwagen, Ausstattung, Adresse, Öffnungszeiten OSM, Telefon, Website, Notiz + „reserviert“ + Nächte), Ausweichplatz, Platz ändern (= ab hier neu planen) |
 | Ausweichplatz | Umkreis 5/10/20/30 km (gemerkt in `settings.altRadius`) um den Platz der Etappe; „Übernehmen“ rechnet diese und die nächste Etappe neu, spätere bleiben |
+| Google-Bewertungen | Places API (New) Text Search (`places.googleapis.com/v1/places:searchText`, Feldmaske rating/userRatingCount/googleMapsUri), Schlüssel `settings.gkey` (synchronisiert). Nur live + im Arbeitsspeicher (Google-Regeln), max. 20 Plätze je Liste (Kontingent). Sortierung „Entfernung/Etappe“ oder „★ Google-Bewertung“ (gewichtet, `settings.sortBy`) |
+| Ersatzdienst | nur auf Rückfrage: bei ORS-Fehler (kein/ungültiger Schlüssel, 429, 5xx, Netz) `confirm` → für die Sitzung OSRM-Demo (`router.project-osrm.org`, Route + Table, `exclude=toll`) und Photon (`photon.komoot.io`, Ortssuche/Rückwärtssuche); Hinweis `#fbNote` mit „zurück zu ORS“ |
+| Koordinaten | in Details/Übersicht/PDF und am Idealpunkt der Etappe, je mit „Kopieren“ und „Camping in der Nähe“ (Google-Maps-Suche „camping“ am Punkt – findet auch Plätze, die in OSM fehlen) |
+| Länder/Fähre/Maut | ORS `extra_info: waycategory, tollways` → `stage.ex {ferry, toll}` (Meter); Länder je Etappe per Photon-Rückwärtssuche alle ~60 km → `stage.countries`; Tabelle `LAND` mit Gespann-Richtwerten (ohne Gewähr) |
+| Teilen | 📤 je Etappe: Text (Datum, Ziel, Adresse, Koordinaten, Rezeption/Check-in/out, Telefon, Website, Navigation, Notiz) über `navigator.share`, sonst Zwischenablage |
+| Offline-Karte | Service Worker speichert jede angesehene OSM-Kachel (Cache `gespann-kacheln`, max. 2500, Netz zuerst). Kein Massen-Vorabladen (OSM-Kachelregeln) – nur „Etappenziele für unterwegs laden“ (je Ziel Zoom 10/13/15) |
 | Reisedatum | Abfahrt (`tour.date`) + Nächte je Stopp (`stage.nights`, Standard 1) → Datum je Etappe |
 | Ausstattung/Filter | Symbole aus OSM (Hund, Strom, WLAN, Duschen, Pool); Filter-Chips „Wohnwagen ✓ / Hund / Strom“ (`settings.filters`), filtern nur ausdrückliche Angaben |
 | Übersicht | Harmonika (📋): außerhalb des Reisezeitraums alles offen, während der Tour nur die nächste Etappe; „Drucken / PDF“ = A4 quer (Übersichtskarte + Tabelle: Nr, Datum, Von → Nach, Strecke, Platz, Adresse, Rezeption, Website/Kontakt mit Links) über `window.print()` |
-| Rezeptionszeiten | GitHub Action im Repo `touren` (`tools/rezeption.mjs`) liest nach jedem Tour-Push die Websites der gewählten Plätze (Startseite + passende Unterseiten, mehrsprachig) → `rezeption.json` {status, hours, snippet, url}. App lädt die Datei beim Abgleich (`gp.rezeption`) und zeigt Zeiten + Quellen-Link; ~2 Min. nach dem Hochladen wird einmal nachgeladen |
+| Rezeptionszeiten | GitHub Action im Repo `touren` (`tools/rezeption.mjs`) liest nach jedem Tour-Push die Websites der gewählten Plätze (Startseite + passende Unterseiten; DE/EN/FR/ES/CA/NL/IT/DA/SV/NO) → `rezeption.json` {v, status ok/partial/none/error, hours, snippet, url, checkin/checkout {text, snippet, url}}; `VERSION` im Skript erhöhen → alle Plätze werden neu geprüft. App lädt die Datei beim Abgleich (`gp.rezeption`) und zeigt Zeiten + Quellen-Link; ~2 Min. nach dem Hochladen wird einmal nachgeladen |
 
 ## Ideale Etappenlänge (Kernlogik)
 
