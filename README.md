@@ -23,6 +23,16 @@ die letzte Etappe führt direkt zum Ziel.
      Auf weiteren Geräten reicht der Token – Einstellungen und Touren werden geladen.
 
 Lokal testen geht auch: im Ordner `python3 -m http.server` starten und `http://localhost:8000` öffnen.
+Auf weiteren Browsern/Geräten am einfachsten: im verbundenen Browser unter ⚙︎ „Link für anderen Browser kopieren“.
+
+## Entwicklung
+
+- Aufbau: `index.html` (Gerüst), `styles.css`, `js/*.js` (klassische Skripte, Reihenfolge in `index.html`), `sw.js`.
+  Kein Build-Schritt – GitHub Pages liefert die Dateien direkt aus.
+- `npm install` – Werkzeuge für Tests und Code-Prüfung (für die App selbst nicht nötig).
+- `npm test` – alle Playwright-Tests (`tests/`, mit nachgebauten Diensten), `npm run lint` (ESLint),
+  `npm run format` (Prettier), `npm run bump` (Version für den Offline-Speicher hochzählen, nach jeder App-Änderung).
+- Jeder Push startet die GitHub Action „Tests“ (Lint, Formatierung, alle Tests).
 
 ## Planen
 

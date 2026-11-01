@@ -82,8 +82,23 @@ Hintergrund: Sebastians erste Testtour Witten → Sant Pere Pescador ergab 3 Üb
 
 ## Technik
 
-- Alles in `index.html` (HTML, CSS, JS inline). Leaflet 1.9.4 von cdnjs.
-- `sw.js`: Service Worker, network-first; bei Änderungen die Cache-Version (`gespann-etappen-vN`) hochzählen.
+- **Dateien (seit Nov. 2026 aufgeteilt, weiter ohne Build-Schritt):** `index.html` (nur HTML-Gerüst + Dialoge), `styles.css`,
+  `js/*.js` = **klassische Skripte** (kein ES-Modul), in `index.html` in fester Reihenfolge eingebunden und mit gemeinsamem
+  globalem Gültigkeitsbereich: `basis` (Konstanten, Einstellungen, Hilfen, Geometrie) → `dienste` (ORS, OSRM/Photon,
+  Zwischenspeicher, Overpass, Matrix) → `daten` (Reisedatum, Links, Adressen) → `recherche` (Rezeption, Sehenswürdigkeiten,
+  Preise/Euro) → `google` → `etappe` (Koordinaten, Fähre/Maut, Teilen, Autosichern) → `planung` (Kernlogik Platzsuche) →
+  `karte` → `panel` (Seitenleiste, Reiter, Bottom-Sheet) → `ziele` → `onlinespeicher` → `export` (Speichern/GPX/Datei/Excel)
+  → `reiseplan` (Zeitleiste, Druck, Offline) → `start` (Dialoge, Einrichtungs-Link, Start). **Regel:** Code auf oberster
+  Ebene (der beim Laden läuft) darf nur Namen aus derselben oder früheren Dateien benutzen; in Funktionen ist alles erlaubt.
+  Warum nicht ES-Module: hunderte Querverweise und Zuweisungen an gemeinsame Variablen (`settings = …`), Tests greifen per
+  `page.evaluate` auf globale Namen zu. Leaflet 1.9.4 von cdnjs.
+- **Version:** nach jeder Änderung an App-Dateien `npm run bump` – zählt `CACHE` in `sw.js` und alle `?v=` (index.html,
+  sw.js) hoch, damit Browser keine Mischung aus alten und neuen Dateien laden. `tests/version.test.js` prüft das.
+- `sw.js`: Service Worker, network-first, hält `index.html`, `styles.css`, alle `js/*.js` (mit `?v=`) offline vor.
+- **Code-Qualität:** `npm run lint` (ESLint 10, `eslint.config.js` liest die globalen Namen aller `js/`-Dateien automatisch
+  ein → findet vertippte Namen), `npm run format` / `format:check` (Prettier, `.prettierrc.json`: 160 Zeichen, einfache
+  Anführungszeichen). GitHub Action `.github/workflows/tests.yml` führt bei jedem Push Lint, Format-Prüfung und alle
+  Tests aus (Fehler-Screenshots als Artefakt).
 - **Routing, Matrix (Umwege), Ortssuche:** OpenRouteService (`api.openrouteservice.org`), Schlüssel gibt der Nutzer
   unter ⚙︎ ein (localStorage `gp.settings`). Kostenloser Plan: ca. 2.000 Routen und 500 Matrix-Abfragen pro Tag.
   Die ORS-Website war Anfang Nov. 2026 offline; Schlüssel gibt es über das HeiGIT-Konto/-Dashboard. Neue Schlüssel
@@ -120,6 +135,10 @@ Hintergrund: Sebastians erste Testtour Witten → Sant Pere Pescador ergab 3 Üb
 
 ## Testen
 
+**Tests liegen im Repo** (`tests/*.test.js`, je Datei ein Playwright-Ablauf mit eigenem Webserver `tests/lib/server.js` und
+Port; Ausgaben/Screenshots nach `tests/out/`, nicht eingecheckt; Vorlage `tests/fixtures/tour.etappen.json`).
+`npm install` (Playwright 1.63, Leaflet 1.9.4, SheetJS 0.18.5 nur zum Lesen der Excel-Datei, ESLint, Prettier), dann
+`npm test` (alle) oder `node tests/run-all.js sights tabs` (Auswahl nach Dateianfang). Neue Funktion → Test ergänzen.
 Die Arbeitsumgebung erreicht ORS/Overpass oft nicht. Bewährt: Playwright-Test mit gemockten Antworten
 (`page.route` für ORS-Directions/Matrix/Geocode und Overpass, Leaflet lokal aus npm, `serviceWorkers:'block'`),
 Ablauf: planen → Plätze wählen → Zielplatz → Tour-Datei exportieren → neu → importieren.
@@ -130,8 +149,5 @@ Online-Speicher: GitHub-API mit In-Memory-Repo mocken, zwei Browser-Kontexte (La
 - **Geplant (noch nicht umgesetzt, Details mit Sebastian klären):**
   - **Sehenswürdigkeiten-Vorschläge** in der Nähe eines Platzes (mit Google-Sternen), „Liste einfügen“ (mehrere Ziele auf einmal).
 
-- **Code aufteilen + Qualitätswerkzeuge (Sebastian will das, aber später – erst auf Zuruf umsetzen):**
-  1. Ohne Build-Schritt in ES-Module aufteilen (`styles.css`, `karte.js`, `routing.js`, `campingplaetze.js`, `google.js`, `reiseplan.js`, `export.js` …), weiter GitHub Pages.
-  2. Playwright-Tests (bisher nur in der Arbeitsumgebung, Scratchpad `t/`) ins Repo legen, GitHub Action lässt sie bei jedem Push laufen; ESLint + Prettier.
 - Start/Ziel sind vorerst zum Testen vorausgefüllt (`DEMO` in `index.html`: Witten → Sant Pere Pescador) – später entfernen.
 - Echte Tests mit realen Diensten stehen noch aus (park4night-Link-Ziel ungeprüft).

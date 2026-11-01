@@ -1,0 +1,21 @@
+{
+  "name": "reiseplaner",
+  "private": true,
+  "description": "Privater Reiseplaner (PWA) für Wohnwagen-Gespanne – Tests und Code-Prüfung (die App selbst braucht keinen Build-Schritt)",
+  "scripts": {
+    "test": "node tests/run-all.js",
+    "lint": "eslint js sw.js tests tools eslint.config.js",
+    "format": "prettier --write js styles.css sw.js tests tools eslint.config.js",
+    "format:check": "prettier --check js styles.css sw.js tests tools eslint.config.js",
+    "bump": "node tools/bump.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "leaflet": "1.9.4",
+    "playwright": "1.63.0",
+    "prettier": "^3.9.10",
+    "xlsx": "0.18.5"
+  }
+}
