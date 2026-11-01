@@ -99,6 +99,10 @@ input:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .ci .btn{margin-top:8px;width:100%}
 .badge{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px;color:#fff}
 .badge.ok{background:var(--ok)} .badge.unk{background:var(--unk)}
+.badge.best{background:var(--accent);vertical-align:1px;margin-left:4px}
+.ideal{margin:2px 0 4px;padding:8px 10px;border-radius:10px;background:var(--warn-soft);font-size:14px}
+.cand .after{font-size:13px;color:var(--ok);margin-top:2px}
+.cand .after.worse{color:var(--danger)}
 .pin{width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#1f6b52;
   border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
 .pin span{transform:rotate(45deg);color:#fff;font:700 12px system-ui,sans-serif}
@@ -172,7 +176,11 @@ a{color:var(--brand)}
 <dialog id="toursDlg">
   <h2>Gespeicherte Touren</h2>
   <ul class="tours" id="toursList"></ul>
-  <div class="dlg-actions"><button class="btn" type="button" id="toursClose">Schließen</button></div>
+  <div class="dlg-actions">
+    <button class="btn" type="button" id="importBtn">Tour-Datei öffnen</button>
+    <button class="btn" type="button" id="toursClose">Schließen</button>
+  </div>
+  <input type="file" id="importIn" accept=".json,application/json" hidden>
 </dialog>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -190,7 +198,7 @@ let settings = loadSettings();
 function loadSettings(){ try { return { ...DEF, ...JSON.parse(localStorage.getItem('gp.settings') || '{}') }; } catch(e){ return { ...DEF }; } }
 function saveSettings(){ try { localStorage.setItem('gp.settings', JSON.stringify(settings)); } catch(e){} }
 
-const state = { start:null, end:null, stages:[], pending:null, done:false, busy:false, tourId:null };
+const state = { start:null, end:null, stages:[], pending:null, done:false, busy:false, tourId:null, endCands:[] };
 const campIndex = new Map();
 const $ = s => document.querySelector(s);
 
@@ -378,29 +386,72 @@ function campPoint(c){
            label: c.tags.name || 'Campingplatz ohne Namen', detour: c.detour || null };
 }
 
+/* Ideale Aufteilung: so wenige Etappen wie möglich (jede ≤ max), alle gleich lang */
+function plan(R){
+  const cm = +settings.cmax * 1000;
+  const n = Math.max(1, Math.ceil(R / cm));
+  return { n, len: R / n };
+}
+
 async function computeNext(from){
-  state.pending = null; state.done = false;
+  state.pending = null; state.done = false; state.endCands = [];
   setStatus('Route wird berechnet …', 'busy'); renderAll();
   const r = await route(from, state.end);
   if (r.dist <= +settings.cmax * 1000){
     state.stages.push({ from, to:{ ...state.end, kind:'end' }, line:r.line, dist:r.dist, dur:r.dur, note:null });
     state.done = true; state.pending = null;
     renderAll(); fitAll();
+    await loadEndCands();
     return;
   }
   const cum = cumul(r.line);
+  const pl = plan(r.dist), optKm = pl.len / 1000;
   for (let lv = 0; lv < LEVELS.length; lv++){
     const L = LEVELS[lv](settings);
+    // Korridor nach unten erweitern, falls die ideale Etappenlänge kürzer ist als das eingestellte Minimum
+    const cmin = Math.max(50, Math.min(L.cmin, Math.floor(optKm - 30)));
     setStatus(lv === 0 ? 'Suche Campingplätze im Korridor …' : 'Erweitere die Suche …', 'busy');
-    const cands = await findCandidates(r.line, cum, L.cmin, L.cmax, L.detour);
+    const cands = await findCandidates(r.line, cum, cmin, L.cmax, L.detour);
     if (cands.length || lv === LEVELS.length - 1){
-      cands.forEach(c => campIndex.set(c.id, c));
-      state.pending = { from, line:r.line, cum, remain:r.dist, remainDur:r.dur, cands, cmin:L.cmin, cmax:L.cmax, detour:L.detour,
+      const cm = +settings.cmax * 1000;
+      cands.forEach(c => {
+        campIndex.set(c.id, c);
+        c.after = Math.max(0, r.dist - c.stageKm + c.detour.d);          // Reststrecke ab diesem Platz (Näherung)
+        c.afterPlan = c.after <= cm ? { n:1, len:c.after } : plan(c.after);
+        c.nights = state.stages.length + c.afterPlan.n;                    // Übernachtungen gesamt
+        c.dev = Math.abs(c.stageKm - pl.len);
+      });
+      cands.sort((a, b) => a.nights - b.nights || a.dev - b.dev);
+      cands.forEach((c, i) => c.best = i === 0);
+      state.pending = { from, line:r.line, cum, remain:r.dist, remainDur:r.dur, cands, cmin, cmax:L.cmax, detour:L.detour, plan:pl,
+        info: cmin < L.cmin ? `Suche ab ${cmin} km, damit die ideale Etappenlänge drin liegt.` : null,
         note: cands.length ? L.note : 'Keine Campingplätze gefunden. Zoom auf der Karte rein und wähle einen Platz manuell.' };
       break;
     }
   }
   renderAll(); fitCorridor();
+}
+
+/* Campingplätze rund um den Zielort, um das Ziel auf einen Platz zu legen */
+async function loadEndCands(){
+  state.endCands = [];
+  const e = state.end, rad = Math.max(10, +settings.detour) * 1000;
+  try {
+    setStatus('Suche Campingplätze am Ziel …', 'busy');
+    const camps = parseCamps(await overpass(`[out:json][timeout:30];nwr["tourism"="camp_site"](around:${rad},${e.lat},${e.lon});out center tags;`));
+    camps.forEach(c => { c.air = hav([e.lat, e.lon], [c.lat, c.lon]); campIndex.set(c.id, c); });
+    state.endCands = camps.sort((a, b) => a.air - b.air).slice(0, 20);
+  } catch(err){ console.warn(err); }
+  renderAll();
+}
+async function selectEnd(c){
+  const i = state.stages.length - 1, s = state.stages[i];
+  if (!state.done || !s) return;
+  setStatus('Letzte Etappe wird neu berechnet …', 'busy');
+  const to = campPoint(c); to.air = c.air;
+  const r = await route(s.from, to);
+  state.stages[i] = { from:s.from, to, line:r.line, dist:r.dist, dur:r.dur, note:null };
+  renderAll(); fitAll();
 }
 
 async function selectCamp(c){
@@ -449,17 +500,28 @@ function campInfo(c, mode){
     <div><span class="badge ${ok ? 'ok' : 'unk'}">${ok ? 'Wohnwagen erlaubt' : 'Wohnwagen: keine Angabe'}</span></div>
     ${c.detour ? `<div>Umweg ${fkm1(c.detour.d)} · ${fdur(c.detour.t)} (einfach)</div>` : ''}
     ${c.stageKm != null && mode === 'cand' ? `<div>Liegt bei Etappen-km ${fkm(c.stageKm)}</div>` : ''}
+    ${c.afterPlan && mode === 'cand' ? `<div>${afterText(c)}</div>` : ''}
+    ${mode === 'end' && c.air != null ? `<div>${fkm1(c.air)} vom Zielort (Luftlinie)</div>` : ''}
     ${mode === 'area' ? '<div class="muted">außerhalb des Suchkorridors</div>' : ''}
     ${t.opening_hours ? `<div class="muted">Öffnungszeiten (OSM): ${esc(t.opening_hours)}</div>` : ''}
     ${web ? `<div><a href="${esc(safeUrl(web))}" target="_blank" rel="noopener">Website</a></div>` : ''}
     ${phone ? `<div><a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a></div>` : ''}
     <div><a href="${gm}" target="_blank" rel="noopener">Google Maps</a> · <a href="${p4n}" target="_blank" rel="noopener">park4night</a></div>
-    ${mode !== 'chosen' && state.pending && !state.busy ? `<button class="btn primary" type="button" data-pick="${esc(c.id)}">Als Etappenziel wählen</button>` : ''}
+    ${(mode === 'cand' || mode === 'area') && state.pending && !state.busy ? `<button class="btn primary" type="button" data-pick="${esc(c.id)}">Als Etappenziel wählen</button>` : ''}
+    ${mode === 'end' && state.done && !state.busy ? `<button class="btn primary" type="button" data-endpick="${esc(c.id)}">Als Ziel wählen</button>` : ''}
   </div>`;
+}
+function afterText(c){
+  const a = c.afterPlan;
+  const tail = a.n === 1 ? `danach noch ${fkm(a.len)} bis zum Ziel` : `danach ${a.n} Etappen à ~${fkm(a.len)}`;
+  return `${tail} · ${c.nights} ${c.nights === 1 ? 'Übernachtung' : 'Übernachtungen'} gesamt`;
 }
 map.on('popupopen', e => {
   e.popup.getElement().querySelectorAll('[data-pick]').forEach(b => {
     b.onclick = () => { const c = campIndex.get(b.dataset.pick); map.closePopup(); if (c) run(() => selectCamp(c)); };
+  });
+  e.popup.getElement().querySelectorAll('[data-endpick]').forEach(b => {
+    b.onclick = () => { const c = campIndex.get(b.dataset.endpick); map.closePopup(); if (c) run(() => selectEnd(c)); };
   });
 });
 
@@ -473,14 +535,28 @@ function renderMap(){
     if (end > p.cmin * 1000)
       L.polyline(slice(p.line, p.cum, p.cmin * 1000, end), { color:COL.corridor, weight:10, opacity:.45 }).addTo(lyr.corridor);
     p.cands.forEach(c => {
-      c._m = L.circleMarker([c.lat, c.lon], { radius:9, color:'#fff', weight:2, fillColor:isOk(c) ? COL.ok : COL.unk, fillOpacity:1 })
+      c._m = L.circleMarker([c.lat, c.lon], { radius:9, color:c.best ? COL.corridor : '#fff', weight:c.best ? 4 : 2, fillColor:isOk(c) ? COL.ok : COL.unk, fillOpacity:1 })
         .bindPopup(() => campInfo(c, 'cand')).addTo(lyr.cands);
     });
+    if (p.plan){
+      L.circleMarker(pointAt(p.line, p.cum, p.plan.len), { radius:6, color:'#fff', weight:2, fillColor:COL.corridor, fillOpacity:1 })
+        .bindTooltip(`Ideal ~${fkm(p.plan.len)}`, { permanent:true, direction:'top', offset:[0, -6] }).addTo(lyr.corridor);
+    }
   }
+  const last = state.stages[state.stages.length - 1];
+  const endIsCamp = state.done && last && last.to.kind === 'camp';
+  state.endCands.forEach(c => {
+    if (endIsCamp && last.to.id === c.id) return;
+    c._m = L.circleMarker([c.lat, c.lon], { radius:7, color:isOk(c) ? COL.ok : COL.unk, weight:3, fillColor:'#fff', fillOpacity:1 })
+      .bindPopup(() => campInfo(c, 'end')).addTo(lyr.cands);
+  });
   if (state.start) L.marker([state.start.lat, state.start.lon], { icon:pinIcon('S') }).bindPopup(esc(state.start.label)).addTo(lyr.pins);
-  if (state.end) L.marker([state.end.lat, state.end.lon], { icon:pinIcon('Z', 'end') }).bindPopup(esc(state.end.label)).addTo(lyr.pins);
+  if (state.end && !endIsCamp) L.marker([state.end.lat, state.end.lon], { icon:pinIcon('Z', 'end') }).bindPopup(esc(state.end.label)).addTo(lyr.pins);
   state.stages.forEach((s, i) => {
-    if (s.to.kind === 'camp') L.marker([s.to.lat, s.to.lon], { icon:pinIcon(String(i + 1)) }).bindPopup(() => campInfo(s.to, 'chosen')).addTo(lyr.pins);
+    if (s.to.kind !== 'camp') return;
+    const fin = state.done && i === state.stages.length - 1;
+    L.marker([s.to.lat, s.to.lon], { icon:fin ? pinIcon('Z', 'end') : pinIcon(String(i + 1)) })
+      .bindPopup(() => campInfo(s.to, 'chosen')).addTo(lyr.pins);
   });
 }
 function sheetPad(){
@@ -542,20 +618,37 @@ function renderPanel(){
     const km = state.stages.reduce((a, s) => a + s.dist, 0), t = state.stages.reduce((a, s) => a + s.dur, 0);
     const n = state.stages.length - 1;
     h += `<div class="summary">Gesamt ${fkm(km)} · ${fdur(t)} Fahrzeit · ${n} ${n === 1 ? 'Übernachtung' : 'Übernachtungen'}</div>`;
+    if (state.endCands.length){
+      const last = state.stages[state.stages.length - 1];
+      h += `<h3>Campingplatz am Ziel</h3>
+        <div class="muted">Plätze im Umkreis von ${Math.max(10, +settings.detour)} km um ${esc(shortLabel(state.end.label))} – wähle einen als Endpunkt.</div>
+        <ul class="cands">`;
+      state.endCands.forEach(c => {
+        const chosen = last.to.kind === 'camp' && last.to.id === c.id;
+        h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
+          <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}</div>
+          <div class="muted">${fkm1(c.air)} vom Zielort</div></div>
+          ${chosen ? '<span class="muted">✓ Ziel</span>' : `<button class="btn small primary" type="button" data-endpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Als Ziel</button>`}</li>`;
+      });
+      h += '</ul>';
+    }
   }
   if (p){
+    const nowN = state.stages.length + p.plan.n - 1;
     h += `<h3>Etappe ${state.stages.length + 1}: Platz wählen</h3>
-      <div class="muted">Bis zum Ziel noch ${fkm(p.remain)} · Korridor ${p.cmin}–${p.cmax} km · Umweg bis ${p.detour} km</div>
+      <div class="ideal">Ideal: noch <b>${p.plan.n} Etappen à ~${fkm(p.plan.len)}</b> → ${nowN} ${nowN === 1 ? 'Übernachtung' : 'Übernachtungen'} gesamt</div>
+      <div class="muted">Bis zum Ziel noch ${fkm(p.remain)} · Korridor ${p.cmin}–${p.cmax} km · Umweg bis ${p.detour} km${p.info ? '<br>' + esc(p.info) : ''}</div>
       ${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}
       <div class="legend"><span><i style="background:${COL.ok}"></i>Wohnwagen erlaubt</span><span><i style="background:${COL.unk}"></i>keine Angabe</span></div>
       <ul class="cands">`;
     p.cands.forEach(c => {
       h += `<li class="cand"><span class="dot" style="background:${isOk(c) ? COL.ok : COL.unk}"></span>
-        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}</div>
-        <div class="muted">Umweg ${fkm1(c.detour.d)} · ${fdur(c.detour.t)} · bei km ${fkm(c.stageKm)}</div></div>
+        <div class="body" data-show="${esc(c.id)}"><div class="name">${esc(c.tags.name || 'Campingplatz ohne Namen')}${c.best ? ' <span class="badge best">Empfehlung</span>' : ''}</div>
+        <div class="muted">bei km ${fkm(c.stageKm)} · Umweg ${fkm1(c.detour.d)} · ${fdur(c.detour.t)}</div>
+        <div class="after${c.nights > nowN ? ' worse' : ''}">${afterText(c)}</div></div>
         <button class="btn small primary" type="button" data-pick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Wählen</button></li>`;
     });
-    h += `</ul><div class="muted" style="margin-top:8px">Weitere Campingplätze erscheinen auf der Karte beim Reinzoomen.</div>`;
+    h += `</ul><div class="muted" style="margin-top:8px">Sortiert nach wenigsten Übernachtungen und Nähe zur idealen Etappenlänge. Weitere Campingplätze erscheinen auf der Karte beim Reinzoomen.</div>`;
   }
   if (state.stages.length && !state.done && !p && !busy){
     h += `<button class="btn primary wide" type="button" id="contBtn" style="margin-top:6px">Erneut versuchen – Etappe ${state.stages.length + 1} planen</button>`;
@@ -563,7 +656,8 @@ function renderPanel(){
   if (state.stages.length){
     h += `<div class="actions">
       <button class="btn" type="button" id="saveBtn" ${busy ? 'disabled' : ''}>Speichern</button>
-      <button class="btn" type="button" id="gpxBtn">GPX exportieren</button>
+      <button class="btn" type="button" id="expBtn">Tour-Datei</button>
+      <button class="btn" type="button" id="gpxBtn">GPX</button>
       <button class="btn ghost" type="button" id="newBtn" ${busy ? 'disabled' : ''}>Neue Tour</button></div>`;
   }
   el.innerHTML = h;
@@ -573,6 +667,7 @@ function renderPanel(){
     run(() => computeNext(from));
   });
   el.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { const c = campIndex.get(b.dataset.pick); if (c) run(() => selectCamp(c)); });
+  el.querySelectorAll('[data-endpick]').forEach(b => b.onclick = () => { const c = campIndex.get(b.dataset.endpick); if (c) run(() => selectEnd(c)); });
   el.querySelectorAll('[data-show]').forEach(b => b.onclick = () => {
     const c = campIndex.get(b.dataset.show); if (!c) return;
     if (window.innerWidth < 900) setSheet('min');
@@ -581,6 +676,7 @@ function renderPanel(){
   const cb = $('#contBtn'); if (cb) cb.onclick = () => run(() => computeNext(state.stages[state.stages.length - 1].to));
   const sb = $('#saveBtn'); if (sb) sb.onclick = saveTour;
   const gb = $('#gpxBtn'); if (gb) gb.onclick = exportGpx;
+  const xb = $('#expBtn'); if (xb) xb.onclick = exportTour;
   const nb = $('#newBtn'); if (nb) nb.onclick = resetTour;
 }
 function renderAll(){ renderPanel(); renderMap(); }
@@ -597,7 +693,7 @@ function setupGeoInput(inp, list, key){
     if (t.length < 3 || !settings.key){ list.innerHTML = ''; return; }
     try {
       const r = await geocode(t, 6, true);
-      if (inp.value.trim() !== t) return;
+      if (inp.value.trim() !== t || document.activeElement !== inp) return;
       list.innerHTML = r.map((g, i) => `<li><button type="button" data-i="${i}">${esc(g.label)}</button></li>`).join('');
       list.querySelectorAll('button').forEach(b => b.onclick = () => {
         state[key] = r[+b.dataset.i]; inp.value = state[key].label; list.innerHTML = '';
@@ -626,22 +722,67 @@ $('#planForm').addEventListener('submit', e => {
 /* ---------- Speichern, Laden, GPX ---------- */
 function loadTours(){ try { return JSON.parse(localStorage.getItem('gp.tours') || '[]'); } catch(e){ return []; } }
 function slimPoint(p){ const o = { lat:p.lat, lon:p.lon, label:p.label, kind:p.kind }; if (p.kind === 'camp'){ o.id = p.id; o.tags = p.tags; o.detour = p.detour; } return o; }
-function saveTour(){
-  if (!state.stages.length) return;
-  const tours = loadTours();
-  const old = tours.find(t => t.id === state.tourId);
-  const name = prompt('Name der Tour', old ? old.name : `${shortLabel(state.start.label)} → ${shortLabel(state.end.label)}`);
-  if (name === null) return;
-  const tour = { id: state.tourId || Date.now(), name: name.trim() || 'Tour', savedAt: new Date().toISOString(),
+const defaultName = () => `${shortLabel(state.start.label)} → ${shortLabel(state.end.label)}`;
+function buildTour(name, id){
+  return { id: id || state.tourId || Date.now(), name: (name || '').trim() || defaultName(), savedAt: new Date().toISOString(),
     start: slimPoint(state.start), end: slimPoint(state.end), done: state.done,
     stages: state.stages.map(s => ({ from:slimPoint(s.from), to:slimPoint(s.to), dist:s.dist, dur:s.dur, note:s.note, line:thin(s.line) })) };
-  const rest = tours.filter(t => t.id !== tour.id);
+}
+function storeTour(tour){
+  const rest = loadTours().filter(t => t.id !== tour.id);
+  localStorage.setItem('gp.tours', JSON.stringify([tour, ...rest]));
+}
+function flash(msg){
+  setStatus(msg);
+  setTimeout(() => { if ($('#status').textContent === msg) setStatus(''); }, 2500);
+}
+function saveTour(){
+  if (!state.stages.length) return;
+  const old = loadTours().find(t => t.id === state.tourId);
+  const name = prompt('Name der Tour', old ? old.name : defaultName());
+  if (name === null) return;
+  const tour = buildTour(name);
+  try { storeTour(tour); state.tourId = tour.id; flash('Tour gespeichert.'); }
+  catch(e){ setStatus('Speicher voll – bitte alte Touren löschen.', 'error'); }
+}
+function download(text, fname, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = fname;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const fileBase = name => name.replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim().replace(/\s+/g, '_') || 'Tour';
+
+/* Tour als Datei exportieren (am Handy über das Teilen-Menü, sonst Download) */
+async function exportTour(){
+  if (!state.stages.length) return;
+  const old = loadTours().find(t => t.id === state.tourId);
+  const tour = buildTour(old ? old.name : defaultName());
+  const json = JSON.stringify({ app:'gespann-etappen', version:1, tour });
+  const fname = fileBase(tour.name) + '.etappen.json';
   try {
-    localStorage.setItem('gp.tours', JSON.stringify([tour, ...rest]));
-    state.tourId = tour.id;
-    setStatus('Tour gespeichert.');
-    setTimeout(() => { if ($('#status').textContent === 'Tour gespeichert.') setStatus(''); }, 2500);
-  } catch(e){ setStatus('Speicher voll – bitte alte Touren löschen.', 'error'); }
+    const file = new File([json], fname, { type:'application/json' });
+    if (window.innerWidth < 900 && navigator.canShare && navigator.canShare({ files:[file] })){
+      await navigator.share({ files:[file], title:tour.name });
+      return;
+    }
+  } catch(e){ if (e && e.name === 'AbortError') return; }
+  download(json, fname, 'application/json');
+}
+/* Tour-Datei importieren */
+async function importTour(file){
+  try {
+    const obj = JSON.parse(await file.text());
+    const t = obj && (obj.tour || obj);
+    if (!t || !t.start || !t.end || !Array.isArray(t.stages)) throw new Error();
+    t.id = t.id || Date.now();
+    t.name = t.name || `${shortLabel(t.start.label)} → ${shortLabel(t.end.label)}`;
+    try { storeTour(t); } catch(e){}
+    if ($('#toursDlg').open) $('#toursDlg').close();
+    loadTour(t.id, t);
+    flash(`„${t.name}“ geladen und gespeichert.`);
+  } catch(e){ setStatus('Diese Datei ist keine gültige Tour-Datei.', 'error'); }
 }
 function openTours(){
   const tours = loadTours(), ul = $('#toursList');
@@ -662,17 +803,18 @@ function openTours(){
   });
   if (!$('#toursDlg').open) $('#toursDlg').showModal();
 }
-function loadTour(id){
-  const t = loadTours().find(x => x.id === id); if (!t || state.busy) return;
-  Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id });
+function loadTour(id, given){
+  const t = given || loadTours().find(x => x.id === id); if (!t || state.busy) return;
+  Object.assign(state, { start:t.start, end:t.end, stages:t.stages, done:t.done, pending:null, tourId:t.id, endCands:[] });
   t.stages.forEach(s => { if (s.to.kind === 'camp') campIndex.set(s.to.id, s.to); });
   $('#startIn').value = t.start.label; $('#endIn').value = t.end.label;
   setStatus(''); renderAll(); fitAll();
   if (!t.done){ const last = t.stages.length ? t.stages[t.stages.length - 1].to : t.start; run(() => computeNext(last)); }
+  else run(loadEndCands);
 }
 function resetTour(){
   if (state.busy) return;
-  Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null });
+  Object.assign(state, { start:null, end:null, stages:[], pending:null, done:false, tourId:null, endCands:[] });
   $('#startIn').value = ''; $('#endIn').value = '';
   setStatus(''); renderAll();
 }
@@ -683,12 +825,12 @@ function exportGpx(){
   const wpt = (p, n, d) => `  <wpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"><name>${x(n)}</name>${d ? `<desc>${x(d)}</desc>` : ''}</wpt>\n`;
   let w = wpt(state.start, 'Start: ' + shortLabel(state.start.label));
   state.stages.forEach((s, i) => {
-    if (s.to.kind !== 'camp') return;
+    const fin = state.done && i === state.stages.length - 1;
+    if (s.to.kind !== 'camp'){ if (fin) w += wpt(s.to, 'Ziel: ' + shortLabel(s.to.label)); return; }
     const t = s.to.tags || {};
     const d = [`Etappe ${i + 1}: ${fkm(s.dist)}`, t.phone || t['contact:phone'], t.website || t['contact:website']].filter(Boolean).join(' · ');
-    w += wpt(s.to, `Etappe ${i + 1}: ${s.to.label}`, d);
+    w += wpt(s.to, `${fin ? 'Ziel' : 'Etappe ' + (i + 1)}: ${s.to.label}`, d);
   });
-  if (state.done) w += wpt(state.end, 'Ziel: ' + shortLabel(state.end.label));
   const pts = [];
   state.stages.forEach((s, i) => (i ? s.line.slice(1) : s.line).forEach(p => pts.push(p)));
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -699,12 +841,7 @@ ${pts.map(p => `    <trkpt lat="${p[0].toFixed(6)}" lon="${p[1].toFixed(6)}"/>`)
   </trkseg></trk>
 </gpx>
 `;
-  const blob = new Blob([xml], { type:'application/gpx+xml' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name.replace(/[^\wäöüÄÖÜß\- ]+/g, '').replace(/\s+/g, '_') + '.gpx';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  download(xml, fileBase(name) + '.gpx', 'application/gpx+xml');
 }
 
 /* ---------- Dialoge ---------- */
@@ -726,6 +863,8 @@ $('#settingsDlg').addEventListener('close', () => {
 $('#settingsBtn').onclick = openSettings;
 $('#toursBtn').onclick = openTours;
 $('#toursClose').onclick = () => $('#toursDlg').close();
+$('#importBtn').onclick = () => $('#importIn').click();
+$('#importIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importTour(f); });
 
 /* ---------- Start ---------- */
 renderAll();
