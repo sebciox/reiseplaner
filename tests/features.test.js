@@ -277,6 +277,15 @@ const srv = require('./lib/server')(ROOT, 8133);
     !(await page.$('.alt .chip[data-filter]')) && !/Wohnwagen erlaubt|🔌/.test(await page.textContent('.alt')),
     'Ausweichplätze: keine Filter-Chips, keine Ausstattung/Wohnwagen-Angabe'
   );
+  // „Platz fehlt?“ auch hier: eigener Platz (Koordinaten) kommt oben in die Liste
+  await page.evaluate(() => {
+    const t = state.stages[0].to;
+    return addCustomCamp('alt', { lat: t.lat + 0.01, lon: t.lon + 0.01, name: 'Hof Test' });
+  });
+  ok(
+    (await page.evaluate(() => state.alt.list[0].tags.name === 'Hof Test' && state.alt.list[0].added)) && !!(await page.$('.alt form.addcamp[data-ctx="alt"]')),
+    'Platz ändern: „Platz fehlt?“ ergänzt eigenen Platz oben in der Liste'
+  );
   await page.selectOption('#altR', '30');
   await page.waitForSelector('[data-altpick]');
   ok(await page.evaluate(() => state.alt.r === 30 && settings.altRadius === 30), 'Umkreis 30 km gewählt und gemerkt');

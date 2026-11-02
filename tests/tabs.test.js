@@ -383,10 +383,22 @@ const srv = require('./lib/server')(ROOT, 8147);
   );
   ok((await page.textContent('#tripView h3')).includes('Paris-Tour'), 'Reiseplan-Titel = Tourname');
   ok(/✓ gespeichert \d\d:\d\d/.test(await page.textContent('#saveChip')), 'Reisezeile: „' + (await page.textContent('#saveChip')) + '“');
-  // Bearbeiten → Reiter 2 mit offener Etappe
+  // „Platz ändern“ in der Tabelle → Reiter 2, Plätze im Umkreis nur für diesen Platz (+ „Platz fehlt?“)
+  const nSt = await page.evaluate(() => state.stages.length);
   await page.click('[data-tledit="0"]');
-  await page.waitForTimeout(300);
-  ok((await tab()) === 'plan' && (await page.evaluate(() => state.openDet.has(0))), 'Bearbeiten → Reiter 2, Details offen');
+  await page.waitForFunction(() => state.alt && state.alt.i === 0 && state.alt.list && !state.busy, null, { timeout: 15000 });
+  ok(
+    (await tab()) === 'plan' &&
+      !!(await page.$('.alt form.addcamp[data-ctx="alt"]')) &&
+      /Platz ändern/.test(await page.textContent('.alt .hd')) &&
+      (await page.evaluate(n => state.stages.length === n, nSt)),
+    '„Platz ändern“ → Reiter 2: anderer Platz im Umkreis + „Platz fehlt?“, keine Etappe verworfen'
+  );
+  ok(
+    (await page.textContent('[data-edit="0"]').catch(() => '')).includes('Ab hier neu planen') || !(await page.$('[data-edit="0"]')),
+    'Reiter 2: „Ab hier neu planen“ heißt jetzt so (statt „Platz ändern“)'
+  );
+  await page.click('[data-alt="0"]');
   await page.click('[data-tabbtn="goals"]');
   ok((await vis('#planForm')) && (await vis('#viaIn')), 'Reiter 1 jederzeit erreichbar');
   ok(

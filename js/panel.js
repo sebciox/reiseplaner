@@ -30,11 +30,12 @@ function detailsHtml(s, i) {
 function altHtml(i) {
   const a = state.alt,
     busy = state.busy;
-  let h = `<div class="alt"><div class="hd"><b>Ausweichplatz</b> im Umkreis von
+  let h = `<div class="alt"><div class="hd"><b>Platz ändern</b> – anderer Platz im Umkreis von
     <select id="altR">${[5, 10, 20, 30].map(k => `<option value="${k}"${k === a.r ? ' selected' : ''}>${k} km</option>`).join('')}</select>
-    um ${esc(shortLabel(state.stages[i].to.label))}</div>`;
+    um ${esc(shortLabel(state.stages[i].to.label))} <span class="muted">(nur dieser Platz wird getauscht, alle anderen Etappen bleiben)</span></div>`;
   if (!a.list) return h + '<div class="muted" style="margin-top:6px">Suche läuft …</div></div>';
-  if (!a.list.length) return h + '<div class="muted" style="margin-top:6px">Keine anderen Campingplätze in diesem Umkreis – Umkreis vergrößern.</div></div>';
+  if (!a.list.length)
+    return h + `<div class="muted" style="margin-top:6px">Keine anderen Campingplätze in diesem Umkreis – Umkreis vergrößern.</div>${addCampHtml('alt')}</div>`;
   h += chipsHtml(a.list) + sortHtml(a.list) + '<ul class="cands">';
   sortRows(a.list.filter(passFilter)).forEach(c => {
     h += `<li class="cand"><span class="dot" style="background:${COL.ok}"></span>
@@ -44,7 +45,7 @@ function altHtml(i) {
         <button class="btn small primary" type="button" data-altpick="${esc(c.id)}" ${busy ? 'disabled' : ''}>Übernehmen</button>
         <a class="btn small" href="${navUrl(c)}" target="_blank" rel="noopener">Navi</a></div></li>`;
   });
-  return h + '</ul></div>';
+  return h + `</ul>${addCampHtml('alt')}</div>`;
 }
 function splitHtml(i) {
   const a = state.split,
@@ -178,7 +179,7 @@ function renderPanel() {
       h += `<li class="stage" data-stagecard="${i}"><div class="num">Etappe ${i + 1}${ds ? ' · ' + fdate(ds[i]) : ''}${i === cur ? ' <span class="badge best">heute/nächste</span>' : ''}</div>
         <div class="route">${esc(shortLabel(s.from.label))} → ${camp ? nameHtml(s.to) : esc(shortLabel(s.to.label))}${s.memo?.res ? '<span class="badge res">reserviert ✓</span>' : ''}</div>
         <div class="row"><span class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${s.to.detour ? ` · ${fkm1(s.to.detour.d)} / ${fdur(s.to.detour.t)} von der Route bis zum Platz` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? ` · ${s.nights} Nächte` : ''}</span>
-        ${camp && !(state.done && i === state.stages.length - 1) ? `<button class="btn small" type="button" data-edit="${i}" ${busy ? 'disabled' : ''} title="Ab hier neu planen (anderen Platz im Korridor wählen)">Platz ändern</button>` : ''}</div>
+        ${camp && !(state.done && i === state.stages.length - 1) ? `<button class="btn small ghost" type="button" data-edit="${i}" ${busy ? 'disabled' : ''} title="Alle Plätze ab dieser Etappe neu wählen">Ab hier neu planen</button>` : ''}</div>
         ${
           s.to.sights && s.to.sights.length > 1
             ? `<div class="sightinfo">★ Basislager: ${s.to.sights.map(x => `${esc(shortLabel(x.label))} ${x.d != null ? (x.est ? '≈' : '') + fkm1(x.d) : ''}`).join(' · ')}</div>`
@@ -201,7 +202,7 @@ function renderPanel() {
           ${
             camp
               ? `<button class="btn${open ? ' on' : ''}" type="button" data-det="${i}">Details ${open ? '▴' : '▾'}</button>
-          <button class="btn${altOpen ? ' on' : ''}" type="button" data-alt="${i}" ${busy ? 'disabled' : ''}>Ausweichplatz</button>`
+          <button class="btn${altOpen ? ' on' : ''}" type="button" data-alt="${i}" ${busy ? 'disabled' : ''} title="Nur diesen Platz gegen einen anderen in der Nähe tauschen">Platz ändern</button>`
               : ''
           }
           <button class="btn${splitOpen ? ' on' : ''}" type="button" data-split="${i}" ${busy ? 'disabled' : ''} title="Campingplatz etwa auf halbem Weg dieser Etappe einfügen">+ Zwischenstopp</button>
@@ -316,7 +317,14 @@ function renderPanel() {
       (b.onclick = () => {
         const i = +b.dataset.edit,
           from = state.stages[i].from;
-        if (state.stages.length - i > 1 && !confirm(`Ab Etappe ${i + 1} neu planen? Die folgenden Etappen werden dabei neu gewählt.`)) return;
+        const later = state.stages.length - i - 1;
+        if (
+          later > 0 &&
+          !confirm(
+            `Ab Etappe ${i + 1} neu planen?\n\nDieser Platz und alle ${later} folgenden Etappen werden verworfen und neu gewählt – samt Preisen, Status und Notizen.\n\nNur diesen Platz tauschen: „Platz ändern“.`
+          )
+        )
+          return;
         state.stages = state.stages.slice(0, i);
         state.alt = null;
         state.split = null;

@@ -141,7 +141,7 @@ function campInfo(c, mode) {
     ${mode === 'area' ? (state.pending ? '<div class="muted">außerhalb des Suchkorridors</div>' : '') : ''}
     ${pdHtml(c, mode)}
     <div class="links" data-lk="${esc(String(c.id))}">${campLinks(c)}</div>
-    ${mode === 'alt' && state.alt && !state.busy ? `<button class="btn primary" type="button" data-altpick="${esc(c.id)}">Als Ausweichplatz übernehmen</button>` : ''}
+    ${mode === 'alt' && state.alt && !state.busy ? `<button class="btn primary" type="button" data-altpick="${esc(c.id)}">Statt des bisherigen Platzes übernehmen</button>` : ''}
     ${(mode === 'cand' || mode === 'area') && state.pending && !state.busy ? `<button class="btn primary" type="button" data-pick="${esc(c.id)}">Als Etappenziel wählen</button>` : ''}
     ${(mode === 'split' || mode === 'area') && state.split && !state.pending && !state.busy ? `<button class="btn primary" type="button" data-splitpick="${esc(c.id)}">Als Zwischenstopp in Etappe ${state.split.i + 1} einfügen</button>` : ''}
     ${mode === 'split' && c.stageKm != null ? `<div>${fkm(c.stageKm)} ab ${esc(shortLabel(state.stages[state.split.i]?.from.label || ''))}, danach noch ${fkm(c.after)}</div>` : ''}

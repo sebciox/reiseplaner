@@ -243,6 +243,7 @@ const nameFromUrl = t => {
 };
 function addCtxCenter(ctx) {
   const p = state.pending;
+  if (ctx === 'alt' && state.alt) return state.stages[state.alt.i]?.to || null;
   if (ctx === 'split' && state.split) {
     const st = state.stages[state.split.i];
     const q = pointAt(st.line, cumul(st.line), st.dist / 2);
@@ -258,6 +259,11 @@ function addCtxCenter(ctx) {
 // Kennzahlen wie bei gefundenen Plätzen berechnen (Umweg/Etappen-km bzw. Entfernung zur Sehenswürdigkeit)
 async function enrichAdded(ctx, c) {
   const p = state.pending;
+  if (ctx === 'alt') {
+    const t = state.alt && state.stages[state.alt.i]?.to;
+    if (t) c.air = hav([t.lat, t.lon], [c.lat, c.lon]);
+    return;
+  }
   const along = async (line, cum, total) => {
     const anchors = sample(line, cum, 0, total, 40).map(a => ({ d: Math.round(a.d), p: [+a.p[0].toFixed(5), +a.p[1].toFixed(5)] }));
     const j = await matrix({
@@ -311,10 +317,11 @@ async function addCustomCamp(ctx, o) {
   campIndex.set(id, c);
   setStatus(`Entfernungen für „${c.tags.name}“ …`, 'busy');
   await enrichAdded(ctx, c);
-  const list = ctx === 'split' ? state.split?.list : state.pending?.cands;
+  const list = ctx === 'split' ? state.split?.list : ctx === 'alt' ? state.alt?.list : state.pending?.cands;
   if (!list) return;
   if (!list.includes(c)) list.push(c);
-  if (ctx === 'split' || (state.pending && state.pending.mode !== 'anchor')) list.sort((a, b) => (a.dev ?? 1e12) - (b.dev ?? 1e12));
+  if (ctx === 'alt') list.sort((a, b) => (a.added ? -1 : 0) - (b.added ? -1 : 0) || a.air - b.air);
+  else if (ctx === 'split' || (state.pending && state.pending.mode !== 'anchor')) list.sort((a, b) => (a.dev ?? 1e12) - (b.dev ?? 1e12));
   else list.sort((a, b) => (a.sight ? a.sight.d : a.air * 1.4) - (b.sight ? b.sight.d : b.air * 1.4));
   renderAll();
   map.setView([c.lat, c.lon], Math.max(map.getZoom(), 11));
@@ -324,7 +331,7 @@ async function addCustomCamp(ctx, o) {
     row?.closest('li')?.classList.add('flashrow');
     row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, 50);
-  flash(`„${c.tags.name}“ ist jetzt in der Liste und auf der Karte – mit „Wählen“ übernehmen.`);
+  flash(`„${c.tags.name}“ ist jetzt in der Liste und auf der Karte – mit „${ctx === 'alt' ? 'Übernehmen' : 'Wählen'}“ übernehmen.`);
 }
 async function searchAddCamp(form) {
   const ctx = form.dataset.ctx,
@@ -687,7 +694,7 @@ async function selectEnd(c) {
   fitAll();
 }
 
-/* Ausweichplatz: Campingplätze im Umkreis um den Platz einer Etappe */
+/* Platz ändern (früher „Ausweichplatz“): Campingplätze im Umkreis um den Platz einer Etappe, nur dieser Platz wird getauscht */
 async function loadAlt(i, km) {
   const s = state.stages[i];
   if (!s) return;
@@ -713,7 +720,8 @@ async function loadAlt(i, km) {
   const pts = [[c.lat, c.lon], ...state.alt.list.filter(passFilter).map(x => [x.lat, x.lon])];
   map.fitBounds(L.latLngBounds(pts).pad(0.15), sheetPad());
 }
-// Ausweichplatz übernehmen: diese und die folgende Etappe neu berechnen, spätere bleiben
+// Platz tauschen: diese und die folgende Etappe neu berechnen, spätere bleiben; die eigene Notiz bleibt
+// (Preise/Status gehören zum alten Platz: `my.cid`)
 async function replaceStop(i, c) {
   const s = state.stages[i];
   if (!s) return;
@@ -722,7 +730,8 @@ async function replaceStop(i, c) {
   if (s.to.near) to.near = { label: s.to.near.label, d: null, t: null, air: hav([c.lat, c.lon], [s.to.lat, s.to.lon]) + (s.to.near.air || 0) };
   if (s.to.sights) to.sights = s.to.sights.map(x => ({ ...x, d: x.lat != null ? hav([c.lat, c.lon], [x.lat, x.lon]) * 1.3 : null, t: null, est: true }));
   const r = await route(s.from, to, visitsOf(s));
-  state.stages[i] = { ...s, to, line: r.line, dist: r.dist, dur: r.dur, ex: r.ex, countries: undefined, note: null, memo: undefined };
+  const memo = s.memo?.text ? { text: s.memo.text } : undefined;
+  state.stages[i] = { ...s, to, line: r.line, dist: r.dist, dur: r.dur, ex: r.ex, countries: undefined, note: null, memo };
   // eigene Zeilen (Fähre/Kosten) dieses Aufenthalts bleiben beim neuen Platz
   const oldKey = String(s.to.id || s.to.label);
   (state.extras || []).forEach(e => {

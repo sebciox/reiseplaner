@@ -212,11 +212,11 @@ function renderTrip() {
   el.querySelectorAll('[data-tledit]').forEach(
     b =>
       (b.onclick = () => {
+        // „Platz ändern“ = nur diesen Platz tauschen (Plätze im Umkreis + „Platz fehlt?“), nicht ab hier neu planen
         const i = +b.dataset.tledit;
-        state.openDet.add(i);
         setTab('plan');
         renderPanel();
-        ensureOneAddr(i);
+        if (!(state.alt && state.alt.i === i)) run(() => loadAlt(i, +settings.altRadius || 10));
         setTimeout(() => document.querySelector(`[data-stagecard="${i}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 30);
       })
   );
