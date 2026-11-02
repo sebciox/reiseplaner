@@ -64,6 +64,7 @@ const state = {
   alt: null, // Ausweichplatz-Suche { i, r, list }
   openDet: new Set(),
   showEndList: false,
+  ideas: [], // Pinnwand: Ideen ohne Basislager { uid, label, lat, lon, info } (siehe pinnwand.js)
   via: [], // Zwischenziele { uid, label, lat, lon, kind:'stay'|'visit', nights }
   round: false, // Rundreise: zurück zum Start
   segs: null,

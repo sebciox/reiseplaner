@@ -33,6 +33,7 @@ function buildTour(name, id) {
     n: state.n,
     date: state.date || undefined,
     via: state.via.length ? state.via : undefined,
+    ideas: state.ideas && state.ideas.length ? state.ideas : undefined,
     round: state.round || undefined,
     ret: state.ret || undefined,
     segs: state.segs
@@ -314,6 +315,7 @@ function loadTour(id, given, quiet) {
     openDet: new Set(),
     showEndList: false,
     via: t.via || [],
+    ideas: t.ideas || [],
     round: !!t.round,
     segs: t.segs || null,
     ret: t.ret || null,
@@ -366,6 +368,7 @@ function resetTour() {
     openDet: new Set(),
     showEndList: false,
     via: [],
+    ideas: [],
     round: false,
     segs: null,
     endSearched: false,

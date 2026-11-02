@@ -2670,3 +2670,113 @@ select.stsel.isopen {
   font-size: 12px;
   white-space: nowrap;
 }
+/* Pinnwand (Reiter 1): Ideen sammeln → Basislager-Vorschlag */
+.pinfield {
+  border: 1px dashed var(--brand);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--brand-soft);
+}
+.pinlist {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pinlist li {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+.pinlist button,
+.pinprop .pghead button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.pinlist button {
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+  border-radius: 50%;
+}
+.pinlist button:hover {
+  background: var(--brand-soft);
+}
+.pintools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+.pinprop {
+  margin-top: 10px;
+}
+.pinprop .pphead {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.pgroup {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--brand);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.pgroup.other {
+  border-left-color: var(--line);
+}
+.pghead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pglet {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #1c2420;
+  font-size: 12px;
+  font-weight: 700;
+}
+.pnights {
+  margin-left: auto;
+}
+.pgroup ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.pgroup li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0 3px 30px;
+  font-size: 13px;
+}
+.pgroup li select {
+  max-width: 55%;
+  font-size: 12.5px;
+}
+.pin.idea {
+  background: #fff;
+  border: 2px dashed var(--brand-ink);
+}
+.pin.idea span {
+  color: var(--brand-ink);
+}

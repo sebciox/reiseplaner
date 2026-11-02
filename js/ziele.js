@@ -31,6 +31,7 @@ function renderVia() {
     )
     .join('');
   $('#viaTools').hidden = state.via.length < 2;
+  if (typeof renderPinboard === 'function') renderPinboard();
   $('#roundIn').checked = !!state.round;
   $('#retLbl').textContent = state.round ? 'Zurück spätestens' : 'Ankunft spätestens';
   $('#dateIn').value = state.date || '';
@@ -80,8 +81,11 @@ function renderVia() {
     b =>
       (b.onclick = () => {
         const [i, q] = b.dataset.vsdel.split(':').map(Number);
-        state.via[i].sights.splice(q, 1);
+        const [x] = state.via[i].sights.splice(q, 1);
+        toPinboard(x);
+        flash(`„${shortLabel(x.label)}“ liegt jetzt auf der Pinnwand (dort mit ✕ ganz entfernen).`);
         ch();
+        touch();
       })
   );
   ul.querySelectorAll('[data-vsadd]').forEach(
@@ -148,8 +152,17 @@ function renderVia() {
   ul.querySelectorAll('[data-vdel]').forEach(
     b =>
       (b.onclick = () => {
-        state.via.splice(+b.dataset.vdel, 1);
+        // Basislager/Besuch auflösen: Orte zurück auf die Pinnwand (nichts geht verloren), Campingplatz/Fähre einfach weg
+        const [v] = state.via.splice(+b.dataset.vdel, 1);
+        if (v.kind === 'stay' || !v.kind || v.kind === 'visit') {
+          [v, ...(v.sights || [])].forEach(toPinboard);
+          const n = 1 + (v.sights || []).length;
+          flash(
+            `„${shortLabel(v.label)}“${n > 1 ? ` und ${n - 1} weitere` : ''} ${n > 1 ? 'liegen' : 'liegt'} jetzt auf der Pinnwand (dort mit ✕ ganz entfernen).`
+          );
+        }
         ch();
+        touch();
       })
   );
 }
@@ -225,7 +238,12 @@ function startViaDrag(e, grip) {
 // Karte folgt der Eingabe: solange noch keine Strecke berechnet ist (oder Reiter 1 offen), alle eingegebenen Orte zeigen
 function fitGoals() {
   if ((state.overview || state.stages.length) && uiTab !== 'goals') return;
-  const pts = [state.start, ...state.via.flatMap(v => [v, v.kind === 'ferry' ? v.to : null, ...(v.sights || [])]), state.round ? null : state.end]
+  const pts = [
+    state.start,
+    ...state.via.flatMap(v => [v, v.kind === 'ferry' ? v.to : null, ...(v.sights || [])]),
+    ...(state.ideas || []),
+    state.round ? null : state.end
+  ]
     .filter(p => p && p.lat != null)
     .map(p => [p.lat, p.lon]);
   if (!pts.length) return;
@@ -492,7 +510,7 @@ $('#planForm').addEventListener('submit', e => {
     if (ae.value.trim()) addViaFromInput();
     return;
   }
-  if (ae && (ae.classList.contains('vsin') || ae.classList.contains('vfto'))) return;
+  if (ae && (ae.classList.contains('vsin') || ae.classList.contains('vfto') || ae.id === 'pinIn')) return;
   const nf = state.via.find(v => v.kind === 'ferry' && !v.to);
   if (nf) {
     setStatus(`Fähre ab „${shortLabel(nf.label)}“: bitte den Ankunftshafen eintragen.`, 'error');

@@ -1,179 +1,290 @@
 <!doctype html>
 <html lang="de">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Reiseplaner</title>
-<meta name="description" content="Campingplätze für Wohnwagen-Gespanne etwa alle 400 km entlang einer Route finden.">
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#9cbca2">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icon-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Reiseplaner">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<link rel="stylesheet" href="styles.css?v=68">
-</head>
-<body>
-<div id="map" aria-label="Karte"></div>
-<div id="mapBusy" role="status" aria-live="polite" hidden></div>
-<div id="toast" role="status" aria-live="polite" hidden></div>
-<div id="fabs">
-  <button class="fab" id="fabMenu" type="button" aria-label="Menü ein- oder ausblenden" title="Menü ein-/ausblenden">☰</button>
-  <button class="fab" id="fabSum" type="button" aria-label="Tourübersicht" title="Tourübersicht" hidden>📋</button>
-</div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Reiseplaner</title>
+    <meta name="description" content="Campingplätze für Wohnwagen-Gespanne etwa alle 400 km entlang einer Route finden." />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#9cbca2" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Reiseplaner" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <link rel="stylesheet" href="styles.css?v=69" />
+  </head>
+  <body>
+    <div id="map" aria-label="Karte"></div>
+    <div id="mapBusy" role="status" aria-live="polite" hidden></div>
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+    <div id="fabs">
+      <button class="fab" id="fabMenu" type="button" aria-label="Menü ein- oder ausblenden" title="Menü ein-/ausblenden">☰</button>
+      <button class="fab" id="fabSum" type="button" aria-label="Tourübersicht" title="Tourübersicht" hidden>📋</button>
+    </div>
 
-<aside id="panel" class="half">
-  <div id="resizer" role="separator" aria-orientation="vertical" aria-label="Breite der Seitenleiste ändern" tabindex="0" title="ziehen: Breite ändern"></div>
-  <button id="handle" type="button" aria-label="Bereich vergrößern oder verkleinern"><span></span></button>
-  <div id="panelHead">
-    <header class="top">
-      <div class="brand"><svg class="logo" viewBox="0 0 72 40" width="40" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M37 30 H58 V20 C57 12 51 6 43 6 H14 a6 6 0 0 0 -6 6 V30 H25 A6 6 0 0 1 37 30"/><path d="M8 23 H14 M23 23 H58"/><rect x="14" y="11" width="9" height="16" rx="2.5"/><path d="M16.5 19 v1.5"/><path d="M35 11 H50 C52.5 11 54 13 54.5 18 H35 Z"/><path d="M44 11 V18"/><path d="M58 28 H70"/><circle cx="31" cy="31" r="4"/></svg><h1>Reiseplaner</h1></div>
-      <div>
-        <button class="btn ghost" id="sumBtn" type="button" hidden>Reiseplan</button>
-        <button class="btn ghost" id="toursBtn" type="button">Touren</button>
-        <button class="btn ghost icon" id="settingsBtn" type="button" aria-label="Einstellungen" title="Einstellungen">⚙︎</button>
+    <aside id="panel" class="half">
+      <div
+        id="resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Breite der Seitenleiste ändern"
+        tabindex="0"
+        title="ziehen: Breite ändern"
+      ></div>
+      <button id="handle" type="button" aria-label="Bereich vergrößern oder verkleinern"><span></span></button>
+      <div id="panelHead">
+        <header class="top">
+          <div class="brand">
+            <svg
+              class="logo"
+              viewBox="0 0 72 40"
+              width="40"
+              height="22"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M37 30 H58 V20 C57 12 51 6 43 6 H14 a6 6 0 0 0 -6 6 V30 H25 A6 6 0 0 1 37 30" />
+              <path d="M8 23 H14 M23 23 H58" />
+              <rect x="14" y="11" width="9" height="16" rx="2.5" />
+              <path d="M16.5 19 v1.5" />
+              <path d="M35 11 H50 C52.5 11 54 13 54.5 18 H35 Z" />
+              <path d="M44 11 V18" />
+              <path d="M58 28 H70" />
+              <circle cx="31" cy="31" r="4" />
+            </svg>
+            <h1>Reiseplaner</h1>
+          </div>
+          <div>
+            <button class="btn ghost" id="sumBtn" type="button" hidden>Reiseplan</button>
+            <button class="btn ghost" id="toursBtn" type="button">Touren</button>
+            <button class="btn ghost icon" id="settingsBtn" type="button" aria-label="Einstellungen" title="Einstellungen">⚙︎</button>
+          </div>
+        </header>
+        <div id="stickyHead">
+          <div class="tabrow">
+            <nav class="tabs" id="tabs" role="tablist" aria-label="Planungsschritte">
+              <button type="button" role="tab" data-tabbtn="goals">1 Ziele</button>
+              <button type="button" role="tab" data-tabbtn="plan">2 Plätze</button>
+              <button type="button" role="tab" data-tabbtn="trip">3 Reiseplan</button>
+            </nav>
+            <span class="mbtns"
+              ><button class="btn ghost icon" id="toursBtnM" type="button" aria-label="Touren" title="Touren">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.2h8.5A1.5 1.5 0 0 1 21 8.7V18a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18Z" />
+                </svg></button
+              ><button class="btn ghost icon" id="settingsBtnM" type="button" aria-label="Einstellungen" title="Einstellungen">⚙︎</button></span
+            >
+          </div>
+          <div id="tripBar"></div>
+        </div>
       </div>
-    </header>
-    <div id="stickyHead">
-      <div class="tabrow">
-      <nav class="tabs" id="tabs" role="tablist" aria-label="Planungsschritte">
-        <button type="button" role="tab" data-tabbtn="goals">1 Ziele</button>
-        <button type="button" role="tab" data-tabbtn="plan">2 Plätze</button>
-        <button type="button" role="tab" data-tabbtn="trip">3 Reiseplan</button>
-      </nav>
-      <span class="mbtns"><button class="btn ghost icon" id="toursBtnM" type="button" aria-label="Touren" title="Touren"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.2h8.5A1.5 1.5 0 0 1 21 8.7V18a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18Z"/></svg></button><button class="btn ghost icon" id="settingsBtnM" type="button" aria-label="Einstellungen" title="Einstellungen">⚙︎</button></span>
+      <div id="scroll">
+        <div id="status" role="status" aria-live="polite"></div>
+        <div id="fbNote" class="note" hidden>
+          Ersatzdienst aktiv (OSRM/Photon statt OpenRouteService) – Fahrzeiten sind Schätzungen.
+          <button class="linkbtn" type="button" id="fbOff">zurück zu ORS</button>
+        </div>
+        <form id="planForm" autocomplete="off">
+          <div class="field">
+            <label for="startIn">Start</label>
+            <input id="startIn" placeholder="z. B. Witten" enterkeyhint="next" />
+            <ul class="sugg" id="startSugg"></ul>
+          </div>
+          <div class="field pinfield" id="pinField">
+            <label for="pinIn"
+              >Pinnwand – Ideen sammeln <span class="muted" style="text-transform: none; font-weight: 400">(optional, für Rundreisen)</span></label
+            >
+            <div class="muted small">
+              Sehenswürdigkeiten sammeln, ohne schon an Übernachtungen zu denken – die App fasst nahe Ideen zu Basislagern zusammen.
+            </div>
+            <ul class="pinlist" id="pinList"></ul>
+            <div class="viaadd">
+              <input id="pinIn" placeholder="Idee, z. B. Kleva Gruva" enterkeyhint="enter" aria-label="Idee zur Pinnwand hinzufügen" />
+              <button class="btn small" type="button" id="pinAddBtn">+ Idee</button>
+              <ul class="sugg" id="pinSugg"></ul>
+            </div>
+            <div class="pintools">
+              <span class="muted small" id="pinCount"></span><button class="btn small" type="button" id="pinSuggest" hidden>Basislager vorschlagen</button>
+            </div>
+            <div id="pinProp"></div>
+          </div>
+          <div class="field">
+            <label for="viaIn">Zwischenziele / Sehenswürdigkeiten <span class="muted" style="text-transform: none; font-weight: 400">(optional)</span></label>
+            <ol class="vialist" id="viaList"></ol>
+            <div class="viaadd">
+              <input id="viaIn" placeholder="z. B. Astrid Lindgrens Värld" enterkeyhint="enter" aria-label="Zwischenziel hinzufügen" />
+              <button class="btn small" type="button" id="viaAddBtn">+ Hinzufügen</button>
+              <ul class="sugg" id="viaSugg"></ul>
+            </div>
+            <div class="muted small" id="viaHint">Beliebig viele Ziele nacheinander eingeben (Enter oder „+ Hinzufügen“), Reihenfolge per Ziehen am ⠿.</div>
+            <div class="viatools" id="viaTools" hidden><button class="btn small" type="button" id="viaOpt">Reihenfolge optimieren</button></div>
+          </div>
+          <div class="field">
+            <label for="endIn">Ziel</label>
+            <input id="endIn" placeholder="z. B. Malmö" enterkeyhint="go" />
+            <ul class="sugg" id="endSugg"></ul>
+            <label class="check" style="margin-top: 6px"><input type="checkbox" id="roundIn" /><span>zurück zum Start (Rundreise)</span></label>
+          </div>
+          <div class="grid2">
+            <div class="field"><label for="dateIn">Abfahrt</label><input type="date" id="dateIn" /></div>
+            <div class="field"><label for="retIn" id="retLbl">Ankunft spätestens</label><input type="date" id="retIn" /></div>
+          </div>
+          <div class="actions foot" id="goalsFoot">
+            <div class="foot-main">
+              <button class="btn primary" id="planBtn" type="submit">Strecke berechnen</button>
+              <button class="btn" id="toPlan" type="button" data-goto="plan" hidden>Weiter: 2 Plätze →</button>
+            </div>
+          </div>
+        </form>
+        <section id="result"></section>
+        <section id="tripView" hidden></section>
       </div>
-      <div id="tripBar"></div>
-    </div>
-  </div>
-  <div id="scroll">
-    <div id="status" role="status" aria-live="polite"></div>
-    <div id="fbNote" class="note" hidden>Ersatzdienst aktiv (OSRM/Photon statt OpenRouteService) – Fahrzeiten sind Schätzungen. <button class="linkbtn" type="button" id="fbOff">zurück zu ORS</button></div>
-    <form id="planForm" autocomplete="off">
-      <div class="field">
-        <label for="startIn">Start</label>
-        <input id="startIn" placeholder="z. B. Witten" enterkeyhint="next">
-        <ul class="sugg" id="startSugg"></ul>
-      </div>
-      <div class="field">
-        <label for="viaIn">Zwischenziele / Sehenswürdigkeiten <span class="muted" style="text-transform:none;font-weight:400">(optional)</span></label>
-        <ol class="vialist" id="viaList"></ol>
-        <div class="viaadd"><input id="viaIn" placeholder="z. B. Astrid Lindgrens Värld" enterkeyhint="enter" aria-label="Zwischenziel hinzufügen">
-          <button class="btn small" type="button" id="viaAddBtn">+ Hinzufügen</button>
-          <ul class="sugg" id="viaSugg"></ul></div>
-        <div class="muted small" id="viaHint">Beliebig viele Ziele nacheinander eingeben (Enter oder „+ Hinzufügen“), Reihenfolge per Ziehen am ⠿.</div>
-        <div class="viatools" id="viaTools" hidden><button class="btn small" type="button" id="viaOpt">Reihenfolge optimieren</button></div>
-      </div>
-      <div class="field">
-        <label for="endIn">Ziel</label>
-        <input id="endIn" placeholder="z. B. Malmö" enterkeyhint="go">
-        <ul class="sugg" id="endSugg"></ul>
-        <label class="check" style="margin-top:6px"><input type="checkbox" id="roundIn"><span>zurück zum Start (Rundreise)</span></label>
-      </div>
-      <div class="grid2">
-        <div class="field"><label for="dateIn">Abfahrt</label><input type="date" id="dateIn"></div>
-        <div class="field"><label for="retIn" id="retLbl">Ankunft spätestens</label><input type="date" id="retIn"></div>
-      </div>
-      <div class="actions foot" id="goalsFoot"><div class="foot-main"><button class="btn primary" id="planBtn" type="submit">Strecke berechnen</button>
-        <button class="btn" id="toPlan" type="button" data-goto="plan" hidden>Weiter: 2 Plätze →</button></div></div>
-    </form>
-    <section id="result"></section>
-    <section id="tripView" hidden></section>
-  </div>
-</aside>
+    </aside>
 
-<dialog id="settingsDlg">
-  <form method="dialog" id="settingsForm" class="dlg-form" novalidate>
-    <div class="dlg-head"><h2>Einstellungen</h2>
-      <button class="btn ghost dlg-x" value="cancel" type="submit" aria-label="Schließen" title="Schließen">✕</button></div>
-    <div class="dlg-body">
-    <div class="field">
-      <label for="sKey">OpenRouteService-Schlüssel</label>
-      <input id="sKey" autocomplete="off" spellcheck="false">
-      <div class="muted">Kostenlos über das HeiGIT-Konto (<a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a>). Wird auch im Online-Speicher abgelegt, falls eingerichtet.</div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label for="sSpeed">Max. km/h</label><input id="sSpeed" type="number" min="80" max="130" step="1" inputmode="numeric"></div>
-      <div class="field"><label for="sDetour">Max. Umweg km</label><input id="sDetour" type="number" min="1" max="50" step="1" inputmode="numeric"></div>
-      <div class="field"><label for="sMin">Etappe min. km</label><input id="sMin" type="number" min="50" max="1500" step="1" inputmode="numeric"></div>
-      <div class="field"><label for="sMax">Etappe max. km</label><input id="sMax" type="number" min="60" max="1500" step="1" inputmode="numeric"></div>
-    </div>
-    <label class="check"><input id="sHighway" type="checkbox"><span>Autobahn bevorzugen
-      <small>Route wird ohne Tempolimit berechnet (wählt Autobahnen), die Fahrzeit trotzdem mit max. km/h.</small></span></label>
-    <label class="check"><input id="sToll" type="checkbox"><span>Maut meiden
-      <small>Mautstraßen umfahren (z.&nbsp;B. Autobahnen in Frankreich, Italien, Spanien).</small></span></label>
-    <div class="muted" style="margin-top:10px">Umweg = Strecke auf der Straße von der Route zum Platz, einfache Richtung. OpenRouteService rechnet mit mindestens 80 km/h.</div>
-    <div class="field" style="margin-top:14px"><label for="sGkey">Google-API-Schlüssel (für Bewertungen)</label>
-      <input id="sGkey" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="AIza…">
-      <div class="muted">Optional. Zeigt Google-Sterne bei den Campingplätzen (Places API). Leer = nur Link zu Google Maps.</div></div>
-    <div class="grid2" style="margin-top:14px">
-      <div class="field"><label for="sAdults">Reisende: Erwachsene</label><input id="sAdults" type="number" min="0" max="20" step="1" inputmode="numeric"></div>
-      <div class="field"><label for="sKids">Kinder</label><input id="sKids" type="number" min="0" max="20" step="1" inputmode="numeric"></div>
-    </div>
-    <div class="muted">Für die geschätzten Eintrittspreise im Reiseplan (Erwachsenen- und Kinderpreis von der Website).</div>
-    <h3 style="margin:18px 0 6px">Online-Speicher (privates GitHub-Repo)</h3>
-    <div class="muted" style="margin-bottom:8px">Touren und Einstellungen (inkl. ORS-Schlüssel) werden dort gespeichert – so hast du sie auf Handy und Laptop. Der Token bleibt nur in diesem Browser.</div>
-    <div class="field"><label for="sRepo">Repo (Besitzer/Name)</label>
-      <input id="sRepo" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="sebciox/touren"></div>
-    <div class="field"><label for="sToken">GitHub-Token</label>
-      <div class="sweb"><input id="sToken" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="github_pat_…"><button class="btn small" type="button" id="sTokenShow" aria-label="Token anzeigen">anzeigen</button></div>
-      <div class="muted">Fine-grained Token, nur für dieses Repo, Recht „Contents: Read and write“. Leer lassen = nur lokal speichern.</div></div>
-    <div class="field" id="setupLinkBox" hidden><button class="btn small" type="button" id="setupLinkBtn">Link für anderen Browser kopieren</button>
-      <div class="muted">Öffnet die App z. B. in Firefox oder am Handy gleich verbunden – mit allen Schlüsseln, Einstellungen und Touren. Der Link enthält deinen Token: nur an dich selbst schicken, nicht weitergeben.</div></div>
-    </div>
-    <div class="dlg-actions">
-      <button class="btn" value="cancel" type="submit">Abbrechen</button>
-      <button class="btn primary" value="save" type="submit">Speichern</button>
-    </div>
-  </form>
-</dialog>
+    <dialog id="settingsDlg">
+      <form method="dialog" id="settingsForm" class="dlg-form" novalidate>
+        <div class="dlg-head">
+          <h2>Einstellungen</h2>
+          <button class="btn ghost dlg-x" value="cancel" type="submit" aria-label="Schließen" title="Schließen">✕</button>
+        </div>
+        <div class="dlg-body">
+          <div class="field">
+            <label for="sKey">OpenRouteService-Schlüssel</label>
+            <input id="sKey" autocomplete="off" spellcheck="false" />
+            <div class="muted">
+              Kostenlos über das HeiGIT-Konto (<a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a>).
+              Wird auch im Online-Speicher abgelegt, falls eingerichtet.
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label for="sSpeed">Max. km/h</label><input id="sSpeed" type="number" min="80" max="130" step="1" inputmode="numeric" /></div>
+            <div class="field">
+              <label for="sDetour">Max. Umweg km</label><input id="sDetour" type="number" min="1" max="50" step="1" inputmode="numeric" />
+            </div>
+            <div class="field"><label for="sMin">Etappe min. km</label><input id="sMin" type="number" min="50" max="1500" step="1" inputmode="numeric" /></div>
+            <div class="field"><label for="sMax">Etappe max. km</label><input id="sMax" type="number" min="60" max="1500" step="1" inputmode="numeric" /></div>
+          </div>
+          <label class="check"
+            ><input id="sHighway" type="checkbox" /><span
+              >Autobahn bevorzugen <small>Route wird ohne Tempolimit berechnet (wählt Autobahnen), die Fahrzeit trotzdem mit max. km/h.</small></span
+            ></label
+          >
+          <label class="check"
+            ><input id="sToll" type="checkbox" /><span
+              >Maut meiden <small>Mautstraßen umfahren (z.&nbsp;B. Autobahnen in Frankreich, Italien, Spanien).</small></span
+            ></label
+          >
+          <div class="muted" style="margin-top: 10px">
+            Umweg = Strecke auf der Straße von der Route zum Platz, einfache Richtung. OpenRouteService rechnet mit mindestens 80 km/h.
+          </div>
+          <div class="field" style="margin-top: 14px">
+            <label for="sGkey">Google-API-Schlüssel (für Bewertungen)</label>
+            <input id="sGkey" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="AIza…" />
+            <div class="muted">Optional. Zeigt Google-Sterne bei den Campingplätzen (Places API). Leer = nur Link zu Google Maps.</div>
+          </div>
+          <div class="grid2" style="margin-top: 14px">
+            <div class="field">
+              <label for="sAdults">Reisende: Erwachsene</label><input id="sAdults" type="number" min="0" max="20" step="1" inputmode="numeric" />
+            </div>
+            <div class="field"><label for="sKids">Kinder</label><input id="sKids" type="number" min="0" max="20" step="1" inputmode="numeric" /></div>
+          </div>
+          <div class="muted">Für die geschätzten Eintrittspreise im Reiseplan (Erwachsenen- und Kinderpreis von der Website).</div>
+          <h3 style="margin: 18px 0 6px">Online-Speicher (privates GitHub-Repo)</h3>
+          <div class="muted" style="margin-bottom: 8px">
+            Touren und Einstellungen (inkl. ORS-Schlüssel) werden dort gespeichert – so hast du sie auf Handy und Laptop. Der Token bleibt nur in diesem
+            Browser.
+          </div>
+          <div class="field">
+            <label for="sRepo">Repo (Besitzer/Name)</label>
+            <input id="sRepo" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="sebciox/touren" />
+          </div>
+          <div class="field">
+            <label for="sToken">GitHub-Token</label>
+            <div class="sweb">
+              <input id="sToken" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="github_pat_…" /><button
+                class="btn small"
+                type="button"
+                id="sTokenShow"
+                aria-label="Token anzeigen"
+              >
+                anzeigen
+              </button>
+            </div>
+            <div class="muted">Fine-grained Token, nur für dieses Repo, Recht „Contents: Read and write“. Leer lassen = nur lokal speichern.</div>
+          </div>
+          <div class="field" id="setupLinkBox" hidden>
+            <button class="btn small" type="button" id="setupLinkBtn">Link für anderen Browser kopieren</button>
+            <div class="muted">
+              Öffnet die App z. B. in Firefox oder am Handy gleich verbunden – mit allen Schlüsseln, Einstellungen und Touren. Der Link enthält deinen Token:
+              nur an dich selbst schicken, nicht weitergeben.
+            </div>
+          </div>
+        </div>
+        <div class="dlg-actions">
+          <button class="btn" value="cancel" type="submit">Abbrechen</button>
+          <button class="btn primary" value="save" type="submit">Speichern</button>
+        </div>
+      </form>
+    </dialog>
 
-<dialog id="toursDlg">
-  <div class="dlg-head"><h2>Gespeicherte Touren</h2>
-    <button class="btn ghost dlg-x" type="button" id="toursX" aria-label="Schließen" title="Schließen">✕</button></div>
-  <div class="dlg-body"><div class="muted" id="syncInfo" style="margin-bottom:6px"></div><ul class="tours" id="toursList"></ul></div>
-  <div class="dlg-actions">
-    <button class="btn" type="button" id="syncBtn" hidden>Abgleichen</button>
-    <button class="btn" type="button" id="importBtn">Tour-Datei öffnen</button>
-    <button class="btn" type="button" id="toursClose">Schließen</button>
-  </div>
-  <input type="file" id="importIn" accept=".json,application/json" hidden>
-</dialog>
+    <dialog id="toursDlg">
+      <div class="dlg-head">
+        <h2>Gespeicherte Touren</h2>
+        <button class="btn ghost dlg-x" type="button" id="toursX" aria-label="Schließen" title="Schließen">✕</button>
+      </div>
+      <div class="dlg-body">
+        <div class="muted" id="syncInfo" style="margin-bottom: 6px"></div>
+        <ul class="tours" id="toursList"></ul>
+      </div>
+      <div class="dlg-actions">
+        <button class="btn" type="button" id="syncBtn" hidden>Abgleichen</button>
+        <button class="btn" type="button" id="importBtn">Tour-Datei öffnen</button>
+        <button class="btn" type="button" id="toursClose">Schließen</button>
+      </div>
+      <input type="file" id="importIn" accept=".json,application/json" hidden />
+    </dialog>
 
-<dialog id="sumDlg">
-  <div class="dlg-head"><h2>Tourübersicht</h2>
-    <button class="btn ghost dlg-x" type="button" id="sumX" aria-label="Schließen" title="Schließen">✕</button></div>
-  <div class="dlg-body"><div id="sumBody" class="acc"></div></div>
-  <div class="dlg-actions">
-    <button class="btn" type="button" id="printBtn">Drucken / PDF</button>
-    <button class="btn" type="button" id="sumClose">Schließen</button>
-  </div>
-</dialog>
-<dialog id="askDlg">
-  <div class="dlg-head"><h2 id="askTitle"></h2></div>
-  <div class="dlg-body"><p id="askText" style="margin:0"></p></div>
-  <div class="dlg-actions" id="askBtns"></div>
-</dialog>
-<div id="print" aria-hidden="true"></div>
+    <dialog id="sumDlg">
+      <div class="dlg-head">
+        <h2>Tourübersicht</h2>
+        <button class="btn ghost dlg-x" type="button" id="sumX" aria-label="Schließen" title="Schließen">✕</button>
+      </div>
+      <div class="dlg-body"><div id="sumBody" class="acc"></div></div>
+      <div class="dlg-actions">
+        <button class="btn" type="button" id="printBtn">Drucken / PDF</button>
+        <button class="btn" type="button" id="sumClose">Schließen</button>
+      </div>
+    </dialog>
+    <dialog id="askDlg">
+      <div class="dlg-head"><h2 id="askTitle"></h2></div>
+      <div class="dlg-body"><p id="askText" style="margin: 0"></p></div>
+      <div class="dlg-actions" id="askBtns"></div>
+    </dialog>
+    <div id="print" aria-hidden="true"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="js/basis.js?v=68"></script>
-<script src="js/dienste.js?v=68"></script>
-<script src="js/daten.js?v=68"></script>
-<script src="js/recherche.js?v=68"></script>
-<script src="js/google.js?v=68"></script>
-<script src="js/etappe.js?v=68"></script>
-<script src="js/planung.js?v=68"></script>
-<script src="js/karte.js?v=68"></script>
-<script src="js/panel.js?v=68"></script>
-<script src="js/ziele.js?v=68"></script>
-<script src="js/onlinespeicher.js?v=68"></script>
-<script src="js/export.js?v=68"></script>
-<script src="js/tabelle.js?v=68"></script>
-<script src="js/zusatz.js?v=68"></script>
-<script src="js/ausgabe.js?v=68"></script>
-<script src="js/reiseplan.js?v=68"></script>
-<script src="js/start.js?v=68"></script>
-</body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="js/basis.js?v=69"></script>
+    <script src="js/dienste.js?v=69"></script>
+    <script src="js/daten.js?v=69"></script>
+    <script src="js/recherche.js?v=69"></script>
+    <script src="js/google.js?v=69"></script>
+    <script src="js/etappe.js?v=69"></script>
+    <script src="js/planung.js?v=69"></script>
+    <script src="js/karte.js?v=69"></script>
+    <script src="js/panel.js?v=69"></script>
+    <script src="js/ziele.js?v=69"></script>
+    <script src="js/pinnwand.js?v=69"></script>
+    <script src="js/onlinespeicher.js?v=69"></script>
+    <script src="js/export.js?v=69"></script>
+    <script src="js/tabelle.js?v=69"></script>
+    <script src="js/zusatz.js?v=69"></script>
+    <script src="js/ausgabe.js?v=69"></script>
+    <script src="js/reiseplan.js?v=69"></script>
+    <script src="js/start.js?v=69"></script>
+  </body>
 </html>

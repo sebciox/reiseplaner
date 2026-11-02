@@ -455,6 +455,7 @@ function renderMap() {
         .addTo(lyr.pins)
     )
   );
+  if (typeof drawIdeas === 'function') drawIdeas(lyr.pins); // Pinnwand (pinnwand.js)
   // Fähre: Ankunftshafen
   state.via.forEach(v => {
     if (v.kind === 'ferry' && v.to)
