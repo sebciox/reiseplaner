@@ -4,7 +4,8 @@ Privater Reiseplaner (PWA) für eine Reise mit **Wohnwagen-Gespann**. Anzeigenam
 nicht öffentlich vertrieben). Sprache der App und der Kommunikation: **Deutsch**. Sebastian will wenig Rückfragen –
 Absicht erschließen und liefern.
 **Fragen immer als Auswahl stellen:** Wenn Entscheidungen oder Vorschläge zur Wahl stehen, diese über den
-Auswahl-Dialog (AskUserQuestion, mit Optionen und Empfehlung) stellen – nicht als Fließtext-Liste.
+Auswahl-Dialog (AskUserQuestion, mit Optionen und Empfehlung) stellen – nicht als Fließtext-Liste. Das gilt **immer**, auch wenn ein Skill (z. B. „grilling“) ein anderes Format vorgibt: jede Frage als
+Auswahl mit Optionen, empfohlene Option zuerst und mit „(Empfohlen)“ markiert, höchstens 4 Fragen je Dialog.
 
 Live: https://sebciox.github.io/reiseplaner/ (Repo `sebciox/reiseplaner`, bis Nov. 2026 `gespann-etappen`; GitHub Pages, Branch `main`, Root). Jeder Push auf `main`
 wird automatisch veröffentlicht. Kein Build-Schritt, kein Backend.
