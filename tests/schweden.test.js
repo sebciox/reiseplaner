@@ -40,6 +40,7 @@ const findPlace = t => {
   return PLACES.find(p => p.name.toLowerCase() === t) || PLACES.find(p => t.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(t));
 };
 const srv = require('./lib/server')(ROOT, 8153);
+let dirCalls = 0;
 
 (async () => {
   const browser = await chromium.launch();
@@ -70,6 +71,7 @@ const srv = require('./lib/server')(ROOT, 8153);
     }
     if (u.includes('photon.komoot.io/api')) return r.fulfill({ json: { features: [] } });
     if (u.includes('/v2/directions/')) {
+      dirCalls++;
       // gerade Linie; Fähre = Teil zwischen 54,0° und 55,35° Breite (Ostsee Travemünde ↔ Malmö)
       const b = JSON.parse(r.request().postData());
       const P = b.coordinates;
@@ -415,6 +417,34 @@ const srv = require('./lib/server')(ROOT, 8153);
   ].filter(w => !W.text.includes(w));
   ok(!wBad.length, 'Word: alle Angaben der PDF enthalten' + (wBad.length ? ' – fehlt: ' + wBad.join(', ') : ''));
   ok(/google\.com\/maps\/dir/.test(W.rels) && W.files.some(f => /word\/media\/.+\.png$/.test(f)), 'Word: Navigation als Link, Übersichtskarte als Bild');
+  // „Strecken neu berechnen“ (⋯): alle Etappen neu, Plätze und Eingaben bleiben; Fähr-Zeile bleibt auch ohne Fähre in der neuen Route
+  await page.evaluate(() => {
+    state.stages[1].ex = { ferry: 0, toll: 0 };
+    state.stages[1].line = [
+      [0, 0],
+      [1, 1]
+    ];
+    renderTrip();
+  });
+  ok(
+    await page.evaluate(() => /Fähre Travemünde – Malmö/.test($('#tripView').innerText)),
+    'Fähr-Zeile mit Angaben bleibt, auch wenn die Route keine Fähre mehr hat'
+  );
+  const c0 = dirCalls;
+  await page.click('#tripView [data-more]');
+  await page.click('#tripView [data-act="reroute"]');
+  await page.waitForFunction(() => !rerouting && state.stages[1].line.length > 2, null, { timeout: 30000 });
+  const rr = await page.evaluate(() => ({
+    n: state.stages.length,
+    ferry: state.stages[1].ex.ferry > 500,
+    est: state.stages.some(s => (s.to.sights || []).some(x => x.est)),
+    nr: state.stages.find(s => s.my?.nr === 'ZMAC58') != null,
+    st: state.stages[2].my?.status
+  }));
+  ok(
+    dirCalls - c0 === rr.n && rr.ferry && !rr.est && rr.nr && rr.st === 'paid',
+    `Strecken neu berechnet (${dirCalls - c0} Routen), Fähre wieder erkannt, Eingaben bleiben`
+  );
   // fertige Tour als Datei (z. B. als Beispiel-Tour für den Online-Speicher, siehe CLAUDE.md)
   const tourJson = await page.evaluate(() => JSON.stringify(tourFile(loadTours().find(t => t.name === 'Schweden Rundreise 2026')), null, 1));
   fs.writeFileSync(path.join(OUT, 'schweden.etappen.json'), tourJson);

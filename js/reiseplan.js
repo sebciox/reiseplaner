@@ -131,7 +131,8 @@ function renderTrip() {
         `<button class="btn primary" type="button" data-act="print">Drucken / PDF</button>
         <button class="btn" type="button" data-act="docx">Word</button>
         <button class="btn" type="button" data-act="save" ${state.busy ? 'disabled' : ''}>Speichern</button>`,
-        `<button class="btn" type="button" data-act="gpx">GPX</button>
+        `<button class="btn" type="button" data-act="reroute" title="Alle Etappen über die Straße neu berechnen – Plätze und Eingaben bleiben">Strecken neu berechnen</button>
+        <button class="btn" type="button" data-act="gpx">GPX</button>
         <button class="btn" type="button" data-act="file">Tour-Datei</button>
         ${saved ? '<button class="btn" type="button" data-act="copy">Kopie speichern</button>' : ''}`
       );
@@ -212,6 +213,7 @@ function renderTrip() {
   const act = {
     print: () => printTour(),
     docx: () => exportDocx(),
+    reroute: () => rerouteAll(),
     gpx: () => exportGpx(),
     file: () => exportTour(),
     save: () => saveTour(),

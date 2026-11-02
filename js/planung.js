@@ -743,6 +743,54 @@ async function replaceStop(i, c) {
   fitAll();
 }
 
+// Alle Strecken neu berechnen, gewählte Plätze und alle Eingaben bleiben: z. B. nach geänderten Routen-Einstellungen
+// (Autobahn/Maut) oder für Touren mit geraden Linien (Beispiel-Tour aus dem Nachbau-Test). Entfernungen Platz ↔
+// Sehenswürdigkeiten werden ebenfalls neu über die Straße gemessen.
+let rerouting = false;
+async function rerouteAll() {
+  if (rerouting || state.busy || !state.stages.length) return;
+  rerouting = true;
+  const n = state.stages.length;
+  let fails = 0;
+  try {
+    for (let i = 0; i < n; i++) {
+      const s = state.stages[i];
+      if (!s) continue;
+      if (i > 0) s.from = state.stages[i - 1].to;
+      setStatus(`Strecke ${i + 1} von ${n} wird berechnet …`, 'busy');
+      try {
+        const r = await route(s.from, s.to, visitsOf(s));
+        Object.assign(s, { line: r.line, dist: r.dist, dur: r.dur, ex: r.ex, countries: undefined });
+      } catch (e) {
+        fails++;
+        continue;
+      }
+      const S = (s.to.sights || []).filter(x => x.lat != null);
+      if (S.length) {
+        try {
+          const r = await roadPairs(S, s.to);
+          S.forEach((x, q) => {
+            if (r[q].d != null) Object.assign(x, { d: r[q].d, t: r[q].t, est: undefined });
+          });
+          const ok = S.filter(x => x.d != null && !x.est);
+          if (s.to.near && ok.length)
+            Object.assign(s.to.near, { d: ok.reduce((a, x) => a + x.d, 0) / ok.length, t: ok.reduce((a, x) => a + (x.t || 0), 0) / ok.length });
+        } catch (e) {}
+      }
+    }
+  } finally {
+    rerouting = false;
+  }
+  touch();
+  renderAll();
+  fitAll();
+  if (fails) setStatus(`${fails} von ${n} Strecken konnten nicht berechnet werden – bitte später noch einmal versuchen.`, 'error');
+  else {
+    setStatus('');
+    flash(`Alle ${n} Strecken neu berechnet ✓`);
+  }
+}
+
 /* Zwischenstopp in eine fertige Etappe einfügen: Plätze im mittleren Teil (25–75 %) der Etappe, sortiert nach Nähe
    zur Hälfte; beim Übernehmen wird die Etappe geteilt, alle anderen Etappen bleiben unverändert */
 async function loadSplit(i) {

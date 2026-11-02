@@ -84,11 +84,13 @@ function addRowHtml(i) {
       : ''
   }</td></tr>`;
 }
+// Fähr-Zeile: Route mit Fähre – oder schon Angaben eingetragen (bleiben sichtbar, auch wenn eine neue Route ohne Fähre fährt)
+const hasFerry = s => !!s && ((s.ex && s.ex.ferry > 500) || (s.ferry && Object.values(s.ferry).some(v => v != null && v !== '')));
 // alles, was in einer Gruppe unter Platz/Sehenswürdigkeiten steht: Fähre der Weiterfahrt, eigene Fähren/Kosten, „+ Zeile“
 function groupExtrasHtml(i, ds, open) {
   const nx = state.stages[i + 1];
   let h = '';
-  if (nx && nx.ex && nx.ex.ferry > 500) h += ferryRowHtml(i + 1, ds);
+  if (hasFerry(nx)) h += ferryRowHtml(i + 1, ds);
   extrasIn(i, 'ferry').forEach(e => (h += ferryRowHtml(-1, ds, e)));
   extrasIn(i, 'cost').forEach(e => (h += costRowHtml(e)));
   if (open && !XP) h += addRowHtml(i);
@@ -134,7 +136,7 @@ function tripMoney() {
       else if (mo.open)
         items.push({ kind: 'pay', text: `${stLabel(ST_CAMP, mo.st)}: ${nm}`, eur: mo.open, approx: mo.approxPaid, date: when(i), grp: i, row: 'c' + i });
     }
-    if (s.ex && s.ex.ferry > 500) {
+    if (hasFerry(s)) {
       const mo = ferryMoney(s.ferry, s.to),
         nm = s.ferry?.name || `Fähre (Fahrt nach ${shortLabel(s.to.label)})`;
       add('ferry', mo.total, mo.paid, mo.open);
