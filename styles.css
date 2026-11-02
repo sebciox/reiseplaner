@@ -2331,7 +2331,7 @@ select.st-open {
   border-color: var(--danger);
 }
 /* Handy: dieselben Zellen als Karten untereinander (Beschriftung aus data-l) */
-@media (max-width: 899px) {
+@media screen and (max-width: 899px) {
   .ptwrap {
     overflow: visible;
   }
@@ -2489,7 +2489,7 @@ select.st-open {
 .oplist .openamt {
   margin-left: 4px;
 }
-@media (max-width: 899px) {
+@media screen and (max-width: 899px) {
   .ptab tr.ferry,
   .ptab tr.cost {
     margin-left: 12px;
@@ -2520,4 +2520,48 @@ select.stsel.isopen {
 }
 .ptab .swebadd {
   font-size: 12px;
+}
+/* Druck/PDF: dieselbe Tabelle wie im Reiter 3 (Ausgabemodus), A4 quer */
+#print .ptab {
+  min-width: 0;
+  font-size: 8pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+#print .ptab th {
+  font-size: 7.5pt;
+  background: #9cbca2;
+  color: #1c2420;
+}
+#print .ptab td {
+  padding: 1.2mm 1.5mm;
+}
+#print .ptab tr.camp td {
+  background: #eef4ef;
+}
+#print .ptab tr.pt td {
+  background: #f4f6f4;
+}
+#print .ptab tr.ferry td,
+#print .ptab tr.cost td {
+  background: #fdf6ec;
+}
+#print .ptab .muted {
+  color: #555;
+}
+#print .ptab .st {
+  font-weight: 600;
+}
+#print h2 {
+  font-size: 12pt;
+  margin: 4mm 0 2mm;
+}
+#print .oplist {
+  margin: 0;
+  padding-left: 5mm;
+  font-size: 9pt;
+}
+#print .ptab td,
+#print .ptab td * {
+  font-size: 8pt;
 }

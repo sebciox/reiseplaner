@@ -116,6 +116,8 @@ const srv = require('./lib/server')(ROOT, 8153);
       ]);
       return r.fulfill({ json: { elements: all.filter(e => e.lat >= S && e.lat <= N && e.lon >= W && e.lon <= E) } });
     }
+    if (u.includes('cdn.jsdelivr.net/npm/docx@'))
+      return r.fulfill({ body: fs.readFileSync(path.join(ROOT, 'node_modules/docx/dist/index.iife.js')), contentType: 'text/javascript' });
     if (u.includes('api.frankfurter.app')) return r.fulfill({ json: { rates: { SEK: 11.0, NOK: 11.7, DKK: 7.46 } } });
     return r.continue();
   });
@@ -366,16 +368,49 @@ const srv = require('./lib/server')(ROOT, 8153);
   );
   const tab = (await page.textContent('#tripView .ptab')).replace(/\s+/g, ' ');
   ok(!/Keine Campingplätze gefunden|Zoom auf der Karte rein/.test(tab), 'Reiseplan ohne alte Suchhinweise aus der Planung');
-  // Druck/PDF und Word: dieselben Angaben?
+  // Drucken/PDF: dieselbe Tabelle (7 Spalten, alles aufgeklappt) + Offene Punkte
   await page.evaluate(() => printTour());
-  await page.waitForFunction(() => window.__printed > 0, null, { timeout: 15000 }).catch(() => {});
+  await page.waitForFunction(() => window.__printed > 0, null, { timeout: 15000 });
   const pr = (await page.evaluate(() => $('#print').innerText)).replace(/\s+/g, ' ');
-  can(
-    /ZMAC58/.test(pr) && /326,61/.test(pr) && /Vasa-Museum/.test(pr),
-    'Drucken/PDF enthält Buchungsnr., Preise und Sehenswürdigkeiten wie die Tabelle',
-    'Schritt 3 (PDF im Querformat mit den 7 Spalten)'
+  const prCols = await page.evaluate(() => [...document.querySelectorAll('#print .ptab thead th')].map(t => t.textContent.trim()).join(' | '));
+  ok(
+    prCols === 'Datum | Name | Adresse | Zeiten | Preis / Status | Notiz / Buchung | Weiter / Entfernung' &&
+      /ZMAC58/.test(pr) &&
+      /326,61/.test(pr) &&
+      /Vasa-Museum/.test(pr) &&
+      /Fähre Travemünde – Malmö/.test(pr) &&
+      /Offene Punkte/.test(pr) &&
+      /Reisende: 2 Erw\. \+ 2 Kinder/.test(pr) &&
+      !(await page.$('#print input, #print select, #print button')),
+    'Drucken/PDF: Kopf, 7 Spalten wie online, alle Angaben, Offene Punkte, keine Eingabefelder'
   );
-  can(await page.evaluate(() => typeof exportDocx === 'function'), 'Word-Export (.docx)', 'Schritt 3');
+  await page.emulateMedia({ media: 'print' });
+  await page.pdf({ path: path.join(OUT, 'schweden.pdf'), preferCSSPageSize: true, printBackground: true });
+  await page.emulateMedia({ media: 'screen' });
+  // Word (.docx)
+  const dlP = page.waitForEvent('download', { timeout: 30000 });
+  await page.click('#tripView [data-act="docx"]');
+  const dl = await dlP;
+  const docxPath = path.join(OUT, 'schweden.docx');
+  await dl.saveAs(docxPath);
+  const W = require('./lib/docx')(docxPath);
+  const cols = (W.xml.match(/<w:gridCol /g) || []).length;
+  ok(/w:orient="landscape"/.test(W.xml) && cols === 7 && /Weiter \/ Entfernung/.test(W.text), `Word: Querformat, Tabelle mit ${cols} Spalten wie online`);
+  const wBad = [
+    'ZMAC58',
+    '16924901',
+    '326,61',
+    '1.170 SEK',
+    'Vasa-Museum',
+    'Hof Näs',
+    'Fähre Travemünde – Malmö',
+    'Überfahrt ca. 9 Std.',
+    'Robert (Roban)',
+    'Offene Punkte',
+    'vor Ort zahlen'
+  ].filter(w => !W.text.includes(w));
+  ok(!wBad.length, 'Word: alle Angaben der PDF enthalten' + (wBad.length ? ' – fehlt: ' + wBad.join(', ') : ''));
+  ok(/google\.com\/maps\/dir/.test(W.rels) && W.files.some(f => /word\/media\/.+\.png$/.test(f)), 'Word: Navigation als Link, Übersichtskarte als Bild');
   console.log('INFO  Duschcode/WLAN aus der PDF: bewusst nicht vorgesehen (Sebastian: nicht speichern)');
 
   console.log(

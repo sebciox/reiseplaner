@@ -21,6 +21,17 @@ const ST_SIGHT = [
   ['free', 'kein Ticket nötig']
 ];
 const stLabel = (list, k) => (list.find(x => x[0] === k) || list[0])[1];
+/* Ausgabemodus für PDF und Word (`XP`): dieselbe Tabelle, aber alles aufgeklappt, ohne Eingabefelder, Knöpfe und
+   „+ Zeile“, leere Angaben weggelassen; Google-Öffnungszeiten als Wochentext mit „lt. Google, Stand …“ */
+let XP = false;
+const gStand = () => `lt. Google, Stand ${new Date().toLocaleDateString('de-DE')}`;
+function ohText(oh) {
+  const v = (oh || []).map(l => [l.split(':')[0], l.replace(/^[^:]+:\s*/, '')]);
+  if (!v.length) return '';
+  if (v.every(x => x[1] === v[0][1])) return 'täglich ' + v[0][1];
+  return v.map(([d, t]) => d.slice(0, 2) + ' ' + t).join(' · ');
+}
+const xpDay = d => (d ? fdate(new Date(d + 'T12:00:00')) : '');
 
 /* ---------- eigene Angaben ---------- */
 function campMy(s) {
@@ -257,6 +268,7 @@ const rsBtn = k =>
   `<button class="rs" type="button" data-rs="${k}" title="gefundenen Wert wiederherstellen" aria-label="gefundenen Wert wiederherstellen">↺</button>`;
 // bearbeitbarer Wert: Antippen → Eingabefeld. link = Wert ist ein Link (Name, Adresse) → eigener ✎-Knopf
 function ed(scope, id, f, html, opt = {}) {
+  if (XP) return html || '';
   const k = edKey(scope, id, f),
     own = !!opt.own,
     F = FIELD[f] || {};
@@ -268,8 +280,16 @@ function ed(scope, id, f, html, opt = {}) {
 // Zeilen mit offenem Punkt (noch nicht gebucht, offener Betrag, Tickets fehlen …): Status wie der Chip hinterlegt
 let openRows = new Set();
 const selHtml = (scope, id, f, list, cur, label) =>
-  `<select class="stsel st-${esc(cur)}${openRows.has(scope + id) ? ' isopen' : ''}" data-sel="${edKey(scope, id, f)}" aria-label="${esc(label)}">${list.map(([k, l]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-const td = (l, h, cls) => `<td data-l="${esc(l)}"${cls ? ` class="${cls}"` : ''}>${h}</td>`;
+  XP
+    ? `<span class="st st-${esc(cur)}">${esc(stLabel(list, cur))}</span>`
+    : `<select class="stsel st-${esc(cur)}${openRows.has(scope + id) ? ' isopen' : ''}" data-sel="${edKey(scope, id, f)}" aria-label="${esc(label)}">${list.map(([k, l]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+// Ausgabe: leere Beschriftungen („Buchungsnr. “, „bezahlt “ …) weglassen
+const xpClean = h =>
+  h
+    .replace(/<div(?: class="x")?>\s*(?:gesamt|bezahlt|Ankunft|Abfahrt|Buchungsnr\.|Stellplatz|Telefon|Ticketnr\.|Überfahrt)\s*<\/div>/g, '')
+    .replace(/bezahlt\s+·\s+/g, '')
+    .replace(/<div(?: class="x")?>\s*<\/div>/g, '');
+const td = (l, h, cls) => `<td data-l="${esc(l)}"${cls ? ` class="${cls}"` : ''}>${XP ? xpClean(h) : h}</td>`;
 const line = h => (h ? `<div class="x">${h}</div>` : '');
 
 /* ---------- Ort eines Aufenthalts ---------- */
@@ -302,6 +322,7 @@ function driveHtml(j) {
   return `<div>nach ${esc(stayTown(j) || shortLabel(s.to.label))}</div><div class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${fl ? ' · ' + fl : ''}</div>`;
 }
 function caret(i, open) {
+  if (XP) return '';
   return `<button class="grptog" type="button" data-grp="${i}" aria-expanded="${open}" aria-label="${open ? 'zuklappen' : 'aufklappen'}" title="${open ? 'zuklappen' : 'aufklappen'}">${open ? '▾' : '▸'}</button>`;
 }
 function startRows(ds, open) {
@@ -324,7 +345,7 @@ function campRowHtml(i, open, ds, cur) {
   let dat = ds ? `<b>${fdate(ds[i])}${!last || camp ? ` – ${fdate(addDays(ds[i], n))}` : ''}</b>` : `Etappe ${i + 1}`;
   dat += `<div class="muted">${n} ${n === 1 ? 'Nacht' : 'Nächte'}</div>`;
   if (camp) dat += `<div class="ort">${ed('c', i, 'ort', esc(stayTown(i)), { own: !!m.ort, ph: '+ Ort' })}</div>`;
-  if (open)
+  if (open && !XP)
     dat += `<div class="nstep" title="Nächte"><button type="button" data-tlnight="${i}" data-d="-1" aria-label="eine Nacht weniger" ${n <= 1 ? 'disabled' : ''}>−</button><b>${n}</b><button type="button" data-tlnight="${i}" data-d="1" aria-label="eine Nacht mehr">+</button></div>`;
   // Name (Link = Google-Eintrag)
   const nm = own('name') ? esc(m.name) : camp ? nameHtml(c) : esc(c.label);
@@ -335,7 +356,8 @@ function campRowHtml(i, open, ds, cur) {
     const w = campWeb(c),
       g = settings.gkey && gRate.has(c.id) ? rateHtml(c) : '';
     name += line([w && linkA(safeUrl(w), hostOf(w)), linkA(p4nUrl(c), 'park4night')].filter(Boolean).join(' · ') + g);
-    name += `<div class="x sbtns"><button class="btn small" type="button" data-share="${i}">Teilen</button> <button class="btn small" type="button" data-tledit="${i}">Platz ändern</button></div>`;
+    if (!XP)
+      name += `<div class="x sbtns"><button class="btn small" type="button" data-share="${i}">Teilen</button> <button class="btn small" type="button" data-tledit="${i}">Platz ändern</button></div>`;
   }
   // Adresse (Link = Navigation)
   const addr = own('addr') ? m.addr : campAddrFound(c);
@@ -343,16 +365,17 @@ function campRowHtml(i, open, ds, cur) {
     link: true,
     own: own('addr')
   });
-  if (open) ad += line(coordHtml(c).replace(/<a class="btn small"[^]*$/, ''));
+  if (open) ad += line(XP ? `<span class="muted">${fcoord(c)}</span>` : coordHtml(c).replace(/<a class="btn small"[^]*$/, ''));
   // Zeiten
   const hf = campHoursFound(c),
     gR = gRate.get(c.id);
   let zt = ed('c', i, 'hours', esc(own('hours') ? m.hours : hf || (camp ? 'Rezeption –' : '')), { own: own('hours'), ph: 'Zeiten' });
   if (open) {
-    if (!own('hours') && !hf && gR?.oh?.length) zt += gHoursHtml(gR.oh, gR.open);
+    if (!own('hours') && !hf && gR?.oh?.length) zt += XP ? line(`${esc(ohText(gR.oh))} <span class="muted">(${gStand()})</span>`) : gHoursHtml(gR.oh, gR.open);
     const r = camp ? rzFor(c) : null;
     if (!own('hours') && r?.url) zt += line(`<a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener">Quelle</a>`);
-    zt += line(`Ankunft ${ed('c', i, 'arr', esc(m.arr || ''), { ph: '–' })}`) + line(`Abfahrt ${ed('c', i, 'dep', esc(m.dep || ''), { ph: '–' })}`);
+    if (!XP || m.arr) zt += line(`Ankunft ${ed('c', i, 'arr', esc(m.arr || ''), { ph: '–' })}`);
+    if (!XP || m.dep) zt += line(`Abfahrt ${ed('c', i, 'dep', esc(m.dep || ''), { ph: '–' })}`);
   }
   // Preis / Status
   let pr = '';
@@ -397,7 +420,9 @@ function sightRowHtml(x, from) {
   const dir = from
     ? `https://www.google.com/maps/dir/?api=1&origin=${from.lat.toFixed(6)},${from.lon.toFixed(6)}&destination=${(+s.lat).toFixed(6)},${(+s.lon).toFixed(6)}&travelmode=driving`
     : navUrl(s);
-  const day = `<input type="date" class="dayin" data-sel="${edKey('s', k, 'day')}" value="${esc(m.day || '')}" aria-label="Besuchstag" title="Besuchstag (freiwillig)">`;
+  const day = XP
+    ? xpDay(m.day)
+    : `<input type="date" class="dayin" data-sel="${edKey('s', k, 'day')}" value="${esc(m.day || '')}" aria-label="Besuchstag" title="Besuchstag (freiwillig)">`;
   const nm = own('name') ? m.name : shortLabel(s.label);
   let name = `<span class="pname">★ ${ed('s', k, 'name', `<a href="${esc(sightGUrl(s))}" target="_blank" rel="noopener">${esc(nm)}</a>`, { link: true, own: own('name') })}</span>`;
   const w = inf.web;
@@ -408,11 +433,12 @@ function sightRowHtml(x, from) {
           ? ` · <a class="stars" href="${esc(g.uri)}" target="_blank" rel="noopener">★ ${g.r.toLocaleString('de-DE', { minimumFractionDigits: 1 })} <span>(${g.n.toLocaleString('de-DE')})</span></a>`
           : '')
     );
+  else if (XP);
   else if ((s.info || g) && !inf.town && !swebOpen.has(k))
     name += line(`<button class="linkbtn swebadd" type="button" data-swebopen="${esc(k)}">+ Website</button>`);
   else if ((s.info || g) && !inf.town)
     name += `<form class="sweb x" data-sweb="${esc(k)}"><input name="w" type="text" inputmode="url" autocomplete="url" placeholder="Website eintragen" aria-label="Website der Sehenswürdigkeit" value="${g && g.web ? esc(g.web) : ''}"><button class="btn small" type="submit">Merken</button></form>`;
-  if (!s.info && sightBusy.has(k)) name += line('<span class="muted">Infos werden geladen …</span>');
+  if (!XP && !s.info && sightBusy.has(k)) name += line('<span class="muted">Infos werden geladen …</span>');
   const addr = own('addr') ? m.addr : g?.addr || inf.addr || cleanLabel(s.label);
   const ad = ed('s', k, 'addr', `<a href="${esc(dir)}" target="_blank" rel="noopener">${esc(addr)}</a>`, { link: true, own: own('addr') });
   let zt = '',
@@ -420,15 +446,16 @@ function sightRowHtml(x, from) {
   if (!inf.town) {
     const hf = sightHoursFound(s),
       r = sightRz(s);
-    zt = ed('s', k, 'hours', own('hours') ? esc(m.hours) : hf ? `${hf.pre ? hf.pre + ': ' : ''}${esc(hf.t)}` : '', {
+    const gx = XP && !own('hours') && hf && hf.src === 'Google' && g && g.oh ? (m.day ? `${xpDay(m.day)}: ${esc(hf.t)}` : esc(ohText(g.oh))) : '';
+    zt = ed('s', k, 'hours', own('hours') ? esc(m.hours) : gx || (hf ? `${hf.pre ? hf.pre + ': ' : ''}${esc(hf.t)}` : ''), {
       own: own('hours'),
       ph: 'Öffnungszeiten –'
     });
     if (!own('hours') && hf)
-      zt += ` <span class="muted">(${hf.url ? `<a href="${esc(safeUrl(hf.url))}" target="_blank" rel="noopener">${hf.src}</a>` : hf.src})</span>`;
+      zt += ` <span class="muted">(${hf.url ? `<a href="${esc(safeUrl(hf.url))}" target="_blank" rel="noopener">${hf.src}</a>` : XP && hf.src === 'Google' ? gStand() : hf.src})</span>`;
     if (!own('hours') && hf && hf.src === 'Google' && r && r.hoursS && r.hoursS.text)
       zt += line(`Website: ${esc(r.hoursS.text)}${r.hoursS.url ? ' · ' + linkA(safeUrl(r.hoursS.url), 'Quelle') : ''}`);
-    if (g && g.oh && g.oh.length) zt += gHoursHtml(g.oh, g.open);
+    if (g && g.oh && g.oh.length && !XP) zt += gHoursHtml(g.oh, g.open);
     if (r && r.hoursUrl && !(r.hoursS && r.hoursS.text)) zt += line(linkA(safeUrl(r.hoursUrl), 'Öffnungszeiten auf der Website'));
     if (r && r.season && r.season.from && dmDe(r.season.from) && dmDe(r.season.to)) zt += line(`Saison ${dmDe(r.season.from)} – ${dmDe(r.season.to)}`);
     const mo = sightMoney(s);
@@ -446,12 +473,12 @@ function sightRowHtml(x, from) {
                 : '';
     pr =
       (ageP
-        ? `<div>${ageP}${mo.src ? ` <span class="muted">(${mo.src})</span>` : ''}</div>`
+        ? `<div>${ageP}${mo.src ? ` <span class="muted">(${XP && mo.src === 'Google' ? gStand() : mo.src})</span>` : ''}</div>`
         : r && r.priceUrl
           ? line(linkA(safeUrl(r.priceUrl), 'Preise auf der Website'))
           : '') +
       `<div>${ed('s', k, 'amount', own('amount') ? moneyHtml(m.amount, s, inf.web) : mo.est != null ? `≈ ${fEur(mo.est)} <span class="muted">für ${persons(mo.ad, mo.ki)}</span>` : '', { own: own('amount'), ph: 'Preise –' })}</div>
-      <div>${selHtml('s', k, 'status', ST_SIGHT, mo.st, 'Ticket-Status')}</div>`;
+      ${XP && mo.st === 'open' && !mo.total ? '' : `<div>${selHtml('s', k, 'status', ST_SIGHT, mo.st, 'Ticket-Status')}</div>`}`;
   }
   const nt = ed('s', k, 'note', esc(m.note || ''), {}) + line(`Ticketnr. ${ed('s', k, 'nr', esc(m.nr || ''), { ph: '–' })}`);
   const dist =
@@ -485,14 +512,14 @@ function planTableHtml() {
   openRows = new Set(tripMoney().items.map(x => x.row));
   let h = `<table class="ptab"><colgroup><col class="c-dat"><col class="c-nm"><col class="c-ad"><col class="c-zt"><col class="c-pr"><col class="c-nt"><col class="c-wt"></colgroup>
     <thead><tr>${PT_COLS.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
-  const o0 = tlOpen.has(-3);
+  const o0 = XP || tlOpen.has(-3);
   h += `<tbody class="grp start${o0 ? ' open' : ''}" data-grpb="-1">${startRows(ds, o0)}</tbody>`;
   st.forEach((s, i) => {
     if (i === last && s.to.kind !== 'camp') {
       h += `<tbody class="grp">${endRowHtml(i, ds)}${groupExtrasHtml(i, ds, false)}</tbody>`;
       return;
     }
-    const open = grpOpen(i, cur);
+    const open = XP || grpOpen(i, cur);
     let b = campRowHtml(i, open, ds, cur);
     if (open) {
       if (s.to.sights && s.to.sights.length) sortSights(s.to.sights).forEach(x => (b += sightRowHtml(x, s.to)));
@@ -501,7 +528,7 @@ function planTableHtml() {
     b += groupExtrasHtml(i, ds, open);
     h += `<tbody class="grp${open ? ' open' : ''}" data-grpb="${i}">${b}</tbody>`;
   });
-  return h + '</table>' + costsHtml();
+  return h + '</table>' + (XP ? '' : costsHtml());
 }
 // Sehenswürdigkeiten einer Gruppe: mit Besuchstag zuerst (nach Datum), dann nach Entfernung vom Platz
 function sortSights(list) {

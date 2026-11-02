@@ -203,8 +203,9 @@ const srv = require('./lib/server')(ROOT, 8152);
     await page.press('#viaIn', 'Enter');
     await page.waitForFunction(n => state.via.length === n, n0 + 1);
   };
-  const XLSXPATH = path.join(ROOT, 'node_modules/xlsx/dist/xlsx.full.min.js');
-  await page.route('**/cdnjs.cloudflare.com/ajax/libs/xlsx/**', r => r.fulfill({ body: fs.readFileSync(XLSXPATH), contentType: 'text/javascript' }));
+  await page.route('**/cdn.jsdelivr.net/npm/docx@*/**', r =>
+    r.fulfill({ body: fs.readFileSync(path.join(ROOT, 'node_modules/docx/dist/index.iife.js')), contentType: 'text/javascript' })
+  );
   await page.route('**/places.googleapis.com/**', r => {
     const u = r.request().url();
     if (u.includes('searchNearby')) {

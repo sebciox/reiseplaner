@@ -19,7 +19,7 @@ function groupOfExtra(e) {
 }
 const extrasIn = (i, kind) => (state.extras || []).filter(e => e.kind === kind && groupOfExtra(e) === i);
 const refPoint = i => (i >= 0 && state.stages[i] ? state.stages[i].to : state.start); // für „kr“ ohne Währungscode
-const delBtn = id => `<button class="rs xdel" type="button" data-xdel="${esc(id)}" title="Zeile löschen" aria-label="Zeile löschen">✕</button>`;
+const delBtn = id => (XP ? '' : `<button class="rs xdel" type="button" data-xdel="${esc(id)}" title="Zeile löschen" aria-label="Zeile löschen">✕</button>`);
 
 /* ---------- Zeilen ---------- */
 // Fähre auf der Fahrt der Etappe j (automatisch erkannt) bzw. eigene Fähr-Zeile e
@@ -30,7 +30,9 @@ function ferryRowHtml(j, ds, e) {
     f = e || s?.ferry || {},
     ref = e ? refPoint(groupOfExtra(e)) : s.to;
   const date = e
-    ? `<input type="date" class="dayin" data-sel="${edKey('x', id, 'date')}" value="${esc(f.date || '')}" aria-label="Datum">`
+    ? XP
+      ? xpDay(f.date)
+      : `<input type="date" class="dayin" data-sel="${edKey('x', id, 'date')}" value="${esc(f.date || '')}" aria-label="Datum">`
     : ds
       ? fdate(ds[j])
       : '';
@@ -49,7 +51,7 @@ function ferryRowHtml(j, ds, e) {
 }
 function costRowHtml(e) {
   const ref = refPoint(groupOfExtra(e));
-  return `<tr class="cost" data-row="x${esc(e.id)}">${td('Datum', `<input type="date" class="dayin" data-sel="${edKey('x', e.id, 'date')}" value="${esc(e.date || '')}" aria-label="Datum">`)}${td(
+  return `<tr class="cost" data-row="x${esc(e.id)}">${td('Datum', XP ? xpDay(e.date) : `<input type="date" class="dayin" data-sel="${edKey('x', e.id, 'date')}" value="${esc(e.date || '')}" aria-label="Datum">`)}${td(
     'Name',
     `<span class="pname">€ ${ed('x', e.id, 'name', esc(e.name || ''), { ph: '+ Bezeichnung, z. B. Maut Öresundbrücke' })}</span>`,
     'nm'
@@ -89,7 +91,7 @@ function groupExtrasHtml(i, ds, open) {
   if (nx && nx.ex && nx.ex.ferry > 500) h += ferryRowHtml(i + 1, ds);
   extrasIn(i, 'ferry').forEach(e => (h += ferryRowHtml(-1, ds, e)));
   extrasIn(i, 'cost').forEach(e => (h += costRowHtml(e)));
-  if (open) h += addRowHtml(i);
+  if (open && !XP) h += addRowHtml(i);
   return h;
 }
 

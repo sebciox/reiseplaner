@@ -129,7 +129,7 @@ function renderTrip() {
       `<div class="muted" style="margin-top:10px">${saved ? 'Änderungen werden automatisch gespeichert. ' : 'Tour noch nicht gespeichert – Änderungen gehen beim Schließen verloren. '}<button class="linkbtn" type="button" data-act="offline">Etappenziele für unterwegs laden</button> (Karte offline)</div>` +
       footHtml(
         `<button class="btn primary" type="button" data-act="print">Drucken / PDF</button>
-        <button class="btn" type="button" data-act="xlsx">Excel</button>
+        <button class="btn" type="button" data-act="docx">Word</button>
         <button class="btn" type="button" data-act="save" ${state.busy ? 'disabled' : ''}>Speichern</button>`,
         `<button class="btn" type="button" data-act="gpx">GPX</button>
         <button class="btn" type="button" data-act="file">Tour-Datei</button>
@@ -211,7 +211,7 @@ function renderTrip() {
   el.querySelectorAll('[data-share]').forEach(b => (b.onclick = () => shareStage(+b.dataset.share)));
   const act = {
     print: () => printTour(),
-    xlsx: () => exportXlsx(),
+    docx: () => exportDocx(),
     gpx: () => exportGpx(),
     file: () => exportTour(),
     save: () => saveTour(),
@@ -314,103 +314,7 @@ $('#fbOff').onclick = () => {
 };
 $('#sumX').onclick = $('#sumClose').onclick = () => $('#sumDlg').close();
 
-/* ---------- Druck / PDF: A4 quer, Übersichtskarte + Tabelle ---------- */
-let printMap = null;
-function printDays() {
-  // Reiseplan-Seite: Fahrten und Aufenthalte (Sehenswürdigkeiten unter dem Platz), nur wenn es mehr als reine Fahrtage gibt
-  const st = state.stages,
-    ds = stageDates(),
-    last = st.length - 1;
-  if (!st.some((s, i) => (i < last && (+s.nights || 1) > 1) || stopSights(s.to).length || visitsOf(s).length)) return '';
-  let rows = '';
-  st.forEach((s, i) => {
-    const c = s.to,
-      n = Math.max(1, +s.nights || 1),
-      vs = visitsOf(s),
-      sg = stopSights(c);
-    rows += `<tr><td>${ds ? fdate(ds[i]) : 'Etappe ' + (i + 1)}</td><td>Fahrt</td><td>${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))} · ${fkm(s.dist)} · ${fdur(s.dur)}${vs.length ? '<br><span class="sm">unterwegs: ' + vs.map(v => esc(shortLabel(v.label)) + ' (≈ ' + fhours(v.hours) + ')').join(', ') + '</span>' : ''}</td><td>${esc(c.label)}</td></tr>`;
-    if (i < last || c.kind === 'camp')
-      rows += `<tr><td>${ds ? fdate(ds[i]) + (i < last ? '<br>– ' + fdate(addDays(ds[i], n)) : '') : ''}</td><td>${i < last ? `${n} ${n === 1 ? 'Nacht' : 'Nächte'}` : 'Ende'}</td><td>${sg.map(x => '★ ' + esc(shortLabel(x.label)) + (x.d != null ? ' · ' + fkm1(x.d) : '')).join('<br>') || (n > 1 ? 'freie Tage' : '–')}</td><td>${esc(c.label)}</td></tr>`;
-  });
-  return `<h2 class="pbreak">Reiseplan</h2><table class="dtab"><colgroup><col style="width:26mm"><col style="width:22mm"><col><col style="width:60mm"></colgroup>
-    <thead><tr><th>Datum</th><th>Art</th><th>Programm</th><th>Übernachtung</th></tr></thead><tbody>${rows}</tbody></table>`;
-}
-async function printTour() {
-  if (!state.stages.length) return;
-  setStatus('Druckansicht wird vorbereitet …', 'busy');
-  await ensureAddrs();
-  await ensureCountries(state.stages.map((_, i) => i));
-  const ds = stageDates(),
-    el = $('#print');
-  let rows = '';
-  state.stages.forEach((s, i) => {
-    const c = s.to,
-      camp = c.kind === 'camp',
-      web = camp && campWeb(c),
-      phone = camp && phoneOf(c),
-      r = camp && rzFor(c);
-    const okR = r && (r.status === 'ok' || r.status === 'partial');
-    const rz = okR
-      ? [
-          r.status === 'ok' ? esc(r.hours || 'siehe Website') : '',
-          r.checkin ? 'Check-in ' + esc(r.checkin.text) : '',
-          r.checkout ? 'Check-out ' + esc(r.checkout.text) : '',
-          r.url ? `<a class="sm" href="${esc(safeUrl(r.url))}">Quelle</a>` : ''
-        ]
-          .filter(Boolean)
-          .join('<br>')
-      : '<span class="sm">–</span>';
-    const extra = [
-      s.countries && s.countries.length ? s.countries.join(' → ') : '',
-      s.ex?.ferry > 200 ? 'Fähre' : '',
-      s.ex?.toll > 1000 ? 'Maut ~' + fkm(s.ex.toll) : ''
-    ]
-      .filter(Boolean)
-      .join(' · ');
-    rows += `<tr><td>${i + 1}</td><td>${ds ? fdate(ds[i]) : ''}</td>
-      <td>${esc(shortLabel(s.from.label))} → ${esc(shortLabel(c.label))}${
-        s.vias && s.vias.length
-          ? `<br><span class="sm">unterwegs: ${visitsOf(s)
-              .map(v => esc(shortLabel(v.label)))
-              .join(', ')}</span>`
-          : ''
-      }${c.near ? `<br><span class="sm">★ ${esc(shortLabel(c.near.label))} ${c.near.d != null ? fkm1(c.near.d) : ''}</span>` : ''}</td>
-      <td>${fkm(s.dist)}<br><span class="sm">${fdur(s.dur)}${extra ? '<br>' + esc(extra) : ''}</span></td>
-      <td><b>${esc(camp ? nameText(c) : c.label)}</b>${camp && priceOf(c) ? `<br><span class="sm">${esc(euroPlain(priceOf(c), c))}</span>` : ''}${(s.nights || 1) > 1 && i < state.stages.length - 1 ? `<br><span class="sm">${s.nights} Nächte</span>` : ''}</td>
-      <td>${camp ? esc(c.addr && c.addr !== 'unbekannt' ? c.addr : '–') : esc(c.label)}<br><span class="sm">${fcoord(c)}</span></td>
-      <td>${camp ? rz : ''}</td>
-      <td>${web ? `<a href="${esc(safeUrl(web))}">${esc(shortUrl(web))}</a><br>` : ''}${phone ? `<a href="tel:${esc(phone.replace(/[^+\d]/g, ''))}">${esc(phone)}</a><br>` : ''}<a href="${esc(gEntryUrl(c))}">Google-Eintrag</a></td></tr>`;
-  });
-  el.innerHTML = `<h1>${esc(tourTitle())}</h1><div class="sub">${esc(totalsText())}</div><div class="pmap"></div>
-    <table><colgroup><col style="width:9mm"><col style="width:18mm"><col style="width:34mm"><col style="width:27mm"><col style="width:42mm"><col style="width:50mm"><col style="width:36mm"><col></colgroup>
-    <thead><tr><th>Nr.</th><th>Datum</th><th>Von → Nach</th><th>Strecke</th><th>Campingplatz</th><th>Adresse</th><th>Rezeption</th><th>Website / Kontakt</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    ${printDays()}
-    <div class="foot">Kartendaten © OpenStreetMap-Mitwirkende · Routing openrouteservice.org · erstellt mit Reiseplaner am ${new Date().toLocaleDateString('de-DE')}. Angaben ohne Gewähr.</div>`;
-  // Übersichtskarte
-  if (printMap) {
-    printMap.remove();
-    printMap = null;
-  }
-  printMap = L.map(el.querySelector('.pmap'), { zoomControl: false, attributionControl: false, fadeAnimation: false, zoomAnimation: false, inertia: false });
-  const tl = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, crossOrigin: 'anonymous' }).addTo(printMap);
-  const pts = [];
-  state.stages.forEach((s, i) => {
-    L.polyline(s.line, { color: COL.brand, weight: 4 }).addTo(printMap);
-    pts.push(...s.line);
-    L.marker([s.to.lat, s.to.lon], { icon: pinIcon(i === state.stages.length - 1 ? 'Z' : String(i + 1), i === state.stages.length - 1 ? 'end' : '') }).addTo(
-      printMap
-    );
-  });
-  L.marker([state.start.lat, state.start.lon], { icon: pinIcon('S') }).addTo(printMap);
-  printMap.fitBounds(L.latLngBounds(pts), { padding: [20, 20] });
-  await new Promise(res => {
-    tl.once('load', res);
-    setTimeout(res, 6000);
-  });
-  setStatus('');
-  window.print();
-}
+/* Drucken / PDF und Word: siehe ausgabe.js */
 $('#printBtn').onclick = () => {
   $('#sumDlg').close();
   printTour();

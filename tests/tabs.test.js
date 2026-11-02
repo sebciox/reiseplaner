@@ -203,8 +203,9 @@ const srv = require('./lib/server')(ROOT, 8147);
     await page.press('#viaIn', 'Enter');
     await page.waitForFunction(n => state.via.length === n, n0 + 1);
   };
-  const XLSXPATH = path.join(ROOT, 'node_modules/xlsx/dist/xlsx.full.min.js');
-  await page.route('**/cdnjs.cloudflare.com/ajax/libs/xlsx/**', r => r.fulfill({ body: fs.readFileSync(XLSXPATH), contentType: 'text/javascript' }));
+  await page.route('**/cdn.jsdelivr.net/npm/docx@*/**', r =>
+    r.fulfill({ body: fs.readFileSync(path.join(ROOT, 'node_modules/docx/dist/index.iife.js')), contentType: 'text/javascript' })
+  );
   await page.route('**/places.googleapis.com/**', r => {
     const u = r.request().url();
     if (u.includes('searchNearby')) {
@@ -296,7 +297,7 @@ const srv = require('./lib/server')(ROOT, 8147);
         s = $('#scroll').getBoundingClientRect();
       return $('#scroll').scrollHeight > $('#scroll').clientHeight + 50 && Math.abs(f.bottom - s.bottom) < 2;
     }),
-    'Aktionsleiste unten fest (Drucken/Excel/Speichern sichtbar ohne Scrollen)'
+    'Aktionsleiste unten fest (Drucken/Word/Speichern sichtbar ohne Scrollen)'
   );
   ok(!(await vis('#tripView [data-act="gpx"]')), 'GPX/Tour-Datei hinter „⋯“');
   await page.click('#tripView [data-more]');
@@ -356,24 +357,17 @@ const srv = require('./lib/server')(ROOT, 8147);
     'Kopf, Reiter und Reisezeile bleiben beim Scrollen fest'
   );
   await page.screenshot({ path: path.join(OUT, 'tabs-scrolled.png') });
-  // Excel
-  const dlP = page.waitForEvent('download', { timeout: 15000 });
-  await page.click('[data-act="xlsx"]');
-  await page.waitForTimeout(1500);
+  // Word (.docx): Querformat, dieselben 7 Spalten wie online
+  const dlP = page.waitForEvent('download', { timeout: 30000 });
+  await page.click('[data-act="docx"]');
   const dl = await dlP;
-  const fp = path.join(OUT, 'reiseplan.xlsx');
+  const fp = path.join(OUT, 'reiseplan.docx');
   await dl.saveAs(fp);
-  const X = require('xlsx');
-  const wb = X.readFile(fp, { cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = X.utils.sheet_to_json(ws, { header: 1 });
-  const typ = rows.slice(1).map(r => r[1]);
+  const W = require('./lib/docx')(fp);
   ok(
-    rows[0][1] === 'Typ' && typ.includes('Campingplatz') && typ.includes('Sehenswürdigkeit'),
-    'Excel: Spalte Typ mit Campingplatz/Sehenswürdigkeit (' + rows.length + ' Zeilen): ' + typ.join(', ')
+    /w:orient="landscape"/.test(W.xml) && (W.xml.match(/<w:gridCol /g) || []).length === 7 && /Paris/.test(W.text) && /Sjötorpets Camping/.test(W.text),
+    'Word: Querformat, 7 Spalten, Plätze und Sehenswürdigkeiten'
   );
-  const webCell = Object.keys(ws).find(k => ws[k] && ws[k].l);
-  ok(!!webCell && rows[1][2] instanceof Date, 'Excel: Links + echte Datumswerte (' + webCell + ')');
   // Speichern
   page.removeAllListeners('dialog');
   page.on('dialog', d => d.accept(d.type() === 'prompt' ? 'Paris-Tour' : undefined));

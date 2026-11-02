@@ -192,8 +192,9 @@ const srv = require('./lib/server')(ROOT, 8151);
     return r.continue();
   });
 
-  const XLSXPATH = path.join(ROOT, 'node_modules/xlsx/dist/xlsx.full.min.js');
-  await page.route('**/cdnjs.cloudflare.com/ajax/libs/xlsx/**', r => r.fulfill({ body: fs.readFileSync(XLSXPATH), contentType: 'text/javascript' }));
+  await page.route('**/cdn.jsdelivr.net/npm/docx@*/**', r =>
+    r.fulfill({ body: fs.readFileSync(path.join(ROOT, 'node_modules/docx/dist/index.iife.js')), contentType: 'text/javascript' })
+  );
   T.sightEls = [
     {
       type: 'node',
@@ -385,22 +386,20 @@ const srv = require('./lib/server')(ROOT, 8151);
   await page.click('[data-act="save"]');
   await page.waitForTimeout(300);
   ok(await page.evaluate(() => loadTours()[0].via[0].info.web === 'https://paris.example/'), 'Tour-Datei enthält via.info.web');
-  // Excel
-  const dlP = page.waitForEvent('download', { timeout: 15000 });
-  await page.click('[data-act="xlsx"]');
+  // Word: Sehenswürdigkeit mit Adresse, Öffnungszeiten (Google mit Stand), Website, Preisen
+  const dlP = page.waitForEvent('download', { timeout: 30000 });
+  await page.click('[data-act="docx"]');
   const dl = await dlP;
-  const fp = path.join(OUT, 'sights.xlsx');
+  const fp = path.join(OUT, 'sights.docx');
   await dl.saveAs(fp);
-  const X = require('xlsx');
-  const rows = X.utils.sheet_to_json(X.readFile(fp).Sheets['Reiseplan'], { header: 1 });
-  const sr = rows.find(r => r[1] === 'Sehenswürdigkeit');
+  const W = require('./lib/docx')(fp);
   ok(
-    sr &&
-      /Av\. Test/.test(sr[6]) &&
-      /Geöffnet: Mo-Su 09:00-23:00 \/ 09:00–23:00/.test(sr[11]) &&
-      sr[14] === 'https://paris.example/' &&
-      /Preise: Erwachsene ab 29 € · Kinder 7 €/.test(sr[17]),
-    'Excel: Sehenswürdigkeit mit Adresse, Öffnungszeiten, Website, Preis'
+    /★ Paris/.test(W.text) &&
+      /Champ de Mars, 75007 Paris/.test(W.text) &&
+      /lt\. Google, Stand \d/.test(W.text) &&
+      /paris\.example/.test(W.text) &&
+      /Erw\. ab 29 € · Kind 7 €/.test(W.text),
+    'Word: Sehenswürdigkeit mit Adresse, Öffnungszeiten (lt. Google, Stand …), Website, Preisen'
   );
   // Info-Fenster gewählter Platz: Entfernung zur Sehenswürdigkeit, keine Wohnwagen-/Ausstattungs-/Navigationszeile
   await page.evaluate(() => {
