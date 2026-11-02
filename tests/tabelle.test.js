@@ -388,6 +388,16 @@ const srv = require('./lib/server')(ROOT, 8152);
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(OUT, 'tabelle-laptop.png') });
+  // eingeklappt: Preis und Status direkt bearbeitbar, offener Status hinterlegt
+  await page.click('[data-tlall="0"]');
+  ok(
+    !!(await page.$('#tripView tbody[data-grpb="1"]:not(.open) tr.camp [data-ed="c|1|ppn"]')) &&
+      !!(await page.$('#tripView tbody[data-grpb="1"]:not(.open) select[data-sel="c|1|status"].isopen')),
+    'eingeklappte Zeile: Preis/Nacht bearbeitbar, Status-Auswahl, offen = hinterlegt'
+  );
+  await edit('c|1|ppn', '250 SEK');
+  ok(await page.evaluate(() => state.stages[1].my?.ppn === '250 SEK'), 'Preis in der eingeklappten Zeile eingetragen');
+  ok(!(await page.$('#tripView select[data-sel="c|0|status"].isopen')), 'bezahlter Platz: Status nicht hinterlegt');
   // ---------- Schritt 2: Fähre, eigene Zeilen, Kosten, offene Punkte, eigene Unterkunft ----------
   await page.evaluate(() => {
     state.stages[1].ex = { ...(state.stages[1].ex || {}), ferry: 150000 };
@@ -430,7 +440,7 @@ const srv = require('./lib/server')(ROOT, 8152);
   await page.check(`#tripView input[type=checkbox][data-sel="x|${tid}|done"]`);
   const chip2 = await page.textContent('#tripBar [data-opento]');
   ok(
-    /^\d+ offen · ≈ [\d.]+ €$/.test(chip1.trim()) && parseInt(chip2) === parseInt(chip1) - 1,
+    /^\d+ offen$/.test(chip1.trim()) && parseInt(chip2) === parseInt(chip1) - 1,
     `Chip in der Reisezeile: „${chip1.trim()}“ → Aufgabe erledigt → „${chip2.trim()}“`
   );
   await page.waitForTimeout(1300);

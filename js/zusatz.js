@@ -123,15 +123,18 @@ function tripMoney() {
       const mo = campMoney(s),
         nm = campMy(s).name || nameText(s.to) || s.to.label;
       add('camp', mo.total, mo.paid, mo.open);
-      if (mo.st === 'open') items.push({ kind: 'book', text: `Noch nicht gebucht: ${nm}`, eur: mo.total, approx: true, date: when(i), grp: i });
-      else if (mo.open) items.push({ kind: 'pay', text: `${stLabel(ST_CAMP, mo.st)}: ${nm}`, eur: mo.open, approx: mo.approxPaid, date: when(i), grp: i });
+      if (mo.st === 'open') items.push({ kind: 'book', text: `Noch nicht gebucht: ${nm}`, eur: mo.total, approx: true, date: when(i), grp: i, row: 'c' + i });
+      else if (mo.open)
+        items.push({ kind: 'pay', text: `${stLabel(ST_CAMP, mo.st)}: ${nm}`, eur: mo.open, approx: mo.approxPaid, date: when(i), grp: i, row: 'c' + i });
     }
     if (s.ex && s.ex.ferry > 500) {
       const mo = ferryMoney(s.ferry, s.to),
         nm = s.ferry?.name || `Fähre (Fahrt nach ${shortLabel(s.to.label)})`;
       add('ferry', mo.total, mo.paid, mo.open);
-      if (mo.st === 'open') items.push({ kind: 'book', text: `Noch nicht gebucht: ${nm}`, eur: mo.total, approx: mo.approx, date: when(i), grp: i - 1 });
-      else if (mo.open) items.push({ kind: 'pay', text: `${stLabel(ST_CAMP, mo.st)}: ${nm}`, eur: mo.open, approx: mo.approx, date: when(i), grp: i - 1 });
+      if (mo.st === 'open')
+        items.push({ kind: 'book', text: `Noch nicht gebucht: ${nm}`, eur: mo.total, approx: mo.approx, date: when(i), grp: i - 1, row: 'f' + i });
+      else if (mo.open)
+        items.push({ kind: 'pay', text: `${stLabel(ST_CAMP, mo.st)}: ${nm}`, eur: mo.open, approx: mo.approx, date: when(i), grp: i - 1, row: 'f' + i });
     }
   });
   allSights().forEach(({ x, i }) => {
@@ -140,8 +143,10 @@ function tripMoney() {
     add('sight', mo.total, mo.paid, mo.open);
     const nm = sightMy(x).name || shortLabel(x.label),
       day = sightMy(x).day ? fdate(new Date(sightMy(x).day + 'T12:00:00')) : '';
-    if (mo.st === 'open' && mo.total) items.push({ kind: 'ticket', text: `Tickets fehlen: ${nm}`, eur: mo.total, approx: true, date: day, grp: i });
-    else if (mo.st === 'onsite' && mo.total) items.push({ kind: 'pay', text: `Vor Ort zahlen: ${nm}`, eur: mo.total, approx: true, date: day, grp: i });
+    const row = 's' + sightKey(sightSrc(x));
+    if (mo.st === 'open' && mo.total) items.push({ kind: 'ticket', text: `Tickets fehlen: ${nm}`, eur: mo.total, approx: true, date: day, grp: i, row: row });
+    else if (mo.st === 'onsite' && mo.total)
+      items.push({ kind: 'pay', text: `Vor Ort zahlen: ${nm}`, eur: mo.total, approx: true, date: day, grp: i, row: row });
   });
   (state.extras || []).forEach(e => {
     const ref = refPoint(groupOfExtra(e)),
@@ -150,19 +155,34 @@ function tripMoney() {
       const mo = ferryMoney(e, ref);
       add('ferry', mo.total, mo.paid, mo.open);
       if (mo.st === 'open')
-        items.push({ kind: 'book', text: `Noch nicht gebucht: ${e.name || 'Fähre'}`, eur: mo.total, approx: mo.approx, date: d, grp: groupOfExtra(e) });
+        items.push({
+          kind: 'book',
+          text: `Noch nicht gebucht: ${e.name || 'Fähre'}`,
+          eur: mo.total,
+          approx: mo.approx,
+          date: d,
+          grp: groupOfExtra(e),
+          row: 'x' + e.id
+        });
       else if (mo.open)
-        items.push({ kind: 'pay', text: `${stLabel(ST_CAMP, mo.st)}: ${e.name || 'Fähre'}`, eur: mo.open, approx: mo.approx, date: d, grp: groupOfExtra(e) });
+        items.push({
+          kind: 'pay',
+          text: `${stLabel(ST_CAMP, mo.st)}: ${e.name || 'Fähre'}`,
+          eur: mo.open,
+          approx: mo.approx,
+          date: d,
+          grp: groupOfExtra(e),
+          row: 'x' + e.id
+        });
     } else if (e.kind === 'cost') {
       const mo = ferryMoney({ price: e.amount, status: e.status }, ref);
       add('other', mo.total, mo.paid, mo.open);
       if (mo.st !== 'paid' && (mo.total || !e.amount))
-        items.push({ kind: 'pay', text: `Offen: ${e.name || 'Kosten'}`, eur: mo.total, approx: mo.approx, date: d, grp: groupOfExtra(e) });
+        items.push({ kind: 'pay', text: `Offen: ${e.name || 'Kosten'}`, eur: mo.total, approx: mo.approx, date: d, grp: groupOfExtra(e), row: 'x' + e.id });
     }
   });
   const tasks = (state.extras || []).filter(e => e.kind === 'task');
-  const openEur = items.reduce((a, x) => a + (x.eur || 0), 0);
-  return { sum, items, tasks, openEur, count: items.length + tasks.filter(t => !t.done).length };
+  return { sum, items, tasks, count: items.length + tasks.filter(t => !t.done).length };
 }
 let costsOpen = { sum: true, open: true };
 function costsHtml() {
@@ -195,16 +215,16 @@ function costsHtml() {
     .join('');
   return `<section class="costs" id="openList">
     <details data-costs="sum"${costsOpen.sum ? ' open' : ''}><summary><b>Kosten</b> <span class="muted">· gesamt ${r(tot.total)} · offen ${r(tot.open)}</span></summary>${sumH}</details>
-    <details data-costs="open"${costsOpen.open ? ' open' : ''}><summary><b>Offene Punkte (${t.count})</b>${t.openEur ? ` <span class="muted">· ${r(t.openEur)}</span>` : ''}</summary>
+    <details data-costs="open"${costsOpen.open ? ' open' : ''}><summary><b>Offene Punkte (${t.count})</b> <span class="muted">· Beträge sind Richtwerte</span></summary>
       <ul class="oplist">${itemsH}${tasksH}</ul>
       <button class="btn small" type="button" data-xadd="task">+ Aufgabe</button></details></section>`;
 }
-// Chip in der Reisezeile: „3 offen · 420 €“
+// Chip in der Reisezeile: nur die Anzahl, z. B. „3 offen“ (Sebastian: Beträge sind nur Richtwerte – nicht aufaddieren)
 function openChipHtml() {
   if (!state.stages.length) return '';
   const t = tripMoney();
   if (!t.count) return '<button type="button" class="savechip" data-opento title="Offene Punkte">✓ nichts offen</button>';
-  return `<button type="button" class="savechip openchip" data-opento title="Offene Punkte anzeigen">${t.count} offen${t.openEur ? ` · ≈ ${Math.round(t.openEur).toLocaleString('de-DE')} €` : ''}</button>`;
+  return `<button type="button" class="savechip openchip" data-opento title="Offene Punkte anzeigen">${t.count} offen</button>`;
 }
 function gotoOpenList() {
   costsOpen.open = true;

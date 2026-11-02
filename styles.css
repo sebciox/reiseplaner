@@ -2506,3 +2506,11 @@ select.st-open {
     border: 0;
   }
 }
+/* offener Punkt in der Zeile: Status hinterlegt wie der Chip „n offen“ */
+select.stsel.isopen {
+  background: var(--warn-soft);
+  border-color: transparent;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-weight: 600;
+}

@@ -262,9 +262,10 @@ function ed(scope, id, f, html, opt = {}) {
     return `${html}<button class="edb" type="button" data-ed="${k}" title="${esc(F.l || '')} bearbeiten" aria-label="${esc(F.l || '')} bearbeiten">✎</button>${mark}`;
   return `<span class="ed${own ? ' own' : ''}" data-ed="${k}" role="button" tabindex="0" title="antippen zum Bearbeiten">${html || `<span class="ph">${esc(opt.ph || F.ph || '+ ' + (F.l || ''))}</span>`}</span>${mark}`;
 }
+// Zeilen mit offenem Punkt (noch nicht gebucht, offener Betrag, Tickets fehlen …): Status wie der Chip hinterlegt
+let openRows = new Set();
 const selHtml = (scope, id, f, list, cur, label) =>
-  `<select class="stsel st-${esc(cur)}" data-sel="${edKey(scope, id, f)}" aria-label="${esc(label)}">${list.map(([k, l]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-const stDot = (st, list) => `<span class="stdot st-${st}">●</span> ${esc(stLabel(list, st))}`;
+  `<select class="stsel st-${esc(cur)}${openRows.has(scope + id) ? ' isopen' : ''}" data-sel="${edKey(scope, id, f)}" aria-label="${esc(label)}">${list.map(([k, l]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
 const td = (l, h, cls) => `<td data-l="${esc(l)}"${cls ? ` class="${cls}"` : ''}>${h}</td>`;
 const line = h => (h ? `<div class="x">${h}</div>` : '');
 
@@ -334,7 +335,9 @@ function campRowHtml(i, open, ds, cur) {
     const mo = campMoney(s),
       p = mo.p;
     const ppn = p ? (p.own ? moneyHtml(p.text, c) : euroText(p, c) || esc(p.text)) : '';
-    if (!open) pr = `${ppn ? ppn + ' <span class="muted">/ Nacht</span>' : '<span class="muted">Preis –</span>'}<div>${stDot(mo.st, ST_CAMP)}</div>`;
+    // eingeklappt: Preis/Nacht und Status ebenfalls direkt bearbeitbar
+    if (!open)
+      pr = `<div>${ed('c', i, 'ppn', ppn ? ppn + ' <span class="muted">/ Nacht</span>' : '', { own: own('ppn'), ph: 'Preis –' })}</div><div>${selHtml('c', i, 'status', ST_CAMP, mo.st, 'Bezahlstatus')}</div>`;
     else {
       const srcN = { web: 'Website', osm: 'OSM', google: 'Google' }[p?.src];
       pr = `<div>${ed('c', i, 'ppn', ppn ? ppn + ' <span class="muted">/ Nacht</span>' : '', { own: own('ppn'), ph: 'Preis –' })}${!p?.own && p ? `<span class="muted">${powerHtml(p, c)} · ${p.url ? `<a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener">${srcN}</a>` : srcN}</span>` : ''}</div>
@@ -453,6 +456,7 @@ function planTableHtml() {
     cur = currentStage(),
     st = state.stages,
     last = st.length - 1;
+  openRows = new Set(tripMoney().items.map(x => x.row));
   let h = `<table class="ptab"><colgroup><col class="c-dat"><col class="c-nm"><col class="c-ad"><col class="c-zt"><col class="c-pr"><col class="c-nt"><col class="c-wt"></colgroup>
     <thead><tr>${PT_COLS.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
   const o0 = tlOpen.has(-3);
