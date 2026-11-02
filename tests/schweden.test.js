@@ -62,7 +62,7 @@ const srv = require('./lib/server')(ROOT, 8153);
     if (u.includes('/geocode/reverse') || u.includes('photon.komoot.io/reverse')) return r.fulfill({ json: { features: [] } });
     if (u.includes('/geocode/')) {
       const p = findPlace(new URL(u).searchParams.get('text'));
-      return r.fulfill({ json: { features: p ? [{ geometry: { coordinates: [p.lon, p.lat] }, properties: { label: p.name + ', Schweden' } }] : [] } });
+      return r.fulfill({ json: { features: p ? [{ geometry: { coordinates: [p.lon, p.lat] }, properties: { label: p.name + (p === F.start ? ', Deutschland' : ', Schweden') } }] : [] } });
     }
     if (u.includes('photon.komoot.io/api')) return r.fulfill({ json: { features: [] } });
     if (u.includes('/v2/directions/')) {
@@ -411,6 +411,10 @@ const srv = require('./lib/server')(ROOT, 8153);
   ].filter(w => !W.text.includes(w));
   ok(!wBad.length, 'Word: alle Angaben der PDF enthalten' + (wBad.length ? ' – fehlt: ' + wBad.join(', ') : ''));
   ok(/google\.com\/maps\/dir/.test(W.rels) && W.files.some(f => /word\/media\/.+\.png$/.test(f)), 'Word: Navigation als Link, Übersichtskarte als Bild');
+  // fertige Tour als Datei (z. B. als Beispiel-Tour für den Online-Speicher, siehe CLAUDE.md)
+  const tourJson = await page.evaluate(() => JSON.stringify(tourFile(loadTours().find(t => t.name === 'Schweden Rundreise 2026')), null, 1));
+  fs.writeFileSync(path.join(OUT, 'schweden.etappen.json'), tourJson);
+  ok(JSON.parse(tourJson).tour.stages.length === 12, 'Tour-Datei tests/out/schweden.etappen.json geschrieben');
   console.log('INFO  Duschcode/WLAN aus der PDF: bewusst nicht vorgesehen (Sebastian: nicht speichern)');
 
   console.log(

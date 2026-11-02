@@ -155,7 +155,7 @@ plant die Reise wie von Hand (7 ★-Ziele mit Nächten und Sehenswürdigkeiten, 
 Bauernhof/Ivendorf per „Platz fehlt?“ mit Koordinaten), trägt jede Angabe der PDF in die Tabelle ein (Namen, Adressen, Telefon,
 Zeiten, Preise in SEK/€, Status, Buchungsnr., Stellplatz, Notizen, Besuchstage, Fähren) und prüft nach dem Neuladen. `ok()` = muss
 gehen, `can()` = Fähigkeit gegenüber der PDF – fehlt sie, meldet der Test „LÜCKE“ (kein Fehler) und listet am Ende alle Lücken;
-neue Funktion, die eine Lücke schließt → im Test von `can()` auf `ok()` umstellen. Prüft auch Drucken/PDF und Word (Inhalt, Querformat, 7 Spalten, Links, Karte). Ergebnisse: `tests/out/schweden-tabelle.png`, `schweden.pdf`, `schweden.docx`. Stand Nov. 2026: 22 Prüfungen erfüllt, keine Lücke.
+neue Funktion, die eine Lücke schließt → im Test von `can()` auf `ok()` umstellen. Prüft auch Drucken/PDF und Word (Inhalt, Querformat, 7 Spalten, Links, Karte). Ergebnisse: `tests/out/schweden-tabelle.png`, `schweden.pdf`, `schweden.docx`, `schweden.etappen.json` (fertige Tour). **Beispiel-Tour im Online-Speicher:** daraus „Schweden 2026 – Beispiel (Nachbau PDF)“ in `sebciox/touren` (`touren/1793627066464.json`) zum Ausprobieren – Strecken sind gerade Linien und Plätze ungefähre Koordinaten (gemockte Dienste); neu erzeugen: Test laufen lassen, Datei mit neuer `id`/`name`/`savedAt` nach `touren/` kopieren. Stand Nov. 2026: 22 Prüfungen erfüllt, keine Lücke.
 
 ## Offene Ideen
 
