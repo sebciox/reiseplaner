@@ -105,9 +105,11 @@ function hav(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * RAD) * Math.cos(b[0] * RAD) * Math.sin(dLon / 2) ** 2;
   return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
+// Strecke entlang der Linie; ein Punkt mit drittem Wert 1 ([lat, lon, 1]) = Ankunft einer Fähre: das Stück davor
+// ist Überfahrt und zählt nicht als Fahrstrecke (Etappenlänge, Korridor)
 function cumul(line) {
   const c = [0];
-  for (let i = 1; i < line.length; i++) c.push(c[i - 1] + hav(line[i - 1], line[i]));
+  for (let i = 1; i < line.length; i++) c.push(c[i - 1] + (line[i][2] ? 0 : hav(line[i - 1], line[i])));
   return c;
 }
 function pointAt(line, cum, d) {
@@ -139,9 +141,13 @@ function slice(line, cum, d0, d1) {
   return out;
 }
 function thin(line, minM = 60) {
-  if (line.length < 3) return line.map(p => [+p[0].toFixed(5), +p[1].toFixed(5)]);
+  const rnd = p => (p[2] ? [+p[0].toFixed(5), +p[1].toFixed(5), 1] : [+p[0].toFixed(5), +p[1].toFixed(5)]);
+  if (line.length < 3) return line.map(rnd);
   const out = [line[0]];
-  for (let i = 1; i < line.length - 1; i++) if (hav(out[out.length - 1], line[i]) >= minM) out.push(line[i]);
+  for (let i = 1; i < line.length - 1; i++) {
+    // Fähre: Punkte vor und an der Überfahrt immer behalten
+    if (line[i][2] || line[i + 1][2] || hav(out[out.length - 1], line[i]) >= minM) out.push(line[i]);
+  }
   out.push(line[line.length - 1]);
-  return out.map(p => [+p[0].toFixed(5), +p[1].toFixed(5)]);
+  return out.map(rnd);
 }

@@ -277,28 +277,40 @@ const srv = require('./lib/server')(ROOT, 8144);
   await page.waitForSelector('#segGo', { timeout: 15000 });
   await waitIdle();
   const kb = await page.$$eval('.keepinfo', e => e.length);
-  ok(kb === 2, 'B: 2 Abschnitte (Paris → Lyon, Lyon → Ziel) werden übernommen');
+  ok(kb === 3, 'B: nur ein Besuch unterwegs dazu → alle 3 Abschnitte werden übernommen (Plätze bleiben)');
+  await setAllOne();
+  await page.click('#segGo');
+  await page.waitForFunction(() => !state.busy && state.done, null, { timeout: 30000 });
+  await waitIdle();
+  const s3 = await page.evaluate(() => ({
+    st: state.stages.map(s => ({ id: s.to.id, label: s.to.label, vias: s.vias || [], seg: s.seg })),
+    done: state.done
+  }));
+  ok(
+    s3.done && s3.st.length === 3 && s3.st.every((x, k) => x.id === s2[k].id),
+    'B: alle Plätze automatisch übernommen: ' + s3.st.map(s => s.label).join(' → ')
+  );
+  ok(s3.st[0].vias.length === 1 && !s3.st[1].vias.length && s3.st.map(s => s.seg).join() === '0,1,2', 'B: Lille als Besuch in Etappe 1, Abschnitte 0,1,2');
+  ok(dirBodies.length - dirN0 <= 4, `B: nur die Etappe mit dem neuen Besuch neu geroutet (${dirBodies.length - dirN0} Routen inkl. Abschnitte)`);
+  console.log('Routen seit B:', dirBodies.length - dirN0);
+  // C) Paris wird „Pause / freie Tage“ (Art geändert) → Abschnitt Paris wird neu geplant, alter Platz als „bisher gewählt“
+  await page.evaluate(() => {
+    state.via.find(x => /Paris/.test(x.label)).kind = 'rest';
+    renderVia();
+  });
+  await page.click('#planForm button[type=submit]');
+  await page.waitForSelector('#segGo', { timeout: 15000 });
+  await waitIdle();
+  ok((await page.$$eval('.keepinfo', e => e.length)) === 2, 'C: Art geändert → dieser Abschnitt wird neu geplant, die anderen 2 übernommen');
   await setAllOne();
   await page.click('#segGo');
   await page.waitForFunction(() => !state.busy && state.pending && state.pending.mode === 'anchor', null, { timeout: 30000 });
   const badge = await page.$$eval('#result .badge.prev', e => e.map(x => x.closest('li').querySelector('.name').textContent));
-  ok(badge.length === 1 && badge[0].includes(s1[0].label), 'B: alter Platz bei Paris als „bisher gewählt“: ' + badge.join(' | '));
-  await page.screenshot({ path: path.join(OUT, 'keep-badge.png') });
-  const prevId = s1[0].id;
-  await page.click(`#result [data-pick="${prevId}"]`);
-  await page.waitForSelector('.endsel', { timeout: 30000 });
-  await waitIdle();
-  const s3 = await page.evaluate(() => ({
-    st: state.stages.map(s => ({ id: s.to.id, label: s.to.label, vias: s.vias, seg: s.seg })),
-    done: state.done,
-    endN: state.endCands.length
-  }));
   ok(
-    s3.done && s3.st.length === 3 && s3.st[1].id === s2[1].id && s3.st[2].id === s2[2].id,
-    'B: Lyon-Platz und Zielplatz automatisch übernommen: ' + s3.st.map(s => s.label).join(' → ')
+    badge.some(b => b.includes(s1[0].label)),
+    'C: alter Platz bei Paris als „bisher gewählt“: ' + badge.join(' | ')
   );
-  ok(s3.st[0].vias.length === 1 && s3.st.map(s => s.seg).join() === '0,1,2', 'B: Lille als Besuch in Etappe 1, Abschnitte 0,1,2');
-  console.log('Routen seit B:', dirBodies.length - dirN0);
+  await page.screenshot({ path: path.join(OUT, 'keep-badge.png') });
   await page.screenshot({ path: path.join(OUT, 'keep-done.png') });
   await browser.close();
   srv.close();

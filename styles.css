@@ -2599,3 +2599,29 @@ select.stsel.isopen {
 #print .ptab td * {
   font-size: 8pt;
 }
+/* Fähre als Zwischenziel: Ankunftshafen */
+.vialist .vferry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+.vialist .vferry input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+}
+.vialist .vferry .ok {
+  color: var(--ok);
+}
+.vialist .vferry .warnt {
+  color: var(--danger);
+  font-size: 12px;
+  white-space: nowrap;
+}

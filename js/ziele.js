@@ -7,16 +7,19 @@ function renderVia() {
   const ul = $('#viaList');
   ul.innerHTML = state.via
     .map(
-      (v, i) => `<li class="${v.kind === 'visit' ? 'visit' : ''}" data-vi="${i}">
+      (v, i) => `<li class="${v.kind === 'visit' ? 'visit' : v.kind === 'ferry' ? 'visit ferry' : ''}" data-vi="${i}">
     <button type="button" class="vgrip" data-vgrip="${i}" aria-label="${esc(v.label)} verschieben (ziehen oder Pfeiltasten)" title="ziehen zum Verschieben">
       <svg viewBox="0 0 12 20" width="12" height="20" aria-hidden="true" fill="currentColor"><circle cx="3" cy="4" r="1.6"/><circle cx="9" cy="4" r="1.6"/><circle cx="3" cy="10" r="1.6"/><circle cx="9" cy="10" r="1.6"/><circle cx="3" cy="16" r="1.6"/><circle cx="9" cy="16" r="1.6"/></svg></button>
     <span class="vn">${i + 1}</span>
     <div class="vt"><b>${esc(cleanLabel(v.label))}</b><div class="vopts">
-      <select data-vkind="${i}" aria-label="Art des Zwischenziels"><option value="stay"${v.kind === 'stay' || !v.kind ? ' selected' : ''}>★ Übernachten in der Nähe</option><option value="rest"${v.kind === 'rest' ? ' selected' : ''}>Pause / freie Tage (nur Campingplatz)</option><option value="visit"${v.kind === 'visit' ? ' selected' : ''}>Besuch unterwegs</option></select>
+      <select data-vkind="${i}" aria-label="Art des Zwischenziels"><option value="stay"${v.kind === 'stay' || !v.kind ? ' selected' : ''}>★ Übernachten in der Nähe</option><option value="rest"${v.kind === 'rest' ? ' selected' : ''}>Pause / freie Tage (nur Campingplatz)</option><option value="visit"${v.kind === 'visit' ? ' selected' : ''}>Besuch unterwegs</option><option value="ferry"${v.kind === 'ferry' ? ' selected' : ''}>⛴ Fähre ab hier</option></select>
       ${
-        v.kind !== 'visit'
-          ? `<label><input type="number" min="1" max="30" data-vnights="${i}" value="${Math.max(1, +v.nights || 1)}"> Nächte</label>`
-          : `<label><input type="number" min="0.5" max="12" step="0.5" data-vhours="${i}" value="${+v.hours || 2}"> h Besuch</label>`
+        v.kind === 'ferry'
+          ? `<label><input type="number" min="0.5" max="36" step="0.5" data-vhours="${i}" value="${+v.hours || 4}"> h Überfahrt</label></div>
+        <div class="vferry">nach <input class="vfto" data-vfto="${i}" placeholder="Ankunftshafen, z. B. Malmö Hamn – Enter" enterkeyhint="enter" aria-label="Ankunftshafen" value="${v.to ? esc(cleanLabel(v.to.label)) : ''}">${v.to ? ' <span class="ok">✓</span>' : ' <span class="warnt">Ankunftshafen fehlt</span>'}`
+          : v.kind !== 'visit'
+            ? `<label><input type="number" min="1" max="30" data-vnights="${i}" value="${Math.max(1, +v.nights || 1)}"> Nächte</label>`
+            : `<label><input type="number" min="0.5" max="12" step="0.5" data-vhours="${i}" value="${+v.hours || 2}"> h Besuch</label>`
       }</div>
       ${
         v.kind === 'stay' || !v.kind
@@ -42,8 +45,15 @@ function renderVia() {
   ul.querySelectorAll('[data-vkind]').forEach(
     b =>
       (b.onchange = () => {
-        state.via[+b.dataset.vkind].kind = b.value;
+        const v = state.via[+b.dataset.vkind];
+        v.kind = b.value;
+        // Fähre: bleibt beim „Reihenfolge optimieren“ an ihrem Platz (📌), Dauer der Überfahrt statt Besuchsdauer
+        if (v.kind === 'ferry') {
+          v.pin = true;
+          if (!v.hours || v.hours === 2) v.hours = 4;
+        }
         ch();
+        if (v.kind === 'ferry' && !v.to) setTimeout(() => $(`[data-vfto="${state.via.indexOf(v)}"]`)?.focus(), 0);
       })
   );
   ul.querySelectorAll('[data-vnights]').forEach(
@@ -62,7 +72,8 @@ function renderVia() {
   ul.querySelectorAll('[data-vhours]').forEach(
     b =>
       (b.onchange = () => {
-        state.via[+b.dataset.vhours].hours = Math.max(0.5, Math.min(12, +b.value || 2));
+        const v = state.via[+b.dataset.vhours];
+        v.hours = Math.max(0.5, Math.min(v.kind === 'ferry' ? 36 : 12, +b.value || 2));
       })
   );
   ul.querySelectorAll('[data-vsdel]').forEach(
@@ -96,6 +107,31 @@ function renderVia() {
         }
       })
   );
+  // Fähre: Ankunftshafen suchen (Enter oder Feld verlassen)
+  ul.querySelectorAll('[data-vfto]').forEach(inp => {
+    const go = async () => {
+      const t = inp.value.trim(),
+        v = state.via[+inp.dataset.vfto];
+      if (!t || !v || (v.to && cleanLabel(v.to.label) === t)) return;
+      try {
+        const r = await placeSearch(t, false);
+        if (!r.length) throw new Error('Hafen nicht gefunden: ' + t);
+        const g = r[0];
+        if (!g.full) flash(`„${t}“ nicht genau gefunden – „${shortLabel(g.label)}“ übernommen.`);
+        v.to = { lat: g.lat, lon: g.lon, label: g.label };
+        ch();
+        fitGoals();
+      } catch (err) {
+        setStatus(err.message, 'error');
+      }
+    };
+    inp.onkeydown = e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      go();
+    };
+    inp.onchange = go;
+  });
   ul.querySelectorAll('[data-vgrip]').forEach(g => {
     // Tastatur: Pfeil hoch/runter verschiebt (für alle ohne Maus/Finger)
     g.onkeydown = e => {
@@ -189,7 +225,7 @@ function startViaDrag(e, grip) {
 // Karte folgt der Eingabe: solange noch keine Strecke berechnet ist (oder Reiter 1 offen), alle eingegebenen Orte zeigen
 function fitGoals() {
   if ((state.overview || state.stages.length) && uiTab !== 'goals') return;
-  const pts = [state.start, ...state.via.flatMap(v => [v, ...(v.sights || [])]), state.round ? null : state.end]
+  const pts = [state.start, ...state.via.flatMap(v => [v, v.kind === 'ferry' ? v.to : null, ...(v.sights || [])]), state.round ? null : state.end]
     .filter(p => p && p.lat != null)
     .map(p => [p.lat, p.lon]);
   if (!pts.length) return;
@@ -456,7 +492,13 @@ $('#planForm').addEventListener('submit', e => {
     if (ae.value.trim()) addViaFromInput();
     return;
   }
-  if (ae && ae.classList.contains('vsin')) return;
+  if (ae && (ae.classList.contains('vsin') || ae.classList.contains('vfto'))) return;
+  const nf = state.via.find(v => v.kind === 'ferry' && !v.to);
+  if (nf) {
+    setStatus(`Fähre ab „${shortLabel(nf.label)}“: bitte den Ankunftshafen eintragen.`, 'error');
+    $(`[data-vfto="${state.via.indexOf(nf)}"]`)?.focus();
+    return;
+  }
   if (
     !settings.key &&
     !useFallback &&

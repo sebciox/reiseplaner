@@ -206,7 +206,8 @@ function sightHoursFound(s) {
   return null;
 }
 function foundVal(scope, id, f) {
-  if (scope === 'f' || scope === 'x') return '';
+  if (scope === 'f') return f === 'name' || f === 'dur' ? ferryDefault(+id, f) : '';
+  if (scope === 'x') return '';
   if (scope === 'c') {
     const s = state.stages[+id],
       c = s.to;
@@ -325,7 +326,7 @@ function sgRowHtml(i, open, ns, nv) {
   return `<tr class="sgrow"><td colspan="7"><button class="sgtog" type="button" data-grp="${i}" aria-expanded="${open}"><span class="tri" aria-hidden="true">${open ? '▼' : '▶'}</span> ${t}</button></td></tr>`;
 }
 function startRows(ds, open) {
-  const vs = state.stages[0] ? visitsOf(state.stages[0]) : [];
+  const vs = state.stages[0] ? sightVisitsOf(state.stages[0]) : [];
   let h = `<tr class="pt" data-row="start">${td('Datum', ds ? `<span class="dat">${fdate(ds[0])}</span>` : '')}${td('Name', `<b>Start: ${esc(shortLabel(state.start.label))}</b>`)}${td('Adresse', esc(cleanLabel(state.start.label)))}${td('Zeiten', '')}${td('Preis / Status', '')}${td('Notiz', '')}${td('Weiter / Entfernung', driveHtml(0))}</tr>`;
   h += sgRowHtml(-1, open, 0, vs.length);
   if (open) vs.forEach(v => (h += visitRowHtml(v)));
@@ -534,7 +535,7 @@ function planTableHtml() {
     }
     const open = XP || tlOpen.has(i),
       sg = s.to.sights || [],
-      vs = st[i + 1] ? visitsOf(st[i + 1]) : [];
+      vs = st[i + 1] ? sightVisitsOf(st[i + 1]) : [];
     let b = campRowHtml(i, ds, cur) + sgRowHtml(i, open, sg.length, vs.length);
     if (open) {
       sortSights(sg).forEach(x => (b += sightRowHtml(x, s.to)));
@@ -628,11 +629,12 @@ function rowGroup(row) {
   if (row === 'start') return { g: -1 };
   if (row === 'end') return { g: state.stages.length - 1 };
   if (row[0] === 'c') return { g: +row.slice(1) };
+  if (row[0] === 'f' && /^f\d+$/.test(row)) return { g: +row.slice(1) - 1 };
   if (row[0] === 's') {
     const k = row.slice(1);
     for (let i = 0; i < state.stages.length; i++) {
       if ((state.stages[i].to.sights || []).some(x => sightKey(sightSrc(x) || x) === k)) return { g: i, sub: true };
-      if (visitsOf(state.stages[i]).some(v => sightKey(v) === k)) return { g: i - 1, sub: true };
+      if (sightVisitsOf(state.stages[i]).some(v => sightKey(v) === k)) return { g: i - 1, sub: true };
     }
   }
   return null;
@@ -665,6 +667,7 @@ function rowPoint(row) {
   if (row === 'start') return state.start;
   if (row === 'end') return state.stages[state.stages.length - 1]?.to;
   if (row[0] === 'c') return state.stages[+row.slice(1)]?.to;
+  if (row[0] === 'f' && /^f\d+$/.test(row)) return ferryViaOf(state.stages[+row.slice(1)]);
   if (row[0] === 's') {
     const x = findSightByKey(row.slice(1));
     return x && x.lat != null ? x : null;
@@ -716,7 +719,8 @@ $('#tripView').addEventListener('click', e => {
     else {
       tlOpen.add(k);
       if (i === -1) {
-        if (state.stages[0]) visitsOf(state.stages[0]).forEach(x => Promise.all([enrichSight(x), loadGSight(x)]).then(r => r.some(Boolean) && renderTrip()));
+        if (state.stages[0])
+          sightVisitsOf(state.stages[0]).forEach(x => Promise.all([enrichSight(x), loadGSight(x)]).then(r => r.some(Boolean) && renderTrip()));
       } else openedGroup(i);
     }
     saveGrp();
@@ -793,7 +797,7 @@ function openedGroup(i) {
     loadRatings([s.to]);
     loadGName(s.to).then(f => f && renderPanel());
   }
-  const xs = [...(s.to.sights || []), ...(state.stages[i + 1] ? visitsOf(state.stages[i + 1]) : [])];
+  const xs = [...(s.to.sights || []), ...(state.stages[i + 1] ? sightVisitsOf(state.stages[i + 1]) : [])];
   xs.forEach(x =>
     Promise.all([enrichSight(x), loadGSight(x)]).then(r => {
       if (r.some(Boolean) && (uiTab === 'trip' || window.__allTabs)) renderTrip();

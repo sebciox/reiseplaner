@@ -33,18 +33,24 @@ function ferryRowHtml(j, ds, e) {
     : ds
       ? fdate(ds[j])
       : '';
-  const def = s ? `Fähre (Fahrt nach ${shortLabel(s.to.label)})` : 'Fähre';
-  const name = `<span class="pname">⛴ ${ed(scope, id, 'name', esc(f.name || (e ? '' : def)), { ph: 'Fähre' })}</span>`;
+  const fv = !e && ferryViaOf(s);
+  const def = e ? '' : ferryDefault(j, 'name');
+  const name = `<span class="pname">⛴ ${ed(scope, id, 'name', esc(f.name || def), { ph: 'Fähre' })}</span>`;
   const zt = line(ed(scope, id, 'dep', f.dep ? 'Abfahrt ' + esc(f.dep) : '')) + line(ed(scope, id, 'arr', f.arr ? 'Ankunft ' + esc(f.arr) : ''));
   const pr = `<div>${ed(scope, id, 'price', f.price ? moneyHtml(f.price, ref) : '')}</div><div>${selHtml(scope, id, 'status', ST_CAMP, f.status || 'open', 'Status der Fähre')}</div>`;
   const nt = ed(scope, id, 'note', esc(f.note || ''), { fill: true });
+  // Adresse: Abfahrts- und Ankunftshafen der Fähre (Zwischenziel), Abfahrt als Navigation
+  const ad = fv
+    ? `<a href="${esc(navUrl(fv))}" target="_blank" rel="noopener">${esc(cleanLabel(fv.label))}</a><div class="muted">→ ${esc(cleanLabel(fv.to.label))}</div>`
+    : '';
   // Dauer der Überfahrt (z. B. „ca. 9 Std.“) – sonst die km auf der Fähre
   const km = !e && s.ex?.ferry ? `${fkm(s.ex.ferry)} auf der Fähre` : '';
+  const dur = f.dur || (e ? '' : ferryDefault(j, 'dur'));
   const wt =
-    (f.dur
-      ? `${ed(scope, id, 'dur', 'Überfahrt ' + esc(f.dur))}${km ? `<div class="muted">${km}</div>` : ''}`
+    (dur
+      ? `${ed(scope, id, 'dur', 'Überfahrt ' + esc(dur))}${km ? `<div class="muted">${km}</div>` : ''}`
       : `${km ? km + ' ' : ''}<div>${ed(scope, id, 'dur', '', {})}</div>`) + (e ? delBtn(id) : '');
-  return `<tr class="ferry" data-row="${scope}${esc(id)}">${td('Datum', date)}${td('Name', name, 'nm')}${td('Adresse', '')}${td('Zeiten', zt)}${td('Preis / Status', pr)}${td('Notiz', nt)}${td('Überfahrt', wt)}</tr>`;
+  return `<tr class="ferry" data-row="${scope}${esc(id)}">${td('Datum', date)}${td('Name', name, 'nm')}${td('Adresse', ad)}${td('Zeiten', zt)}${td('Preis / Status', pr)}${td('Notiz', nt)}${td('Überfahrt', wt)}</tr>`;
 }
 function costRowHtml(e) {
   const ref = refPoint(groupOfExtra(e));
@@ -56,6 +62,14 @@ function costRowHtml(e) {
     'Preis / Status',
     `<div>${ed('x', e.id, 'amount', e.amount ? moneyHtml(e.amount, ref) : '')}</div><div>${selHtml('x', e.id, 'status', ST_CAMP, e.status || 'open', 'Status')}</div>`
   )}${td('Notiz', ed('x', e.id, 'note', esc(e.note || ''), { fill: true }))}${td('Löschen', delBtn(e.id))}</tr>`;
+}
+// gefundene Werte der Fähr-Zeile aus der Fähre (Zwischenziel): „Fähre Travemünde – Malmö“, „ca. 9 h“
+function ferryDefault(j, f) {
+  const s = state.stages[j],
+    fv = ferryViaOf(s);
+  if (f === 'name') return fv ? `Fähre ${shortLabel(fv.label)} – ${shortLabel(fv.to.label)}` : s ? `Fähre (Fahrt nach ${shortLabel(s.to.label)})` : 'Fähre';
+  if (f === 'dur') return fv && fv.hours ? `ca. ${fhours(fv.hours)}` : '';
+  return '';
 }
 // Fähr-Zeile: Route mit Fähre – oder schon Angaben eingetragen (bleiben sichtbar, auch wenn eine neue Route ohne Fähre fährt)
 const hasFerry = s => !!s && ((s.ex && s.ex.ferry > 500) || (s.ferry && Object.values(s.ferry).some(v => v != null && v !== '')));
@@ -79,7 +93,7 @@ function allSights() {
   const out = [];
   state.stages.forEach((s, i) => {
     (s.to.sights || []).forEach(x => out.push({ x, i, from: s.to }));
-    visitsOf(s).forEach(v => out.push({ x: v, i: i - 1, from: null, visit: true }));
+    sightVisitsOf(s).forEach(v => out.push({ x: v, i: i - 1, from: null, visit: true }));
   });
   return out;
 }
@@ -98,7 +112,7 @@ function tripMoney() {
     }
     if (hasFerry(s)) {
       const mo = ferryMoney(s.ferry, s.to),
-        nm = s.ferry?.name || `Fähre (Fahrt nach ${shortLabel(s.to.label)})`;
+        nm = s.ferry?.name || ferryDefault(i, 'name');
       if (mo.st === 'open')
         items.push({ kind: 'book', text: `Noch nicht gebucht: ${nm}`, eur: mo.total, approx: mo.approx, date: when(i), grp: i - 1, row: 'f' + i });
       else if (mo.open)

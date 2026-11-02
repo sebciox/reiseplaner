@@ -113,7 +113,7 @@ async function computeSegs() {
   const segs = [];
   let pend = [];
   for (const v of state.via) {
-    if (v.kind === 'visit') {
+    if (v.kind === 'visit' || v.kind === 'ferry') {
       pend.push(v);
       continue;
     }
@@ -155,19 +155,21 @@ const segDone = k => state.stages.filter(s => s.seg === k).length;
 /* Erneut „Strecke berechnen“ (z. B. Ziel nachträglich eingefügt): Etappen unveränderter Abschnitte werden übernommen.
    Ein Abschnitt gilt als unverändert, wenn Start, Ziel, Art, Besuche unterwegs und Sehenswürdigkeiten gleich sind. */
 const ptKey = p => (p ? p.uid || `${(+p.lat).toFixed(4)},${(+p.lon).toFixed(4)}` : '');
-const segKey = (from, g) =>
+// loose = ohne Besuche/Fähren: Abschnitt mit gleichem Start, Ziel und Sehenswürdigkeiten, nur Besuche/Fähren geändert
+const segKey = (from, g, loose) =>
   [
     ptKey(from),
     ptKey(g.to),
     g.kind,
     g.rest ? 'r' : '',
-    (g.visits || []).map(v => v.uid).join('+'),
+    loose ? '' : (g.visits || []).map(v => v.uid + (v.kind === 'ferry' && v.to ? '>' + ptKey(v.to) + '@' + (+v.hours || 0) : '')).join('+'),
     (g.sights || []).map(x => x.uid || ptKey(x)).join('+')
   ].join('|');
 function snapshotKeep() {
   const st = state.stages;
   if (!st.length) return null;
   const secs = new Map(),
+    loose = new Map(),
     prev = new Set(st.filter(s => s.to.kind === 'camp').map(s => String(s.to.id)));
   const keepEnd = { endCands: state.endCands, endSearched: state.endSearched };
   if (state.segs) {
@@ -175,11 +177,16 @@ function snapshotKeep() {
     state.segs.forEach((g, k) => {
       const ss = st.filter(s => s.seg === k);
       const complete = ss.length === g.n && (g.kind !== 'sight' || ss[ss.length - 1].to.kind === 'camp') && (g.kind === 'sight' || state.done);
-      if (complete)
+      if (complete) {
         secs.set(
           segKey(from, g),
           ss.map(s => ({ ...s }))
         );
+        loose.set(
+          segKey(from, g, true),
+          ss.map(s => ({ ...s }))
+        );
+      }
       from = g.to;
     });
   } else if (state.done && state.end) {
@@ -188,7 +195,7 @@ function snapshotKeep() {
       st.map(s => ({ ...s }))
     );
   }
-  return { secs, prev, keepEnd };
+  return { secs, loose, prev, keepEnd };
 }
 // nach computeSegs: passende Abschnitte markieren (g.keep = alte Etappen, Anzahl wie bisher)
 function applyKeep(kp) {
@@ -198,10 +205,12 @@ function applyKeep(kp) {
   let from = state.start,
     n = 0;
   state.segs.forEach(g => {
-    const ss = kp.secs.get(segKey(from, g));
-    if (ss) {
-      g.keep = ss;
-      g.n = ss.length;
+    const ss = kp.secs.get(segKey(from, g)),
+      sl = !ss && kp.loose ? kp.loose.get(segKey(from, g, true)) : null;
+    if (ss || sl) {
+      g.keep = ss || sl;
+      g.n = g.keep.length;
+      if (sl) g.revisit = true; // nur Besuche/Fähren geändert → Plätze bleiben, Besuche werden neu verteilt
       n++;
     }
     from = g.to;
@@ -417,6 +426,10 @@ async function searchAddCamp(form) {
 }
 const viaByUid = uid => state.via.find(v => v.uid === uid);
 const visitsOf = s => (s.vias || []).map(viaByUid).filter(Boolean);
+// Besuche unterwegs ohne Fähren (Fähren haben ihre eigene Zeile im Reiseplan)
+const sightVisitsOf = s => visitsOf(s).filter(v => v.kind !== 'ferry');
+// Fähre (Zwischenziel) auf der Fahrt einer Etappe
+const ferryViaOf = s => (s ? visitsOf(s).find(v => v.kind === 'ferry' && v.to) || null : null);
 // Abstand eines Punktes entlang der Linie (nächster Linienpunkt)
 function posOnLine(line, cum, p) {
   let best = 0,
@@ -478,6 +491,34 @@ async function computeNext(from) {
         setStatus('Übernommene Etappe wird neu berechnet …', 'busy');
         const r0 = await route(from, ks[0].to, visitsOf(ks[0]));
         ks[0] = { ...ks[0], from, line: r0.line, dist: r0.dist, dur: r0.dur, ex: r0.ex, countries: undefined };
+      }
+      if (g.revisit) {
+        // Besuche/Fähren neu auf die übernommenen Etappen verteilen (geringster Umweg), betroffene Etappen neu routen
+        delete g.revisit;
+        const old = ks.map(s => (s.vias || []).join());
+        ks.forEach(s => (s.vias = []));
+        const P = p => [+p.lat, +p.lon];
+        g.visits.forEach(v => {
+          let best = 0,
+            bc = Infinity;
+          ks.forEach((s, q) => {
+            const a = P(s.from),
+              b = P(s.to),
+              c = hav(a, P(v)) + (v.kind === 'ferry' && v.to ? hav(P(v), P(v.to)) + hav(P(v.to), b) : hav(P(v), b)) - hav(a, b);
+            if (c < bc) {
+              bc = c;
+              best = q;
+            }
+          });
+          ks[best].vias.push(v.uid);
+        });
+        for (let q = 0; q < ks.length; q++) {
+          if (q > 0) ks[q] = { ...ks[q], from: ks[q - 1].to };
+          if (ks[q].vias.join() === old[q]) continue;
+          setStatus(`Etappe mit geänderten Besuchen/Fähren wird neu berechnet …`, 'busy');
+          const rq = await route(ks[q].from, ks[q].to, visitsOf(ks[q]));
+          ks[q] = { ...ks[q], line: rq.line, dist: rq.dist, dur: rq.dur, ex: rq.ex, countries: undefined };
+        }
       }
       if (g.kind === 'sight') ks[ks.length - 1].nights = g.nights;
       state.stages.push(...ks);
@@ -871,7 +912,8 @@ async function selectCamp(c) {
     p.mode === 'anchor'
       ? p.visits || []
       : (p.visitPos || [])
-          .filter(v => c.stageKm == null || v.d < c.stageKm)
+          // Fähre: gehört nur zu dieser Etappe, wenn der Platz klar hinter dem Ankunftshafen liegt (Platz am Abfahrtshafen = davor)
+          .filter(v => c.stageKm == null || (viaByUid(v.uid)?.kind === 'ferry' ? v.d + 5000 < c.stageKm : v.d < c.stageKm))
           .map(v => viaByUid(v.uid))
           .filter(Boolean);
   if (p.mode === 'anchor') {

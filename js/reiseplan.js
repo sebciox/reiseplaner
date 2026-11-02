@@ -161,7 +161,7 @@ function renderTrip() {
   // Recherche für die Plätze und Sehenswürdigkeiten des Reiseplans anstoßen (nur was noch fehlt)
   setTimeout(() => {
     requestPrices(state.stages.map(s => s.to).filter(c => c.kind === 'camp'));
-    requestSights(state.via.filter(v => v.kind !== 'rest').flatMap(v => [v, ...(v.sights || [])]));
+    requestSights(state.via.filter(v => v.kind !== 'rest' && v.kind !== 'ferry').flatMap(v => [v, ...(v.sights || [])]));
   }, 0);
   el.querySelectorAll('form[data-sweb]').forEach(
     f =>
@@ -181,7 +181,8 @@ function renderTrip() {
         flash('Website gemerkt – Öffnungszeiten und Preise werden in 2–5 Min. gesucht.');
       })
   );
-  if (state.via.some(v => v.kind !== 'rest' && [v, ...(v.sights || [])].some(y => !y.info || y.info.v !== INFO_V))) setTimeout(enrichAll, 0);
+  if (state.via.some(v => v.kind !== 'rest' && v.kind !== 'ferry' && [v, ...(v.sights || [])].some(y => !y.info || y.info.v !== INFO_V)))
+    setTimeout(enrichAll, 0);
   el.querySelectorAll('[data-tlall]').forEach(
     b =>
       (b.onclick = () => {

@@ -177,6 +177,27 @@ async function geocodeFirst(text) {
   return r[0];
 }
 async function route(a, b, via = []) {
+  // Fähre als Zwischenziel: Straße bis zum Abfahrtshafen + Überfahrt + Straße ab dem Ankunftshafen. Der Routendienst
+  // nähme sonst den schnellsten Landweg (z. B. Fehmarn/Öresund statt Travemünde–Malmö). Die Überfahrt zählt nicht als
+  // Fahrstrecke/Fahrzeit (Linienpunkt mit Kennzeichen 1, siehe cumul), ihre Dauer steht in ex.ferryH.
+  const fi = via.findIndex(v => v.kind === 'ferry' && v.to && v.to.lat != null);
+  if (fi >= 0) {
+    const f = via[fi];
+    const r1 = await route(a, f, via.slice(0, fi)),
+      r2 = await route(f.to, b, via.slice(fi + 1));
+    const sea = hav([f.lat, f.lon], [f.to.lat, f.to.lon]);
+    return {
+      line: [...r1.line, [+f.to.lat, +f.to.lon, 1], ...r2.line],
+      dist: r1.dist + r2.dist,
+      dur: r1.dur + r2.dur,
+      ex: {
+        ferry: (r1.ex?.ferry || 0) + (r2.ex?.ferry || 0) + sea,
+        toll: (r1.ex?.toll || 0) + (r2.ex?.toll || 0),
+        ferryH: (r1.ex?.ferryH || 0) + (r2.ex?.ferryH || 0) + (+f.hours || 0),
+        ferryUid: f.uid
+      }
+    };
+  }
   const vmax = Math.max(80, +settings.speed || 80);
   const P = [a, ...via, b];
   const body = { coordinates: P.map(p => [p.lon, p.lat]), radiuses: P.map(() => -1), extra_info: ['waycategory', 'tollways'] };

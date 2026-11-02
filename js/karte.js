@@ -365,17 +365,41 @@ $('#map').addEventListener(
   true
 );
 
+// Linie zeichnen; Stücke über eine Fähre (Punkt mit Kennzeichen 1) gestrichelt in Wasserblau
+function drawRoute(line, style, layer) {
+  let part = [];
+  const flush = () => {
+    if (part.length > 1) L.polyline(part, style).addTo(layer);
+  };
+  for (let i = 0; i < line.length; i++) {
+    const p = line[i];
+    if (p[2] && part.length) {
+      flush();
+      L.polyline([part[part.length - 1], [p[0], p[1]]], {
+        color: '#4a86b8',
+        weight: 4,
+        opacity: 0.9,
+        dashArray: '2 8',
+        lineCap: 'round',
+        interactive: false
+      }).addTo(layer);
+      part = [];
+    }
+    part.push([p[0], p[1]]);
+  }
+  flush();
+}
 function renderMap() {
   lyr.route.clearLayers();
   lyr.corridor.clearLayers();
   lyr.cands.clearLayers();
   lyr.pins.clearLayers();
   drawArea();
-  state.stages.forEach(s => L.polyline(s.line, { color: COL.brand, weight: 5, opacity: 0.9 }).addTo(lyr.route));
-  if (askingN()) L.polyline(state.overview.line, { color: COL.brand, weight: 5, opacity: 0.8 }).addTo(lyr.route);
+  state.stages.forEach(s => drawRoute(s.line, { color: COL.brand, weight: 5, opacity: 0.9 }, lyr.route));
+  if (askingN()) drawRoute(state.overview.line, { color: COL.brand, weight: 5, opacity: 0.8 }, lyr.route);
   const p = state.pending;
   if (p) {
-    L.polyline(p.line, { color: COL.pending, weight: 4, opacity: 0.7, dashArray: '8 8' }).addTo(lyr.route);
+    drawRoute(p.line, { color: COL.pending, weight: 4, opacity: 0.7, dashArray: '8 8' }, lyr.route);
     const end = Math.min(p.cmax * 1000, p.remain);
     if (end > p.cmin * 1000)
       L.polyline(slice(p.line, p.cum, p.cmin * 1000, end), { color: COL.corridor, weight: 10, opacity: 0.45, interactive: false }).addTo(lyr.corridor);
@@ -431,14 +455,33 @@ function renderMap() {
         .addTo(lyr.pins)
     )
   );
+  // Fähre: Ankunftshafen
+  state.via.forEach(v => {
+    if (v.kind === 'ferry' && v.to)
+      L.marker([v.to.lat, v.to.lon], { icon: pinIcon('⛴', 'visit'), zIndexOffset: -100 })
+        .bindPopup(`<b>⛴ Ankunft</b><br>${esc(cleanLabel(v.to.label))}`)
+        .addTo(lyr.pins);
+  });
   state.via.forEach((v, i) =>
     L.marker([v.lat, v.lon], {
-      icon: pinIcon(v.kind === 'visit' ? '•' : v.kind === 'rest' ? 'P' : '★', v.kind === 'visit' ? 'visit' : 'sight'),
+      icon: pinIcon(
+        v.kind === 'visit' ? '•' : v.kind === 'ferry' ? '⛴' : v.kind === 'rest' ? 'P' : '★',
+        v.kind === 'visit' || v.kind === 'ferry' ? 'visit' : 'sight'
+      ),
       zIndexOffset: -100
     })
-      .bindPopup(() => sightPopHtml(v))
+      .bindPopup(() =>
+        v.kind === 'ferry'
+          ? `<b>⛴ Fähre ab ${esc(shortLabel(v.label))}</b><br>${v.to ? `nach ${esc(shortLabel(v.to.label))} · ≈ ${fhours(+v.hours || 4)}` : 'Ankunftshafen fehlt'}`
+          : sightPopHtml(v)
+      )
       .on('click', () => {
-        // Pause/freie Tage = Campingplatz → dessen Zeile; sonst die Sehenswürdigkeit bzw. der Besuch
+        // Pause/freie Tage = Campingplatz → dessen Zeile; Fähre → Fähr-Zeile; sonst die Sehenswürdigkeit bzw. der Besuch
+        if (v.kind === 'ferry') {
+          const j = state.stages.findIndex(s => ferryViaOf(s)?.uid === v.uid);
+          if (j >= 0) focusRow('f' + j);
+          return;
+        }
         const k = v.kind === 'rest' ? state.stages.findIndex(s => s.to.kind === 'camp' && hav([s.to.lat, s.to.lon], [v.lat, v.lon]) < 300) : -1;
         focusRow(k >= 0 ? 'c' + k : 's' + sightKey(v));
       })

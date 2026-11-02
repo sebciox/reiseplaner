@@ -190,7 +190,11 @@ function renderPanel() {
         ${
           s.vias && s.vias.length
             ? `<div class="muted">unterwegs: ${visitsOf(s)
-                .map(v => `${esc(shortLabel(v.label))} (≈ ${fhours(v.hours)} · <a href="${parkUrl(v)}" target="_blank" rel="noopener">Parken fürs Gespann</a>)`)
+                .map(v =>
+                  v.kind === 'ferry'
+                    ? `⛴ Fähre ${esc(shortLabel(v.label))} → ${esc(shortLabel(v.to?.label || '?'))} (≈ ${fhours(v.hours)})`
+                    : `${esc(shortLabel(v.label))} (≈ ${fhours(v.hours)} · <a href="${parkUrl(v)}" target="_blank" rel="noopener">Parken fürs Gespann</a>)`
+                )
                 .join(', ')}
           · Tag gesamt ≈ ${fdur(s.dur + visitsOf(s).reduce((a, v) => a + (+v.hours || 2) * 3600, 0))}</div>`
             : ''
