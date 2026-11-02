@@ -368,6 +368,11 @@ const srv = require('./lib/server')(ROOT, 8151);
     state.via[0].info.web = '';
     renderTrip();
   });
+  ok(
+    !(await page.$('#tripView tr.sight form[data-sweb]')) && !!(await page.$('#tripView tr.sight [data-swebopen]')),
+    'ohne Website: nur kleiner Link „+ Website“'
+  );
+  await page.click('#tripView tr.sight [data-swebopen]');
   ok(await page.$('#tripView tr.sight form[data-sweb] input'), 'ohne Website: Eingabefeld (vorbelegt mit Google-Website)');
   await page.fill('#tripView tr.sight form[data-sweb] input', 'www.eigene-seite.example');
   await page.click('#tripView tr.sight form[data-sweb] button');

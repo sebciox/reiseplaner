@@ -250,6 +250,8 @@ const srv = require('./lib/server')(ROOT, 8153);
   for (const [i, p] of F.plan.entries()) {
     const shown = await page.evaluate(i => nameText(state.stages[i].to) || state.stages[i].to.label, i);
     if (shown !== p.name) (await edit(`c|${i}|name`, p.name)) ? entered++ : missing.push(`${p.name}: Name`);
+    const town = await page.evaluate(i => stayTown(i), i);
+    if (p.ort && town !== p.ort) (await edit(`c|${i}|ort`, p.ort)) ? entered++ : missing.push(`${p.name}: Ort`);
     for (const f of ['addr', 'phone', 'hours', 'arr', 'ppn', 'total', 'paid', 'nr', 'pitch', 'note'])
       if (p[f]) (await edit(`c|${i}|${f}`, p[f])) ? entered++ : missing.push(`${p.name}: ${f}`);
     if (p.status) (await status(`c|${i}|status`, p.status)) ? entered++ : missing.push(`${p.name}: Status`);
@@ -275,7 +277,7 @@ const srv = require('./lib/server')(ROOT, 8153);
   // Fähren
   for (const [k, f] of F.ferries.entries()) {
     const j = ferryStages[k];
-    for (const x of ['name', 'dep', 'arr', 'note']) (await edit(`f|${j}|${x}`, f[x])) ? entered++ : missing.push(`${f.name}: ${x}`);
+    for (const x of ['name', 'dep', 'arr', 'dur', 'note']) if (f[x]) (await edit(`f|${j}|${x}`, f[x])) ? entered++ : missing.push(`${f.name}: ${x}`);
     (await status(`f|${j}|status`, 'paid')) ? entered++ : missing.push(`${f.name}: Status`);
   }
   ok(!missing.length, `${entered} Angaben der PDF eingetragen` + (missing.length ? ' – fehlgeschlagen: ' + missing.join('; ') : ''));
@@ -345,26 +347,25 @@ const srv = require('./lib/server')(ROOT, 8153);
   await page.setViewportSize({ width: 1400, height: 950 });
 
   /* ---------- 4. Was die PDF zeigt, die App aber (noch) nicht so ---------- */
-  const row3 = await page.evaluate(() => document.querySelector('#tripView tbody[data-grpb="3"] tr.camp').innerText);
-  can(
-    /Hultsfred\s*\n?.*27\.7/.test(row3) || /^[^\n]*Hultsfred/.test(row3.split('Folkparks')[0].split('\n')[0]),
-    'Spalte „Ort & Datum“: Ort unter dem Datum',
-    'Ort steht nur in der Adresse'
+  // früher Lücken, jetzt Pflicht: Ort unter dem Datum, „nach <Ort>“, Fährdauer, keine alten Suchhinweise
+  const orte = await page.evaluate(
+    n => [...Array(n).keys()].map(i => document.querySelector(`#tripView tbody[data-grpb="${i}"] tr.camp td[data-l="Datum"]`)?.innerText || ''),
+    F.plan.length
   );
-  can(/nach Söderköping/.test(wt), 'Weiterfahrt nennt den Ort („nach Söderköping“)', 'nennt den Platznamen („nach Korskullens Camping“)');
-  can(
+  const ortBad = F.plan.filter((p, i) => !orte[i].includes(p.ort)).map(p => p.ort);
+  ok(
+    !ortBad.length,
+    'Spalte Datum mit Ort wie in der PDF (Travemünde, Malmö / Vellinge, Karlshamn …)' + (ortBad.length ? ' – fehlt: ' + ortBad.join(', ') : '')
+  );
+  ok(/nach Söderköping/.test(wt), 'Weiterfahrt nennt den Ort: ' + wt);
+  ok(
     await page.evaluate(() =>
-      [...document.querySelectorAll('#tripView tr.ferry')].some(r => /9\s*(h|Std)/.test(r.querySelector('td[data-l="Strecke"]')?.innerText || ''))
+      [...document.querySelectorAll('#tripView tr.ferry')].every(r => /Überfahrt ca\. 9 Std\./.test(r.querySelector('td[data-l="Überfahrt"]')?.innerText || ''))
     ),
-    'Fähre: Dauer der Überfahrt („ca. 9 Std.“) als eigene Angabe',
-    'nur km auf der Fähre, Dauer als Notiz'
+    'Fähre: Dauer der Überfahrt „ca. 9 Std.“'
   );
   const tab = (await page.textContent('#tripView .ptab')).replace(/\s+/g, ' ');
-  can(
-    !/Keine Campingplätze gefunden|Zoom auf der Karte rein/.test(tab),
-    'Reiseplan ohne alte Suchhinweise aus der Planung',
-    'in der Spalte Notiz steht z. B. „Keine Campingplätze gefunden. Zoom auf der Karte rein …“'
-  );
+  ok(!/Keine Campingplätze gefunden|Zoom auf der Karte rein/.test(tab), 'Reiseplan ohne alte Suchhinweise aus der Planung');
   // Druck/PDF und Word: dieselben Angaben?
   await page.evaluate(() => printTour());
   await page.waitForFunction(() => window.__printed > 0, null, { timeout: 15000 }).catch(() => {});

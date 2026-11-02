@@ -39,8 +39,13 @@ function ferryRowHtml(j, ds, e) {
   const zt = line(`Abfahrt ${ed(scope, id, 'dep', esc(f.dep || ''), { ph: '–' })}`) + line(`Ankunft ${ed(scope, id, 'arr', esc(f.arr || ''), { ph: '–' })}`);
   const pr = `<div>${ed(scope, id, 'price', f.price ? moneyHtml(f.price, ref) : '', { ph: 'Preis –' })}</div><div>${selHtml(scope, id, 'status', ST_CAMP, f.status || 'open', 'Status der Fähre')}</div>`;
   const nt = ed(scope, id, 'note', esc(f.note || ''), {}) + line(`Buchungsnr. ${ed(scope, id, 'nr', esc(f.nr || ''), { ph: '–' })}`);
-  const wt = e ? delBtn(id) : s.ex?.ferry ? `${fkm(s.ex.ferry)} <span class="muted">auf der Fähre</span>` : '';
-  return `<tr class="ferry" data-row="${scope}${esc(id)}">${td('Datum', date)}${td('Name', name, 'nm')}${td('Adresse', '')}${td('Zeiten', zt)}${td('Preis / Status', pr)}${td('Notiz / Buchung', nt)}${td(e ? 'Löschen' : 'Strecke', wt)}</tr>`;
+  // Dauer der Überfahrt (z. B. „ca. 9 Std.“) – sonst die km auf der Fähre
+  const km = !e && s.ex?.ferry ? `${fkm(s.ex.ferry)} auf der Fähre` : '';
+  const wt =
+    (f.dur
+      ? `Überfahrt ${ed(scope, id, 'dur', esc(f.dur), {})}${km ? `<div class="muted">${km}</div>` : ''}`
+      : `${km ? km + ' ' : ''}<div>${ed(scope, id, 'dur', '', {})}</div>`) + (e ? delBtn(id) : '');
+  return `<tr class="ferry" data-row="${scope}${esc(id)}">${td('Datum', date)}${td('Name', name, 'nm')}${td('Adresse', '')}${td('Zeiten', zt)}${td('Preis / Status', pr)}${td('Notiz / Buchung', nt)}${td('Überfahrt', wt)}</tr>`;
 }
 function costRowHtml(e) {
   const ref = refPoint(groupOfExtra(e));

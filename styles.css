@@ -2514,3 +2514,10 @@ select.stsel.isopen {
   padding: 3px 8px;
   font-weight: 600;
 }
+.ptab .ort {
+  margin-top: 2px;
+  font-size: 12.5px;
+}
+.ptab .swebadd {
+  font-size: 12px;
+}

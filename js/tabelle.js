@@ -206,6 +206,7 @@ function foundVal(scope, id, f) {
       return mo.total != null ? fEurA(mo.total, mo.approx) : '';
     }
     if (f === 'phone') return (c.kind === 'camp' && phoneOf(c)) || '';
+    if (f === 'ort') return townOf(campMy(s).addr || campAddrFound(c));
     return '';
   }
   const x = findSightByKey(id),
@@ -234,6 +235,8 @@ function ownVal(scope, id, f) {
 /* ---------- Zellen-Bausteine ---------- */
 const FIELD = {
   name: { l: 'Name' },
+  ort: { l: 'Ort', ph: '+ Ort' },
+  dur: { l: 'Dauer der Überfahrt', ph: '+ Dauer, z. B. ca. 9 Std.' },
   addr: { l: 'Adresse' },
   hours: { l: 'Zeiten', multi: true },
   arr: { l: 'Ankunft', ph: 'Ankunft, z. B. 20:00' },
@@ -269,13 +272,34 @@ const selHtml = (scope, id, f, list, cur, label) =>
 const td = (l, h, cls) => `<td data-l="${esc(l)}"${cls ? ` class="${cls}"` : ''}>${h}</td>`;
 const line = h => (h ? `<div class="x">${h}</div>` : '');
 
+/* ---------- Ort eines Aufenthalts ---------- */
+// aus der Adresse: letzter Teil ohne Land und Postleitzahl („Folkparksvägen 10, 577 36 Hultsfred“ → „Hultsfred“)
+const COUNTRY_RE =
+  /^(deutschland|germany|schweden|sverige|sweden|dänemark|danmark|denmark|norwegen|norge|norway|frankreich|france|spanien|españa|spain|italien|italia|italy|niederlande|nederland|netherlands|belgien|belgique|belgium|österreich|austria|schweiz|suisse|switzerland|polen|polska|poland|tschechien|finnland|suomi|finland)$/i;
+function townOf(addr) {
+  const parts = String(addr || '')
+    .split(',')
+    .map(x => x.trim())
+    .filter(x => x && !COUNTRY_RE.test(x));
+  if (parts.length < 2) return '';
+  const t = parts[parts.length - 1].replace(/^(?:[A-Z]{1,2}-?)?\d[\d\s-]*\s+/, '').trim();
+  return /\d/.test(t) ? '' : t;
+}
+// Ort des Aufenthalts i: eigener Wert, sonst aus der (eigenen bzw. gefundenen) Adresse
+function stayTown(i) {
+  const s = state.stages[i];
+  if (!s) return '';
+  const m = campMy(s);
+  return m.ort || townOf(m.addr || campAddrFound(s.to)) || (s.to.kind !== 'camp' ? shortLabel(s.to.label) : '');
+}
+
 /* ---------- Zeilen ---------- */
-// Weiterfahrt ab einem Aufenthalt = Etappe j (die nächste)
+// Weiterfahrt ab einem Aufenthalt = Etappe j (die nächste) – „nach <Ort>“ wie in der Reise-PDF, sonst Platzname
 function driveHtml(j) {
   const s = state.stages[j];
   if (!s) return '<span class="muted">–</span>';
   const fl = [s.ex?.ferry > 200 ? 'Fähre' : '', s.ex?.toll > 1000 ? 'Maut' : ''].filter(Boolean).join(' · ');
-  return `<div>nach ${esc(shortLabel(s.to.label))}</div><div class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${fl ? ' · ' + fl : ''}</div>`;
+  return `<div>nach ${esc(stayTown(j) || shortLabel(s.to.label))}</div><div class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${fl ? ' · ' + fl : ''}</div>`;
 }
 function caret(i, open) {
   return `<button class="grptog" type="button" data-grp="${i}" aria-expanded="${open}" aria-label="${open ? 'zuklappen' : 'aufklappen'}" title="${open ? 'zuklappen' : 'aufklappen'}">${open ? '▾' : '▸'}</button>`;
@@ -299,6 +323,7 @@ function campRowHtml(i, open, ds, cur) {
   // Datum
   let dat = ds ? `<b>${fdate(ds[i])}${!last || camp ? ` – ${fdate(addDays(ds[i], n))}` : ''}</b>` : `Etappe ${i + 1}`;
   dat += `<div class="muted">${n} ${n === 1 ? 'Nacht' : 'Nächte'}</div>`;
+  if (camp) dat += `<div class="ort">${ed('c', i, 'ort', esc(stayTown(i)), { own: !!m.ort, ph: '+ Ort' })}</div>`;
   if (open)
     dat += `<div class="nstep" title="Nächte"><button type="button" data-tlnight="${i}" data-d="-1" aria-label="eine Nacht weniger" ${n <= 1 ? 'disabled' : ''}>−</button><b>${n}</b><button type="button" data-tlnight="${i}" data-d="1" aria-label="eine Nacht mehr">+</button></div>`;
   // Name (Link = Google-Eintrag)
@@ -359,7 +384,6 @@ function campRowHtml(i, open, ds, cur) {
           : ed('c', i, 'phone', '', { ph: '–' }))
     );
   }
-  if (open && s.note) nt += line(`<span class="muted">${esc(s.note)}</span>`);
   const cls = `camp${i === cur ? ' cur' : ''}`;
   return `<tr class="${cls}" data-row="c${i}">${td('Datum', dat)}${td('Name', name, 'nm')}${td('Adresse', ad)}${td('Zeiten', zt)}${td('Preis / Status', pr)}${td('Notiz / Buchung', nt)}${td('Weiter / Entfernung', last ? '<span class="muted">–</span>' : driveHtml(i + 1))}</tr>`;
 }
@@ -384,6 +408,8 @@ function sightRowHtml(x, from) {
           ? ` · <a class="stars" href="${esc(g.uri)}" target="_blank" rel="noopener">★ ${g.r.toLocaleString('de-DE', { minimumFractionDigits: 1 })} <span>(${g.n.toLocaleString('de-DE')})</span></a>`
           : '')
     );
+  else if ((s.info || g) && !inf.town && !swebOpen.has(k))
+    name += line(`<button class="linkbtn swebadd" type="button" data-swebopen="${esc(k)}">+ Website</button>`);
   else if ((s.info || g) && !inf.town)
     name += `<form class="sweb x" data-sweb="${esc(k)}"><input name="w" type="text" inputmode="url" autocomplete="url" placeholder="Website eintragen" aria-label="Website der Sehenswürdigkeit" value="${g && g.web ? esc(g.web) : ''}"><button class="btn small" type="submit">Merken</button></form>`;
   if (!s.info && sightBusy.has(k)) name += line('<span class="muted">Infos werden geladen …</span>');
@@ -485,6 +511,7 @@ function sortSights(list) {
     .map(o => o.x);
 }
 
+const swebOpen = new Set(); // Sehenswürdigkeiten, bei denen „+ Website“ angetippt wurde
 /* ---------- Bearbeiten (eine Ereignis-Delegation auf #tripView) ---------- */
 function afterEdit() {
   touch();
@@ -540,6 +567,13 @@ $('#tripView').addEventListener('click', e => {
   if (b && !e.target.closest('a')) {
     e.preventDefault();
     openEditor(b);
+    return;
+  }
+  const wo = e.target.closest('[data-swebopen]');
+  if (wo) {
+    swebOpen.add(wo.dataset.swebopen);
+    renderTrip();
+    setTimeout(() => document.querySelector(`#tripView form[data-sweb="${CSS.escape(wo.dataset.swebopen)}"] input`)?.focus(), 0);
     return;
   }
   const r = e.target.closest('[data-rs]');
