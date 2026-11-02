@@ -2914,3 +2914,10 @@ select.stsel.isopen {
 path.leghit {
   cursor: pointer;
 }
+.legerr {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--warn-soft);
+  font-size: 13px;
+}

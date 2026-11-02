@@ -273,6 +273,30 @@ const srv = require('./lib/server')(ROOT, 8154);
     /\+ Fähre ≈ 9 h/.test(await page.textContent('#tripView tbody[data-grpb="1"] tr.camp td[data-l="Weiter / Entfernung"]')),
     'Spalte „Weiter“: „… + Fähre ≈ 9 h“'
   );
+  // 2b. Häfen nur eingetippt (ohne Enter, ohne Vorschlag) → „Neu berechnen“ sucht sie selbst
+  await page.click('#tripView [data-legopen="2"]');
+  await page.waitForSelector('#legDlg[open] #legFerryDel');
+  await page.click('#legFerryDel');
+  await page.waitForFunction(() => !state.busy && !state.stages[2].ex?.ferryH, null, { timeout: 10000 });
+  await page.click('#tripView [data-legopen="2"]');
+  await page.click('#legFerryOn');
+  await page.fill('#legDlg [data-legsearch="a"]', 'Travemünde Skandinavienkai');
+  await page.fill('#legDlg [data-legsearch="b"]', 'Malmö Hamn');
+  await page.fill('#legHours', '9');
+  await page.click('#legApply');
+  await page.waitForFunction(() => !state.busy && state.stages[2].ex?.ferryH === 9, null, { timeout: 10000 });
+  ok(
+    await page.evaluate(() => /Malmö/.test(ferryViaOf(state.stages[2])?.to?.label || '') && !$('#legDlg').open),
+    'Häfen nur eingetippt (ohne Enter) → beim „Neu berechnen“ gesucht und übernommen'
+  );
+  // nur ein Hafen → Hinweis im Dialog (nicht hinter dem Dialog), Dialog bleibt offen
+  await page.click('#tripView [data-legopen="1"]');
+  await page.click('#legFerryOn');
+  await page.fill('#legDlg [data-legsearch="a"]', 'Travemünde Skandinavienkai');
+  await page.click('#legApply');
+  await page.waitForFunction(() => !$('#legErr').hidden && /Ankunftshafen/.test($('#legErr').textContent), null, { timeout: 8000 });
+  ok(await page.evaluate(() => $('#legDlg').open), 'nur Abfahrtshafen → Hinweis im Dialog, Dialog bleibt offen');
+  await page.click('#legCancel');
   // 3. km und Zeit von Hand
   await page.click('#tripView [data-ed="c|2|drv"]');
   await page.fill('#tripView .edin', '45 km + 9 h Fähre');

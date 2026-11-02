@@ -101,7 +101,7 @@ function openLeg(j) {
   $('#legDlg').showModal();
   if (!f)
     ['a', 'b'].forEach(k =>
-      ferryTerminals(k === 'a' ? s.from : s.to)
+      Promise.race([ferryTerminals(k === 'a' ? s.from : s.to), new Promise((_, no) => setTimeout(() => no(new Error('Zeit')), 15000))])
         .then(r => {
           legPorts[k] = r;
           if (legJ === j) renderLeg();
@@ -113,9 +113,21 @@ function openLeg(j) {
     );
 }
 const legPasses = s => visitsOf(s).filter(v => v.kind === 'pass');
+// Eingetippte (noch nicht bestätigte) Werte überleben ein Neuzeichnen des Dialogs (z. B. wenn die Hafen-Vorschläge kommen)
+function legDraft() {
+  const v = q => document.querySelector('#legDlg ' + q)?.value;
+  return { a: v('[data-legsearch="a"]'), b: v('[data-legsearch="b"]'), pass: v('#legPassIn'), hours: v('#legHours') };
+}
+function legMsg(t) {
+  const el = $('#legErr');
+  if (!el) return;
+  el.textContent = t || '';
+  el.hidden = !t;
+}
 function renderLeg() {
   const s = state.stages[legJ];
   if (!s) return;
+  const dr = legDraft();
   $('#legTitle').textContent = `Fahrt anpassen: ${shortLabel(s.from.label)} → ${shortLabel(stayTown(legJ) || s.to.label)}`;
   const port = (k, sel) => {
     const list = legPorts[k];
@@ -146,7 +158,27 @@ function renderLeg() {
     ${ps.length ? `<ul class="legpass">${ps.map(v => `<li>${esc(shortLabel(v.label))}<button type="button" data-legpdel="${esc(v.uid)}" aria-label="entfernen">✕</button></li>`).join('')}</ul>` : ''}
     <input id="legPassIn" placeholder="Ort, durch den die Route führen soll – Enter" aria-label="Zwischenpunkt hinzufügen">
     <div class="muted small">Oder auf der Karte: Linie der Fahrt antippen → „Zwischenpunkt hier“, den Punkt dann an die richtige Stelle ziehen.</div></div>`;
-  $('#legBody').innerHTML = fer + pas;
+  $('#legBody').innerHTML = '<div class="legerr" id="legErr" role="alert" hidden></div>' + fer + pas;
+  // eigene Eingaben wiederherstellen (gewählter Hafen gewinnt)
+  const put = (q, v) => {
+    const el = document.querySelector('#legDlg ' + q);
+    if (el && v != null && v !== '' && !el.value) el.value = v;
+  };
+  if (!(legFerry && legFerry.from)) put('[data-legsearch="a"]', dr.a);
+  if (!(legFerry && legFerry.to)) put('[data-legsearch="b"]', dr.b);
+  put('#legPassIn', dr.pass);
+  if (dr.hours && legFerry && legFerry.hoursSet) $('#legHours').value = dr.hours;
+}
+// eingetippten Hafen (ohne Enter) über die Suche auflösen
+async function legResolvePort(k) {
+  const t = document.querySelector(`#legDlg [data-legsearch="${k}"]`)?.value.trim(),
+    key = k === 'a' ? 'from' : 'to',
+    sel = legFerry && legFerry[key];
+  if (!t || (sel && cleanLabel(sel.label) === t)) return;
+  const r = await placeSearch(t, false);
+  if (!r.length)
+    throw new Error(`${k === 'a' ? 'Abfahrtshafen' : 'Ankunftshafen'} „${t}“ nicht gefunden – bitte anders schreiben oder einen Vorschlag antippen.`);
+  legFerry[key] = { label: r[0].label, lat: +r[0].lat, lon: +r[0].lon };
 }
 function legPortPick(k, x) {
   legFerry = legFerry || { hours: 4 };
@@ -164,7 +196,39 @@ async function applyLeg() {
   if (!s) return;
   const h = +$('#legHours')?.value;
   if (legFerry && h) legFerry.hours = Math.max(0.5, Math.min(36, h));
+  const btn = $('#legApply');
+  btn.disabled = true;
+  let passT;
+  try {
+    // eingetippte, aber nicht mit Enter bestätigte Häfen bzw. Zwischenpunkte mitnehmen
+    const typed = k => document.querySelector(`#legDlg [data-legsearch="${k}"]`)?.value.trim();
+    if (legFerry && !legFerry.from && !legFerry.to && !typed('a') && !typed('b')) legFerry = null; // Fähre geöffnet, aber leer gelassen
+    if (legFerry) {
+      legMsg('Häfen werden gesucht …');
+      await legResolvePort('a');
+      await legResolvePort('b');
+      if (!legFerry.from || !legFerry.to)
+        throw new Error('Für die Fähre bitte Abfahrts- und Ankunftshafen eintragen (Vorschlag antippen oder Namen eingeben).');
+    }
+    passT = $('#legPassIn')?.value.trim() || '';
+  } catch (err) {
+    legMsg(err.message);
+    btn.disabled = false;
+    return;
+  }
+  btn.disabled = false;
+  legMsg('');
   let list = visitsOf(s).filter(v => v.kind !== 'ferry');
+  if (passT) {
+    try {
+      const r = await placeSearch(passT, false);
+      if (!r.length) throw new Error(`„${passT}“ nicht gefunden`);
+      list.push({ uid: 'v' + ++viaSeq, label: r[0].label, lat: r[0].lat, lon: r[0].lon, kind: 'pass', pin: true });
+    } catch (err) {
+      legMsg(err.message);
+      return;
+    }
+  }
   if (legFerry && legFerry.from && legFerry.to) {
     const old = legFerry.uid && viaByUid(legFerry.uid);
     list.push({
@@ -178,9 +242,6 @@ async function applyLeg() {
       hours: legFerry.hours || 4,
       to: { label: legFerry.to.label, lat: legFerry.to.lat, lon: legFerry.to.lon }
     });
-  } else if (legFerry && (legFerry.from || legFerry.to)) {
-    flash('Für die Fähre bitte Abfahrts- und Ankunftshafen wählen.');
-    return;
   }
   $('#legDlg').close();
   await setLegVias(j, list);
@@ -235,7 +296,7 @@ $('#legDlg').addEventListener('keydown', async e => {
       await setLegVias(legJ, [...visitsOf(s), { uid: 'v' + ++viaSeq, label: g.label, lat: g.lat, lon: g.lon, kind: 'pass', pin: true }]);
     } else legPortPick(inp.dataset.legsearch, g);
   } catch (err) {
-    flash(err.message);
+    legMsg(err.message);
   }
 });
 
