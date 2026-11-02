@@ -63,9 +63,11 @@ function buildTour(name, id) {
       vias: s.vias && s.vias.length ? s.vias : undefined,
       memo: s.memo && (s.memo.res || s.memo.text) ? s.memo : undefined,
       my: s.my && Object.keys(s.my).some(k => k !== 'cid') ? s.my : undefined,
+      ferry: s.ferry && Object.keys(s.ferry).length ? s.ferry : undefined,
       nights: s.nights > 1 ? s.nights : undefined,
       dayPlan: s.dayPlan && Object.keys(s.dayPlan).length ? s.dayPlan : undefined
     })),
+    extras: state.extras && state.extras.length ? state.extras : undefined,
     endCands: state.endSearched ? state.endCands.map(c => ({ id: c.id, lat: c.lat, lon: c.lon, tags: c.tags, air: Math.round(c.air) })) : undefined
   };
 }
@@ -314,7 +316,8 @@ function loadTour(id, given, quiet) {
     via: t.via || [],
     round: !!t.round,
     segs: t.segs || null,
-    ret: t.ret || null
+    ret: t.ret || null,
+    extras: t.extras || []
   });
   t.stages.forEach(s => {
     if (s.seg == null) s.seg = 0;
@@ -366,7 +369,8 @@ function resetTour() {
     round: false,
     segs: null,
     endSearched: false,
-    ret: null
+    ret: null,
+    extras: []
   });
   $('#startIn').value = DEMO.start;
   $('#endIn').value = DEMO.end;

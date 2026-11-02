@@ -39,6 +39,13 @@ function findSightByKey(k) {
 }
 function setOwn(scope, id, f, v) {
   v = v == null ? '' : String(v).trim();
+  if (scope === 'f' || scope === 'x') {
+    const o = scope === 'f' ? state.stages[+id] && (state.stages[+id].ferry = state.stages[+id].ferry || {}) : extraById(id);
+    if (!o) return;
+    if (v === '') delete o[f];
+    else o[f] = v;
+    return;
+  }
   if (scope === 'c') {
     const s = state.stages[+id];
     if (!s) return;
@@ -186,6 +193,7 @@ function sightHoursFound(s) {
   return null;
 }
 function foundVal(scope, id, f) {
+  if (scope === 'f' || scope === 'x') return '';
   if (scope === 'c') {
     const s = state.stages[+id],
       c = s.to;
@@ -213,6 +221,8 @@ function foundVal(scope, id, f) {
   return '';
 }
 function ownVal(scope, id, f) {
+  if (scope === 'f') return state.stages[+id]?.ferry?.[f] || '';
+  if (scope === 'x') return extraById(id)?.[f] || '';
   if (scope === 'c') {
     const s = state.stages[+id];
     return f === 'note' ? s.memo?.text || '' : campMy(s)[f] || '';
@@ -235,7 +245,9 @@ const FIELD = {
   nr: { l: 'Buchungsnr.', ph: '+ Buchungsnr.' },
   pitch: { l: 'Stellplatz', ph: '+ Stellplatz' },
   phone: { l: 'Telefon', ph: '+ Telefon' },
-  amount: { l: 'Betrag', ph: 'z. B. 140 € oder 4 × 35 €' }
+  amount: { l: 'Betrag', ph: 'z. B. 140 € oder 4 × 35 €' },
+  price: { l: 'Preis', ph: 'Preis, z. B. 1.250 SEK' },
+  text: { l: 'Aufgabe', ph: 'Aufgabe, z. B. Vignette kaufen' }
 };
 const edKey = (scope, id, f) => esc(`${scope}|${id}|${f}`);
 const rsBtn = k =>
@@ -269,9 +281,9 @@ function caret(i, open) {
 }
 function startRows(ds, open) {
   const vs = state.stages[0] ? visitsOf(state.stages[0]) : [];
-  let h = `<tr class="pt">${td('Datum', ds ? fdate(ds[0]) : '')}${td('Name', `${vs.length ? caret(-1, open) : ''}<b>Start: ${esc(shortLabel(state.start.label))}</b>`)}${td('Adresse', esc(cleanLabel(state.start.label)))}${td('Zeiten', '')}${td('Preis / Status', '')}${td('Notiz / Buchung', '')}${td('Weiter / Entfernung', driveHtml(0))}</tr>`;
+  let h = `<tr class="pt">${td('Datum', ds ? fdate(ds[0]) : '')}${td('Name', `${caret(-1, open)}<b>Start: ${esc(shortLabel(state.start.label))}</b>`)}${td('Adresse', esc(cleanLabel(state.start.label)))}${td('Zeiten', '')}${td('Preis / Status', '')}${td('Notiz / Buchung', '')}${td('Weiter / Entfernung', driveHtml(0))}</tr>`;
   if (open) vs.forEach(v => (h += visitRowHtml(v)));
-  return h;
+  return h + groupExtrasHtml(-1, ds, open);
 }
 function campRowHtml(i, open, ds, cur) {
   const s = state.stages[i],
@@ -447,7 +459,7 @@ function planTableHtml() {
   h += `<tbody class="grp start${o0 ? ' open' : ''}" data-grpb="-1">${startRows(ds, o0)}</tbody>`;
   st.forEach((s, i) => {
     if (i === last && s.to.kind !== 'camp') {
-      h += `<tbody class="grp">${endRowHtml(i, ds)}</tbody>`;
+      h += `<tbody class="grp">${endRowHtml(i, ds)}${groupExtrasHtml(i, ds, false)}</tbody>`;
       return;
     }
     const open = grpOpen(i, cur);
@@ -456,9 +468,10 @@ function planTableHtml() {
       if (s.to.sights && s.to.sights.length) sortSights(s.to.sights).forEach(x => (b += sightRowHtml(x, s.to)));
       if (st[i + 1]) visitsOf(st[i + 1]).forEach(v => (b += visitRowHtml(v)));
     }
+    b += groupExtrasHtml(i, ds, open);
     h += `<tbody class="grp${open ? ' open' : ''}" data-grpb="${i}">${b}</tbody>`;
   });
-  return h + '</table>';
+  return h + '</table>' + costsHtml();
 }
 // Sehenswürdigkeiten einer Gruppe: mit Besuchstag zuerst (nach Datum), dann nach Entfernung vom Platz
 function sortSights(list) {
@@ -538,7 +551,10 @@ $('#tripView').addEventListener('click', e => {
     tlOpen.add(-1);
     if (i === -1) {
       if (tlOpen.has(-3)) tlOpen.delete(-3);
-      else tlOpen.add(-3);
+      else {
+        tlOpen.add(-3);
+        if (state.stages[0]) visitsOf(state.stages[0]).forEach(x => Promise.all([enrichSight(x), loadGSight(x)]).then(r => r.some(Boolean) && renderTrip()));
+      }
     } else if (tlOpen.has(i) || (i === currentStage() && !tlOpen.has(-1))) tlOpen.delete(i);
     else {
       tlOpen.add(i);
@@ -558,7 +574,7 @@ $('#tripView').addEventListener('change', e => {
   const sel = e.target.closest('[data-sel]');
   if (!sel) return;
   const [scope, id, f] = sel.dataset.sel.split('|');
-  setOwn(scope, id, f, sel.value);
+  setOwn(scope, id, f, sel.type === 'checkbox' ? (sel.checked ? '1' : '') : sel.value);
   afterEdit();
 });
 // beim Aufklappen einer Gruppe: Adresse, Google-Daten und Infos der Sehenswürdigkeiten nachladen

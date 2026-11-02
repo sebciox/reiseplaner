@@ -2396,3 +2396,113 @@ select.st-open {
     border: 0;
   }
 }
+/* Reiseplan: Fähren, eigene Zeilen, Kosten, offene Punkte */
+.ptab tr.ferry td,
+.ptab tr.cost td {
+  font-size: 13px;
+  border-top: 1px dashed var(--line);
+}
+.ptab tr.ferry td.nm,
+.ptab tr.cost td.nm {
+  padding-left: 24px;
+}
+.ptab tr.addrow td {
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  padding: 5px 8px 7px 24px;
+}
+.ptab .xdel {
+  font-size: 13px;
+}
+.ownstay .ownf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 6px 0;
+}
+.ownstay .ownf input:not([type]) {
+  flex: 1 1 240px;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+}
+.ownstay .ownhits {
+  position: static;
+  display: block;
+  margin-top: 6px;
+}
+.openchip {
+  background: var(--warn-soft);
+  color: var(--text);
+}
+.costs {
+  margin-top: 14px;
+}
+.costs details {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+.costs summary {
+  cursor: pointer;
+}
+.costtab {
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 13.5px;
+}
+.costtab th,
+.costtab td {
+  padding: 3px 14px 3px 0;
+  text-align: right;
+}
+.costtab th:first-child,
+.costtab td:first-child {
+  text-align: left;
+}
+.costtab th {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.costtab tr.tot td {
+  border-top: 1px solid var(--line);
+  font-weight: 700;
+}
+.oplist {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 8px;
+}
+.oplist li {
+  padding: 3px 0;
+  font-size: 13.5px;
+}
+.oplist li.task.done .ed {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.oplist .openamt {
+  margin-left: 4px;
+}
+@media (max-width: 899px) {
+  .ptab tr.ferry,
+  .ptab tr.cost {
+    margin-left: 12px;
+    border-top: 1px dashed var(--line);
+  }
+  .ptab tr.addrow {
+    display: block;
+    padding: 6px 11px;
+  }
+  .ptab tr.ferry td,
+  .ptab tr.cost td,
+  .ptab tr.addrow td {
+    padding: 0;
+    border: 0;
+  }
+}

@@ -723,6 +723,11 @@ async function replaceStop(i, c) {
   if (s.to.sights) to.sights = s.to.sights.map(x => ({ ...x, d: x.lat != null ? hav([c.lat, c.lon], [x.lat, x.lon]) * 1.3 : null, t: null, est: true }));
   const r = await route(s.from, to, visitsOf(s));
   state.stages[i] = { ...s, to, line: r.line, dist: r.dist, dur: r.dur, ex: r.ex, countries: undefined, note: null, memo: undefined };
+  // eigene Zeilen (Fähre/Kosten) dieses Aufenthalts bleiben beim neuen Platz
+  const oldKey = String(s.to.id || s.to.label);
+  (state.extras || []).forEach(e => {
+    if (e.at === oldKey) e.at = String(to.id || to.label);
+  });
   const nx = state.stages[i + 1];
   if (nx) {
     const r2 = await route(to, nx.to, visitsOf(nx));

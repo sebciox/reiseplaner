@@ -128,7 +128,7 @@ async function loadGName(c) {
 }
 // Aktueller Name laut Google (live, nicht gespeichert): aus der Bewertungs-Abfrage (nur echter Campingplatz ≤ 500 m) oder dem Namensabgleich
 function gBetterName(c) {
-  if (!c || (c.kind && c.kind !== 'camp')) return '';
+  if (!c || (c.kind && c.kind !== 'camp') || c.tags?.['gp:own']) return ''; // eigene Unterkunft: kein Google-Name
   const osm = c.tags?.name || c.label || '',
     g = gRate.get(c.id);
   if (g && g.name && g.near && namesDiffer(osm, g.name)) return g.name;

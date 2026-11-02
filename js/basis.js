@@ -67,7 +67,8 @@ const state = {
   via: [], // Zwischenziele { uid, label, lat, lon, kind:'stay'|'visit', nights }
   round: false, // Rundreise: zurück zum Start
   segs: null,
-  ret: null
+  ret: null,
+  extras: [] // eigene Zeilen im Reiseplan: Fähren, Kosten, Aufgaben (siehe zusatz.js)
 }; // ret = spätestes Rückkehr-/Ankunftsdatum; segs = Abschnitte bei Zwischenzielen { to, kind:'sight'|'end'|'home', visits, n, nights, radius, dist, dur }
 const campIndex = new Map();
 const $ = s => document.querySelector(s);

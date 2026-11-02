@@ -622,7 +622,8 @@ window.addEventListener('resize', () => updateWide());
 document.querySelectorAll('[data-tabbtn]').forEach(b => (b.onclick = () => setTab(b.dataset.tabbtn)));
 $('#toPlan').onclick = () => setTab('plan');
 $('#tripBar').addEventListener('click', e => {
-  if (e.target.closest('[data-savenow]')) saveTour();
+  if (e.target.closest('[data-opento]')) gotoOpenList();
+  else if (e.target.closest('[data-savenow]')) saveTour();
   else if (e.target.closest('[data-savesync]')) {
     if (saveInfo.online === 'error' || saveInfo.online === 'pending') scheduleOnline(true);
   } else if (e.target.closest('[data-tripx]')) {

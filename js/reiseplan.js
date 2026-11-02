@@ -137,6 +137,9 @@ function renderTrip() {
       );
   }
   el.querySelectorAll('[data-goto]').forEach(b => (b.onclick = () => setTab(b.dataset.goto)));
+  // Chip „n offen · … €“ in der Reisezeile mitziehen
+  const oc = $('#tripBar [data-opento]');
+  if (oc) oc.outerHTML = openChipHtml();
   // aufgeklappte Gruppen: Infos einmal nachladen (z. B. die aktuelle Etappe beim ersten Öffnen)
   el.querySelectorAll('tbody.grp.open[data-grpb]').forEach(b => {
     const i = +b.dataset.grpb;

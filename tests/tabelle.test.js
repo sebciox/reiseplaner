@@ -388,6 +388,89 @@ const srv = require('./lib/server')(ROOT, 8152);
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(OUT, 'tabelle-laptop.png') });
+  // ---------- Schritt 2: Fähre, eigene Zeilen, Kosten, offene Punkte, eigene Unterkunft ----------
+  await page.evaluate(() => {
+    state.stages[1].ex = { ...(state.stages[1].ex || {}), ferry: 150000 };
+    tlOpen.add(-1);
+    tlOpen.add(0);
+    renderTrip();
+  });
+  ok(!!(await page.$('#tripView tbody[data-grpb="0"] tr.ferry')), 'Fähre auf der Weiterfahrt → eigene Zeile in der Gruppe');
+  await edit('f|1|price', '1.250 SEK');
+  await page.selectOption('#tripView select[data-sel="f|1|status"]', 'booked');
+  await edit('f|1|nr', 'FERRY-1');
+  ok(
+    await page.evaluate(
+      () => state.stages[1].ferry.price === '1.250 SEK' && state.stages[1].ferry.status === 'booked' && state.stages[1].ferry.nr === 'FERRY-1'
+    ),
+    'Fähre: Preis, Status, Buchungsnr. gespeichert'
+  );
+  await page.click('#tripView [data-xadd="cost"][data-at="0"]');
+  await page.waitForSelector('#tripView .edin');
+  await page.fill('#tripView .edin', 'Maut Öresundbrücke');
+  await page.press('#tripView .edin', 'Enter');
+  const xid = await page.evaluate(() => state.extras[0].id);
+  await edit(`x|${xid}|amount`, '62 €');
+  ok(
+    await page.evaluate(() => state.extras.length === 1 && state.extras[0].kind === 'cost' && state.extras[0].amount === '62 €'),
+    '+ Zeile → Kosten mit Bezeichnung und Betrag'
+  );
+  await page.click('#tripView [data-xadd="task"]');
+  await page.waitForSelector('#tripView .edin');
+  await page.fill('#tripView .edin', 'Vignette kaufen');
+  await page.press('#tripView .edin', 'Enter');
+  let ol = await row('#openList');
+  ok(
+    /gebucht: Fähre/.test(ol) && /Offen: Maut Öresundbrücke · [^≈]*62 €/.test(ol) && /Vignette kaufen/.test(ol) && /Noch nicht gebucht/.test(ol),
+    'Offene Punkte: Fähre, Kosten, Aufgabe, nicht Gebuchtes: ' + ol.slice(0, 220)
+  );
+  ok(/Fähren/.test(ol) && /Sonstiges/.test(ol) && /Summe/.test(ol), 'Kostensumme nach Bereichen');
+  const chip1 = await page.textContent('#tripBar [data-opento]');
+  const tid = await page.evaluate(() => state.extras.find(e => e.kind === 'task').id);
+  await page.check(`#tripView input[type=checkbox][data-sel="x|${tid}|done"]`);
+  const chip2 = await page.textContent('#tripBar [data-opento]');
+  ok(
+    /^\d+ offen · ≈ [\d.]+ €$/.test(chip1.trim()) && parseInt(chip2) === parseInt(chip1) - 1,
+    `Chip in der Reisezeile: „${chip1.trim()}“ → Aufgabe erledigt → „${chip2.trim()}“`
+  );
+  await page.waitForTimeout(1300);
+  ok(
+    await page.evaluate(() => {
+      const t = loadTours()[0];
+      return t.extras?.length === 2 && t.stages[1].ferry?.nr === 'FERRY-1';
+    }),
+    'Fähre und eigene Zeilen in der Tour gespeichert'
+  );
+  // eigene Unterkunft statt Platz 1
+  const n0 = await page.evaluate(() => state.stages.length);
+  await page.click('#tripView [data-xadd="stay"][data-at="0"]');
+  await page.fill('#tripView form.ownstay input[name=n]', 'Bauernhof Vellinge');
+  const co = await page.evaluate(() => `${(state.stages[0].to.lat + 0.01).toFixed(5)}, ${(state.stages[0].to.lon + 0.01).toFixed(5)}`);
+  await page.fill('#tripView form.ownstay input[name=q]', co);
+  await page.click('#tripView form.ownstay button[type=submit]');
+  await page.waitForFunction(() => !state.busy && String(state.stages[0].to.id).startsWith('eigen/'), null, { timeout: 15000 });
+  ok(
+    (await page.evaluate(n => state.stages.length === n, n0)) && /^Bauernhof Vellinge✎?$/.test((await page.textContent('#tripView tr.camp .pname')).trim()),
+    'eigene Unterkunft statt Platz: Etappenziel, Route neu, ohne Google-/OSM-Namen'
+  );
+  ok(!!(await page.$('#tripView tbody[data-grpb="0"] tr.cost')), 'Kostenzeile bleibt beim ersetzten Aufenthalt');
+  // eigene Unterkunft zusätzlich auf der ersten Fahrt
+  await page.click('#tripView [data-grp="-1"]');
+  await page.click('#tripView [data-xadd="stay"][data-at="-1"]');
+  await page.fill('#tripView form.ownstay input[name=n]', 'Zwischenhof');
+  const co2 = await page.evaluate(() => {
+    const l = state.stages[0].line[Math.floor(state.stages[0].line.length / 2)];
+    return `${l[0].toFixed(5)}, ${l[1].toFixed(5)}`;
+  });
+  await page.fill('#tripView form.ownstay input[name=q]', co2);
+  await page.click('#tripView form.ownstay button[type=submit]');
+  await page.waitForFunction(n => !state.busy && state.stages.length === n + 1, n0, { timeout: 15000 });
+  ok(await page.evaluate(() => state.stages[0].to.tags.name === 'Zwischenhof'), 'eigene Unterkunft als zusätzlicher Stopp auf der Fahrt');
+  ok(
+    !(await page.$('#tripView tbody[data-grpb="0"] tr.cost')) && !!(await page.$('#tripView tbody[data-grpb="1"] tr.cost')),
+    'Kostenzeile wandert mit ihrem Aufenthalt (jetzt Gruppe 2)'
+  );
+  await page.screenshot({ path: path.join(OUT, 'tabelle-schritt2.png'), fullPage: false });
   // Konflikt: offene Tour online auf anderem Gerät geändert
   await page.evaluate(() => {
     const rt = JSON.parse(JSON.stringify(loadTours()[0]));
