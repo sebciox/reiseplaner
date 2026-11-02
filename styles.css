@@ -2083,3 +2083,316 @@ a {
 .leaflet-container a.btn {
   color: #fff;
 }
+
+/* ---------- Reiseplan als Tabelle (Reiter 3) ---------- */
+/* Laptop: Karte oben, Tabelle unten über die ganze Breite; Trennlinie (#resizer) ziehbar */
+@media (min-width: 900px) {
+  body.tripwide #map {
+    inset: 0 0 auto 0;
+    height: var(--mh, 42vh);
+  }
+  body.tripwide #panel {
+    top: var(--mh, 42vh);
+    left: 0;
+    right: 0;
+    width: auto;
+    box-shadow: 0 -2px 18px rgba(0, 0, 0, 0.14);
+  }
+  body.tripwide #resizer {
+    top: -5px;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 10px;
+    cursor: row-resize;
+  }
+  body.tripwide #resizer::after {
+    top: 3px;
+    left: 50%;
+    width: 44px;
+    height: 4px;
+    margin: 0 0 0 -22px;
+  }
+  body.tripwide #toast,
+  body.tripwide #mapBusy {
+    left: 50%;
+  }
+  body.tripwide #panelHead {
+    padding-top: 10px;
+  }
+}
+.tripline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tripline .tripchips {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+.savechip {
+  flex: none;
+  border: 0;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.savechip.unsaved {
+  background: #fbe3df;
+  color: #a3301f;
+  font-weight: 700;
+}
+.savechip.warnc {
+  background: var(--warn-soft);
+  color: var(--text);
+}
+.ptwrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+table.ptab {
+  width: 100%;
+  min-width: 940px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13.5px;
+}
+.ptab col.c-dat {
+  width: 118px;
+}
+.ptab col.c-nm {
+  width: 21%;
+}
+.ptab col.c-ad {
+  width: 17%;
+}
+.ptab col.c-zt {
+  width: 15%;
+}
+.ptab col.c-pr {
+  width: 17%;
+}
+.ptab col.c-nt {
+  width: 15%;
+}
+.ptab col.c-wt {
+  width: 124px;
+}
+.ptab th {
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--line);
+}
+.ptab td {
+  padding: 7px 8px;
+  vertical-align: top;
+  border-top: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.ptab tbody.grp {
+  border-top: 2px solid var(--line);
+}
+.ptab tbody.open tr.camp td {
+  background: var(--brand-soft);
+}
+.ptab tr.sight td {
+  font-size: 13px;
+  border-top: 1px dashed var(--line);
+}
+.ptab tr.sight td.nm {
+  padding-left: 24px;
+}
+.ptab tr.pt td {
+  color: var(--muted);
+}
+.ptab tr.cur td:first-child {
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+.ptab .x {
+  margin-top: 3px;
+}
+.ptab .cnt {
+  color: var(--accent);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ptab .nstep {
+  margin-top: 4px;
+}
+.ptab .sbtns {
+  margin-top: 6px;
+}
+.ptab .gh summary {
+  font-size: 12.5px;
+}
+.grptog {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 5px 0 0;
+  color: var(--brand-ink);
+}
+.ed {
+  cursor: text;
+  border-radius: 4px;
+  border-bottom: 1px dotted transparent;
+}
+.ed:hover,
+.ed:focus-visible {
+  background: var(--field);
+  border-bottom-color: var(--muted);
+  outline: none;
+}
+.ed .ph {
+  color: var(--muted);
+  font-style: italic;
+}
+.ownt {
+  font-size: 10.5px;
+  color: var(--brand-ink);
+  background: var(--brand-soft);
+  border-radius: 6px;
+  padding: 0 4px;
+  margin-left: 3px;
+  white-space: nowrap;
+}
+.edb,
+.rs {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0 3px;
+}
+.edb:hover,
+.rs:hover {
+  color: var(--brand-ink);
+}
+.edin {
+  width: 100%;
+  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--text);
+}
+.stsel,
+.dayin {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--text);
+  max-width: 100%;
+}
+.dayin {
+  width: 100%;
+  max-width: 140px;
+}
+.stdot.st-open,
+.openamt {
+  color: var(--danger);
+}
+.stdot.st-booked,
+.stdot.st-partial {
+  color: #c08a1e;
+}
+.stdot.st-onsite {
+  color: var(--accent);
+}
+.stdot.st-paid,
+.stdot.st-bought,
+.stdot.st-free {
+  color: var(--ok);
+}
+select.st-paid,
+select.st-bought,
+select.st-free {
+  border-color: var(--ok);
+}
+select.st-open {
+  border-color: var(--danger);
+}
+/* Handy: dieselben Zellen als Karten untereinander (Beschriftung aus data-l) */
+@media (max-width: 899px) {
+  .ptwrap {
+    overflow: visible;
+  }
+  table.ptab,
+  .ptab tbody,
+  .ptab tr,
+  .ptab td {
+    display: block;
+    width: auto;
+    min-width: 0;
+  }
+  .ptab colgroup,
+  .ptab thead {
+    display: none;
+  }
+  .ptab tbody.grp {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    margin: 10px 0;
+    overflow: hidden;
+  }
+  .ptab tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+    padding: 9px 11px;
+  }
+  .ptab td,
+  .ptab tbody.open tr.camp td {
+    border: 0;
+    padding: 0;
+    background: none;
+  }
+  .ptab tbody.open tr.camp {
+    background: var(--brand-soft);
+  }
+  .ptab td[data-l]::before {
+    content: attr(data-l);
+    display: block;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+  }
+  .ptab td.nm {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+  .ptab td.nm::before {
+    display: none;
+  }
+  .ptab td:empty {
+    display: none;
+  }
+  .ptab tr.sight {
+    margin-left: 12px;
+    border-top: 1px dashed var(--line);
+  }
+  .ptab tr.sight td,
+  .ptab tr.sight td.nm {
+    padding: 0;
+    border: 0;
+  }
+}

@@ -416,8 +416,20 @@ function priceHtml(c, compact, placeholder) {
 let priceQueue = new Map(),
   priceTimer = null,
   pricePoll = [];
-function requestPrices(list) {
+// Sehenswürdigkeiten mit Website, für die noch keine (aktuelle) Website-Recherche vorliegt → über anfragen.json anfragen
+function requestSights(list) {
   if (!ghOn() || !list || !list.length) return;
+  for (const x of list) {
+    const w = x.info?.web;
+    if (!w || x.info?.town || priceReq.has('web:' + w)) continue;
+    if ((rzData['web:' + w]?.v || 0) >= 2) continue;
+    priceReq.set('web:' + w, Date.now());
+    priceQueue.set('web:' + w, { id: 'web:' + w, name: x.label || '', website: w, sight: true });
+  }
+  if (priceQueue.size) requestPrices([]);
+}
+function requestPrices(list) {
+  if (!ghOn() || !list) return;
   for (const c of list.slice(0, 15)) {
     const t = researchTarget(c);
     if (!t || priceReq.has(t.key)) continue;
@@ -429,16 +441,26 @@ function requestPrices(list) {
   if (!priceQueue.size) return;
   clearTimeout(priceTimer);
   priceTimer = setTimeout(async () => {
-    const camps = [...priceQueue.values()];
+    const all = [...priceQueue.values()];
     priceQueue.clear();
+    const camps = all.filter(x => !x.sight).map(({ sight, ...x }) => x),
+      sights = all.filter(x => x.sight).map(({ sight, ...x }) => x);
     try {
       const cur = await ghRead('anfragen.json').catch(() => null);
-      const old = (cur?.data?.camps || []).filter(x => Date.now() - Date.parse(x.at || 0) < 864e5 && !camps.some(y => y.id === x.id));
+      const fresh = (list, now) => (list || []).filter(x => Date.now() - Date.parse(x.at || 0) < 864e5 && !now.some(y => y.id === x.id));
       const at = new Date().toISOString();
-      await ghWrite('anfragen.json', { camps: [...old, ...camps.map(x => ({ ...x, at }))].slice(-60) }, cur?.sha, `Preise anfragen: ${camps.length} Plätze`);
+      await ghWrite(
+        'anfragen.json',
+        {
+          camps: [...fresh(cur?.data?.camps, camps), ...camps.map(x => ({ ...x, at }))].slice(-60),
+          sights: [...fresh(cur?.data?.sights, sights), ...sights.map(x => ({ ...x, at }))].slice(-60)
+        },
+        cur?.sha,
+        `Recherche anfragen: ${[camps.length && camps.length + ' Plätze', sights.length && sights.length + ' Sehenswürdigkeiten'].filter(Boolean).join(', ')}`
+      );
     } catch (e) {
       console.warn(e);
-      camps.forEach(x => priceReq.delete(x.id));
+      all.forEach(x => priceReq.delete(x.id));
       return;
     }
     // Ergebnis kommt nach ~2–5 Min. → rezeption.json mehrmals nachladen

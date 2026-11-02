@@ -5,7 +5,7 @@
    Dateien: einstellungen.json (ohne Token) und touren/<id>.json (Format wie die Tour-Datei).
    gp.sync merkt sich je Tour den zuletzt abgeglichenen Stand { sha, at } und ausstehende Löschungen. */
 const GH = 'https://api.github.com';
-const SYNC_KEYS = ['key', 'speed', 'detour', 'cmin', 'cmax', 'highway', 'noToll', 'altRadius', 'filters', 'gkey', 'sortBy'];
+const SYNC_KEYS = ['key', 'speed', 'detour', 'cmin', 'cmax', 'highway', 'noToll', 'altRadius', 'filters', 'gkey', 'sortBy', 'adults', 'kids'];
 const ghOn = () => !!(settings.ghToken && /^[\w.-]+\/[\w.-]+$/.test(settings.ghRepo || ''));
 function syncMeta() {
   try {
@@ -118,7 +118,7 @@ function syncNow() {
 async function doSync() {
   await gh('GET', ''); // Repo erreichbar und Token gültig?
   const meta = syncMeta(),
-    res = { settings: false, pulled: 0, pushed: 0, removed: 0 };
+    res = { settings: false, pulled: 0, pushed: 0, removed: 0, pulledIds: [] };
   // 1) Einstellungen
   const f = await ghRead('einstellungen.json');
   const pushSettings = async sha => {
@@ -172,10 +172,16 @@ async function doSync() {
       const rf = await ghRead(tourPath(id));
       if (!rf) continue;
       const rt = rf.data.tour || rf.data;
+      // offene Tour hier und dort geändert → nicht still überschreiben, sondern nachfragen (afterSync → askConflict)
+      if (l && localChanged && k && id === state.tourId) {
+        res.conflict = { id, rt, sha: rf.sha };
+        continue;
+      }
       if (!l || !localChanged || new Date(rt.savedAt) >= new Date(l.savedAt)) {
         local.set(id, rt);
         changed = true;
         res.pulled++;
+        res.pulledIds.push(id);
         meta.known[id] = { sha: rf.sha, at: rt.savedAt };
       } else await push(l, rf.sha);
     } else if (r && localChanged) await push(l, r);
@@ -239,6 +245,9 @@ async function syncAndReport(okMsg, errMsg) {
   if (!ghOn()) return;
   try {
     const r = await syncNow();
+    if (saveInfo.online !== 'conflict') saveInfo.online = 'ok';
+    afterSync(r);
+    renderSaveChip();
     if (r && r.settings && $('#status').classList.contains('error') && settings.key) setStatus('');
     if (r && r.pushed) rzRecheck();
     if (r && (r.rz || r.pulled)) renderPanel();
@@ -253,6 +262,8 @@ async function syncAndReport(okMsg, errMsg) {
     else if (parts.length) flash('Online-Speicher: ' + parts.join(', ') + '.');
   } catch (e) {
     console.warn(e);
+    saveInfo.online = 'error';
+    renderSaveChip();
     setStatus((errMsg || 'Online-Speicher: ') + e.message, 'error');
   }
   if ($('#toursDlg').open) openTours();

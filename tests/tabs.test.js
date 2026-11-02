@@ -305,17 +305,31 @@ const srv = require('./lib/server')(ROOT, 8147);
   await page.click('#tripView [data-more]');
   await page.click('[data-tlall="0"]');
   await page.waitForTimeout(200);
-  const stops = await page.$$eval('#tripView .tl-stop', e => e.map(x => x.innerText.replace(/\s+/g, ' ').trim()));
-  ok(stops.length >= 1 && stops[0].includes('★ Paris') && /Nacht/.test(stops[0]), 'Zeitleiste: Platz mit untergeordnetem ★ Paris: ' + stops[0].slice(0, 90));
-  ok((await page.$$eval('#tripView .tl-drive', e => e.length)) === (await page.evaluate(() => state.stages.length)), 'je Etappe eine Fahrt');
-  // Nächte in der Zeitleiste
-  await page.click('#tripView details[data-tl="0"] summary');
-  await page.waitForSelector('#tripView details[data-tl="0"][open]');
+  const camps = await page.$$eval('#tripView tr.camp', e => e.map(x => x.innerText.replace(/\s+/g, ' ').trim()));
+  ok(
+    camps.length >= 1 && /★ 1/.test(camps[0]) && /Nacht/.test(camps[0]),
+    'Tabelle eingeklappt: Kurzzeile je Aufenthalt mit ★-Anzahl: ' + camps[0].slice(0, 90)
+  );
+  ok((await page.$$eval('#tripView .ptab thead th', e => e.length)) === 7, 'Tabelle mit 7 Spalten');
+  ok(!(await page.$('#tripView tr.sight')), 'eingeklappt: keine Unterzeilen');
+  ok(
+    await page.evaluate(() => {
+      const m = $('#map').getBoundingClientRect(),
+        p = $('#panel').getBoundingClientRect();
+      return document.body.classList.contains('tripwide') && p.left === 0 && p.width >= innerWidth - 1 && m.bottom <= p.top + 1 && m.height > 150;
+    }),
+    'Laptop, Reiter 3: Karte oben, Reiseplan unten über die ganze Breite'
+  );
+  // Nächte in der Tabelle (Gruppe aufklappen)
+  await page.click('#tripView [data-grp="0"]');
+  await page.waitForSelector('#tripView tbody[data-grpb="0"].open tr.sight');
+  ok(/★ Paris/.test(await page.textContent('#tripView tbody[data-grpb="0"] tr.sight')), 'aufgeklappt: ★ Paris als Unterzeile unter dem Platz');
   await page.click('[data-tlnight="0"][data-d="1"]');
-  ok((await page.evaluate(() => state.stages[0].nights === 2)) && /2 Nächte/.test(await page.textContent('#tripView .tl-stop')), 'Nächte + in der Zeitleiste');
-  ok(await page.evaluate(() => $('#tripView details[data-tl="0"]').open), 'aufgeklappt bleibt aufgeklappt');
+  ok((await page.evaluate(() => state.stages[0].nights === 2)) && /2 Nächte/.test(await page.textContent('#tripView tr.camp')), 'Nächte + in der Tabelle');
+  ok(await page.evaluate(() => !!$('#tripView tbody[data-grpb="0"].open')), 'aufgeklappt bleibt aufgeklappt');
   await page.waitForFunction(() => /Sjötorpets/.test($('#tripView').textContent), null, { timeout: 5000 }).catch(() => {});
-  ok(/Sjötorpets Camping \(OSM: Lokal 0\)/.test(await page.textContent('#tripView .tl-name')), 'abweichender Name bei Google angezeigt');
+  ok(/Sjötorpets Camping \(OSM: Lokal 0\)/.test(await page.textContent('#tripView tr.camp .pname')), 'abweichender Name bei Google angezeigt');
+  ok(/nicht gespeichert/.test(await page.textContent('#saveChip')), 'Reisezeile: „nicht gespeichert“');
   // feste Reisezeile beim Scrollen
   await page.click('[data-tlall="1"]');
   await page.waitForTimeout(300);
@@ -373,12 +387,17 @@ const srv = require('./lib/server')(ROOT, 8147);
     'erneut Speichern → „' + (await page.textContent('#toast')) + '“'
   );
   ok((await page.textContent('#tripView h3')).includes('Paris-Tour'), 'Reiseplan-Titel = Tourname');
+  ok(/✓ gespeichert \d\d:\d\d/.test(await page.textContent('#saveChip')), 'Reisezeile: „' + (await page.textContent('#saveChip')) + '“');
   // Bearbeiten → Reiter 2 mit offener Etappe
   await page.click('[data-tledit="0"]');
   await page.waitForTimeout(300);
   ok((await tab()) === 'plan' && (await page.evaluate(() => state.openDet.has(0))), 'Bearbeiten → Reiter 2, Details offen');
   await page.click('[data-tabbtn="goals"]');
   ok((await vis('#planForm')) && (await vis('#viaIn')), 'Reiter 1 jederzeit erreichbar');
+  ok(
+    await page.evaluate(() => !document.body.classList.contains('tripwide') && $('#panel').getBoundingClientRect().top === 0),
+    'Reiter 1: wieder Seitenleiste links'
+  );
   ok(await vis('#toPlan'), 'Reiter 1: „Weiter: 2 Plätze →“');
   await page.click('#toPlan');
   ok((await tab()) === 'plan' && (await vis('#result [data-goto="trip"]')), 'Weiter → Reiter 2, dort „Weiter: Reiseplan →“');

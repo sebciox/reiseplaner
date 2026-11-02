@@ -95,7 +95,7 @@ function tripChips() {
   const e = tripEnd(),
     dm = d => `${d.getDate()}.${d.getMonth() + 1}.`;
   if (!e)
-    return `<button type="button" class="tripchips" data-tripdate><span class="chip">📅 Abfahrtsdatum eintragen</span></button><div class="tripdet" hidden>${tripHtml()}</div>`;
+    return `<div class="tripline"><button type="button" class="tripchips" data-tripdate><span class="chip">📅 Abfahrtsdatum eintragen</span></button>${saveChipHtml()}</div><div class="tripdet" hidden>${tripHtml()}</div>`;
   const d0 = new Date(state.date + 'T12:00:00'),
     days = dayDiff(e, d0) + 1;
   let st = '';
@@ -106,8 +106,8 @@ function tripChips() {
         ? `<span class="chip bad">⚠ ${over} ${over === 1 ? 'Tag' : 'Tage'} zu lang</span>`
         : `<span class="chip good">✓ ${over === 0 ? 'passt genau' : `${-over} ${-over === 1 ? 'Tag' : 'Tage'} Puffer`}</span>`;
   }
-  return `<button type="button" class="tripchips" data-tripx aria-expanded="${tripOpen}" title="${tripOpen ? 'Details ausblenden' : 'Details anzeigen'}">
-    <span class="chip">📅 ${dm(d0)} – ${dm(e)}${!state.done ? ' <span class="est">geschätzt</span>' : ''}</span><span class="chip">${days} ${days === 1 ? 'Tag' : 'Tage'}</span>${st}<span class="caret">${tripOpen ? '▴' : '▾'}</span></button>
+  return `<div class="tripline"><button type="button" class="tripchips" data-tripx aria-expanded="${tripOpen}" title="${tripOpen ? 'Details ausblenden' : 'Details anzeigen'}">
+    <span class="chip">📅 ${dm(d0)} – ${dm(e)}${!state.done ? ' <span class="est">geschätzt</span>' : ''}</span><span class="chip">${days} ${days === 1 ? 'Tag' : 'Tage'}</span>${st}<span class="caret">${tripOpen ? '▴' : '▾'}</span></button>${saveChipHtml()}</div>
     <div class="tripdet"${tripOpen ? '' : ' hidden'}>${tripHtml()}</div>`;
 }
 const dayKey = d => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();

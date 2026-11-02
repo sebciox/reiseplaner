@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Reiseplaner">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<link rel="stylesheet" href="styles.css?v=54">
+<link rel="stylesheet" href="styles.css?v=55">
 </head>
 <body>
 <div id="map" aria-label="Karte"></div>
@@ -107,6 +107,11 @@
     <div class="field" style="margin-top:14px"><label for="sGkey">Google-API-Schlüssel (für Bewertungen)</label>
       <input id="sGkey" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="AIza…">
       <div class="muted">Optional. Zeigt Google-Sterne bei den Campingplätzen (Places API). Leer = nur Link zu Google Maps.</div></div>
+    <div class="grid2" style="margin-top:14px">
+      <div class="field"><label for="sAdults">Reisende: Erwachsene</label><input id="sAdults" type="number" min="0" max="20" step="1" inputmode="numeric"></div>
+      <div class="field"><label for="sKids">Kinder</label><input id="sKids" type="number" min="0" max="20" step="1" inputmode="numeric"></div>
+    </div>
+    <div class="muted">Für die geschätzten Eintrittspreise im Reiseplan (Erwachsenen- und Kinderpreis von der Website).</div>
     <h3 style="margin:18px 0 6px">Online-Speicher (privates GitHub-Repo)</h3>
     <div class="muted" style="margin-bottom:8px">Touren und Einstellungen (inkl. ORS-Schlüssel) werden dort gespeichert – so hast du sie auf Handy und Laptop. Der Token bleibt nur in diesem Browser.</div>
     <div class="field"><label for="sRepo">Repo (Besitzer/Name)</label>
@@ -145,22 +150,28 @@
     <button class="btn" type="button" id="sumClose">Schließen</button>
   </div>
 </dialog>
+<dialog id="askDlg">
+  <div class="dlg-head"><h2 id="askTitle"></h2></div>
+  <div class="dlg-body"><p id="askText" style="margin:0"></p></div>
+  <div class="dlg-actions" id="askBtns"></div>
+</dialog>
 <div id="print" aria-hidden="true"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="js/basis.js?v=54"></script>
-<script src="js/dienste.js?v=54"></script>
-<script src="js/daten.js?v=54"></script>
-<script src="js/recherche.js?v=54"></script>
-<script src="js/google.js?v=54"></script>
-<script src="js/etappe.js?v=54"></script>
-<script src="js/planung.js?v=54"></script>
-<script src="js/karte.js?v=54"></script>
-<script src="js/panel.js?v=54"></script>
-<script src="js/ziele.js?v=54"></script>
-<script src="js/onlinespeicher.js?v=54"></script>
-<script src="js/export.js?v=54"></script>
-<script src="js/reiseplan.js?v=54"></script>
-<script src="js/start.js?v=54"></script>
+<script src="js/basis.js?v=55"></script>
+<script src="js/dienste.js?v=55"></script>
+<script src="js/daten.js?v=55"></script>
+<script src="js/recherche.js?v=55"></script>
+<script src="js/google.js?v=55"></script>
+<script src="js/etappe.js?v=55"></script>
+<script src="js/planung.js?v=55"></script>
+<script src="js/karte.js?v=55"></script>
+<script src="js/panel.js?v=55"></script>
+<script src="js/ziele.js?v=55"></script>
+<script src="js/onlinespeicher.js?v=55"></script>
+<script src="js/export.js?v=55"></script>
+<script src="js/tabelle.js?v=55"></script>
+<script src="js/reiseplan.js?v=55"></script>
+<script src="js/start.js?v=55"></script>
 </body>
 </html>

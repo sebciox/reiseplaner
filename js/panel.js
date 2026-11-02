@@ -557,6 +557,7 @@ function renderPanel() {
   if (xb) xb.onclick = exportTour;
   const nb = $('#newBtn');
   if (nb) nb.onclick = resetTour;
+  autosaveSoon(); // gespeicherte Tour: Änderungen sichern; neue Tour: Entwurf
 }
 function renderAll() {
   renderPanel();
@@ -604,12 +605,27 @@ function applyTab() {
   $('#tripBar').innerHTML = tripChips();
   $('#toPlan').hidden = all || !done.goals;
   document.querySelectorAll('.actions.foot').forEach(f => f.classList.toggle('static', all));
+  updateWide();
   if (uiTab === 'trip' || all) renderTrip();
 }
+// Laptop, Reiter 3: Seitenleiste weg – oben die Karte, unten der Reiseplan über die ganze Breite (Trennlinie ziehbar)
+function updateWide() {
+  const wide = !window.__allTabs && uiTab === 'trip' && !isMobile() && !!state.stages.length;
+  if (document.body.classList.contains('tripwide') === wide) return;
+  document.body.classList.toggle('tripwide', wide);
+  setTimeout(() => {
+    map.invalidateSize();
+    popupPad();
+  }, 0);
+}
+window.addEventListener('resize', () => updateWide());
 document.querySelectorAll('[data-tabbtn]').forEach(b => (b.onclick = () => setTab(b.dataset.tabbtn)));
 $('#toPlan').onclick = () => setTab('plan');
 $('#tripBar').addEventListener('click', e => {
-  if (e.target.closest('[data-tripx]')) {
+  if (e.target.closest('[data-savenow]')) saveTour();
+  else if (e.target.closest('[data-savesync]')) {
+    if (saveInfo.online === 'error' || saveInfo.online === 'pending') scheduleOnline(true);
+  } else if (e.target.closest('[data-tripx]')) {
     tripOpen = !tripOpen;
     applyTab();
   } else if (e.target.closest('[data-tripdate]')) {
@@ -674,9 +690,21 @@ $('#fabMenu').onclick = () => setSheet(sheetHidden() ? lastSheet : 'hide');
     } catch (e) {}
     return w;
   };
+  // im breiten Reiseplan (body.tripwide): Höhe der Karte oben
+  const setH = h => {
+    h = Math.max(120, Math.min(Math.round(window.innerHeight - 160), h));
+    root.style.setProperty('--mh', h + 'px');
+    try {
+      localStorage.setItem('gp.ui.mh', h);
+    } catch (e) {}
+    return h;
+  };
+  const wide = () => document.body.classList.contains('tripwide');
   try {
     const w = +localStorage.getItem('gp.ui.pw');
     if (w) root.style.setProperty('--pw', Math.max(320, Math.min(760, w)) + 'px');
+    const h = +localStorage.getItem('gp.ui.mh');
+    if (h) root.style.setProperty('--mh', Math.max(120, h) + 'px');
   } catch (e) {}
   let drag = false;
   rz.addEventListener('pointerdown', e => {
@@ -686,7 +714,7 @@ $('#fabMenu').onclick = () => setSheet(sheetHidden() ? lastSheet : 'hide');
     e.preventDefault();
   });
   rz.addEventListener('pointermove', e => {
-    if (drag) setW(e.clientX);
+    if (drag) wide() ? setH(e.clientY) : setW(e.clientX);
   });
   const end = () => {
     if (!drag) return;
@@ -697,7 +725,11 @@ $('#fabMenu').onclick = () => setSheet(sheetHidden() ? lastSheet : 'hide');
   rz.addEventListener('pointerup', end);
   rz.addEventListener('pointercancel', end);
   rz.addEventListener('keydown', e => {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    if (wide() && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      setH($('#panel').getBoundingClientRect().top + (e.key === 'ArrowDown' ? 30 : -30));
+      map.invalidateSize();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
       setW($('#panel').offsetWidth + (e.key === 'ArrowRight' ? 30 : -30));
       map.invalidateSize();

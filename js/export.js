@@ -62,6 +62,7 @@ function buildTour(name, id) {
       seg: s.seg || undefined,
       vias: s.vias && s.vias.length ? s.vias : undefined,
       memo: s.memo && (s.memo.res || s.memo.text) ? s.memo : undefined,
+      my: s.my && Object.keys(s.my).some(k => k !== 'cid') ? s.my : undefined,
       nights: s.nights > 1 ? s.nights : undefined,
       dayPlan: s.dayPlan && Object.keys(s.dayPlan).length ? s.dayPlan : undefined
     })),
@@ -124,6 +125,8 @@ function saveTour(asCopy) {
       setStatus('Speicher voll – bitte alte Touren löschen.', 'error');
       return;
     }
+    baselineSig();
+    saveInfo.at = new Date();
     renderPanel();
     if (ghOn()) {
       setStatus(`Tour „${old.name}“ aktualisiert – wird online gesichert …`, 'busy');
@@ -163,6 +166,9 @@ function saveTour(asCopy) {
     setStatus('Speicher voll – bitte alte Touren löschen.', 'error');
     return;
   }
+  clearDraft();
+  baselineSig();
+  saveInfo.at = new Date();
   renderPanel();
   if (ghOn()) {
     setStatus('Tour gespeichert – wird online gesichert …', 'busy');
@@ -282,10 +288,10 @@ function openTours(fromButton) {
     if (ghOn() && !fromButton) syncAndReport();
   }
 }
-function loadTour(id, given) {
+function loadTour(id, given, quiet) {
   const t = given || loadTours().find(x => x.id === id);
   if (!t || state.busy) return;
-  uiTab = t.done ? 'trip' : 'plan';
+  if (!quiet) uiTab = t.done ? 'trip' : 'plan';
   prevDone = !!t.done; // fertige Tour → gleich der Reiseplan
   Object.assign(state, {
     start: t.start,
@@ -321,15 +327,18 @@ function loadTour(id, given) {
   $('#startIn').value = t.start.label;
   $('#endIn').value = t.end.label;
   renderVia();
-  setStatus('');
+  if (!quiet) setStatus('');
+  saveInfo.at = null;
+  saveInfo.err = '';
+  baselineSig();
   renderAll();
-  fitAll();
+  if (!quiet) fitAll();
   // Unfertige Tour: Planung geht weiter (braucht die Suche). Fertige Tour: keine Abfrage – Plätze am Ziel kommen
   // aus der gespeicherten Tour oder erst auf Knopfdruck.
   if (!t.done) {
     const last = t.stages.length ? t.stages[t.stages.length - 1].to : t.start;
     run(() => computeNext(last));
-  } else if (isMobile()) {
+  } else if (isMobile() && !quiet) {
     setSheet('min');
     setTimeout(fitAll, 320);
   }
@@ -364,6 +373,10 @@ function resetTour() {
   renderVia();
   uiTab = 'goals';
   prevDone = false;
+  clearDraft();
+  lastSig = null;
+  saveInfo.at = null;
+  saveInfo.online = '';
   setStatus('');
   renderAll();
 }
@@ -557,3 +570,193 @@ ${pts.map(p => `    <trkpt lat="${p[0].toFixed(6)}" lon="${p[1].toFixed(6)}"/>`)
 `;
   download(xml, fileBase(name) + '.gpx', 'application/gpx+xml');
 }
+
+/* ---------- Automatisch speichern ----------
+   Gespeicherte Tour: jede Änderung nach ~1 s lokal, online höchstens alle 20 s (Repo-Verlauf schonen).
+   Neue, nie gespeicherte Tour: Entwurf im Browser (`gp.draft`) → nach Absturz wiederherstellbar; beim Schließen fragt der Browser. */
+let lastSig = null,
+  onlineTimer = null,
+  lastOnline = 0;
+const saveInfo = { at: null, online: '', err: '' }; // online: '' | 'pending' | 'ok' | 'error' | 'conflict'
+const tourSig = t => JSON.stringify({ ...t, savedAt: 0, name: 0, id: 0 });
+const savedTour = () => (state.tourId && loadTours().find(t => t.id === state.tourId)) || null;
+// Stand nach Laden/Speichern merken – nur echte Änderungen danach werden gesichert
+function baselineSig() {
+  lastSig = state.stages.length ? tourSig(buildTour('', state.tourId || 1)) : null;
+}
+function autosaveNow() {
+  if (!state.stages.length || state.busy) return;
+  const old = savedTour(),
+    t = buildTour(old ? old.name : '', state.tourId || undefined),
+    sig = tourSig(t);
+  if (sig === lastSig) return;
+  lastSig = sig;
+  if (!old) {
+    saveDraft(t);
+    renderSaveChip();
+    return;
+  }
+  try {
+    storeTour(t);
+  } catch (e) {
+    saveInfo.err = 'Speicher voll – bitte alte Touren löschen.';
+    renderSaveChip();
+    return;
+  }
+  saveInfo.at = new Date();
+  saveInfo.err = '';
+  if (ghOn()) {
+    saveInfo.online = 'pending';
+    scheduleOnline();
+  }
+  renderSaveChip();
+}
+const autosaveSoon = debounce(autosaveNow, 800);
+function scheduleOnline(now) {
+  if (!ghOn()) return;
+  if (now) clearTimeout(onlineTimer);
+  else if (onlineTimer) return; // läuft schon ein Zeitgeber → höchstens alle 20 s
+  onlineTimer = setTimeout(onlineSave, now ? 0 : Math.max(1500, 20000 - (Date.now() - lastOnline)));
+}
+async function onlineSave() {
+  onlineTimer = null;
+  lastOnline = Date.now();
+  try {
+    const r = await syncNow();
+    if (saveInfo.online !== 'conflict') saveInfo.online = 'ok';
+    afterSync(r);
+  } catch (e) {
+    console.warn(e);
+    saveInfo.online = 'error';
+    saveInfo.err = e.message;
+  }
+  renderSaveChip();
+}
+// Ergebnis eines Abgleichs: Konflikt bei der offenen Tour → nachfragen; auf anderem Gerät geändert → neu laden
+function afterSync(r) {
+  if (!r) return;
+  if (r.conflict && r.conflict.id === state.tourId) askConflict(r.conflict);
+  else if (r.pulledIds && r.pulledIds.includes(state.tourId) && !state.busy) {
+    const t = savedTour();
+    if (t && tourSig(t) !== lastSig) {
+      loadTour(t.id, t, true);
+      flash('Tour wurde auf einem anderen Gerät geändert – neu geladen.');
+    }
+  }
+}
+async function askConflict(cf) {
+  saveInfo.online = 'conflict';
+  renderSaveChip();
+  const when = fstamp(cf.rt.savedAt);
+  const v = await askChoice(
+    'Auf anderem Gerät geändert',
+    `Die Tour „${cf.rt.name}“ wurde am ${when} auf einem anderen Gerät geändert, während du hier auch etwas geändert hast. Welchen Stand willst du behalten?`,
+    [
+      { v: 'load', label: 'Stand vom anderen Gerät laden' },
+      { v: 'keep', label: 'Meinen Stand behalten', primary: true }
+    ]
+  );
+  const m = syncMeta();
+  if (v === 'load') {
+    storeTour(cf.rt);
+    m.known[cf.id] = { sha: cf.sha, at: cf.rt.savedAt };
+    saveSyncMeta(m);
+    saveInfo.online = 'ok';
+    loadTour(cf.id, cf.rt, true);
+    flash('Stand vom anderen Gerät geladen.');
+  } else {
+    // online gilt als bekannt → beim nächsten Abgleich wird der eigene Stand hochgeladen
+    m.known[cf.id] = { sha: cf.sha, at: (m.known[cf.id] || {}).at || '' };
+    saveSyncMeta(m);
+    saveInfo.online = 'pending';
+    scheduleOnline(true);
+  }
+  renderSaveChip();
+}
+// Auswahl-Dialog (statt confirm): Promise mit dem Wert des gewählten Knopfs (Abbrechen/Esc → null)
+function askChoice(title, text, buttons) {
+  const d = $('#askDlg');
+  $('#askTitle').textContent = title;
+  $('#askText').textContent = text;
+  $('#askBtns').innerHTML = buttons
+    .map(b => `<button class="btn${b.primary ? ' primary' : ''}" type="button" data-v="${esc(b.v)}">${esc(b.label)}</button>`)
+    .join('');
+  return new Promise(res => {
+    const done = v => {
+      d.onclose = null;
+      if (d.open) d.close();
+      res(v);
+    };
+    $('#askBtns')
+      .querySelectorAll('[data-v]')
+      .forEach(b => (b.onclick = () => done(b.dataset.v)));
+    d.onclose = () => done(null);
+    d.showModal();
+  });
+}
+function saveDraft(t) {
+  try {
+    localStorage.setItem('gp.draft', JSON.stringify({ at: new Date().toISOString(), tour: t }));
+  } catch (e) {}
+}
+function clearDraft() {
+  try {
+    localStorage.removeItem('gp.draft');
+  } catch (e) {}
+}
+// beim Start: ungespeicherte Tour aus dem letzten Mal anbieten
+async function offerDraft() {
+  let d = null;
+  try {
+    d = JSON.parse(localStorage.getItem('gp.draft') || 'null');
+  } catch (e) {}
+  if (!d || !d.tour || !d.tour.stages || !d.tour.stages.length || state.stages.length) return;
+  const v = await askChoice('Ungespeicherte Tour', `„${d.tour.name}“ vom ${fstamp(d.at)} wurde nicht gespeichert. Wiederherstellen?`, [
+    { v: 'drop', label: 'Verwerfen' },
+    { v: 'load', label: 'Wiederherstellen', primary: true }
+  ]);
+  if (v === 'load') {
+    loadTour(null, { ...d.tour, id: null });
+    state.tourId = null;
+    baselineSig();
+    renderAll();
+    flash('Tour wiederhergestellt – noch nicht gespeichert.');
+  } else if (v === 'drop') clearDraft();
+}
+function saveChipHtml() {
+  if (!state.stages.length) return '';
+  const t = savedTour();
+  if (!t) return '<button type="button" class="savechip unsaved" id="saveChip" data-savenow title="Jetzt speichern">● nicht gespeichert</button>';
+  const at = saveInfo.at || new Date(t.savedAt),
+    hm = at.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const on =
+    saveInfo.online === 'conflict'
+      ? ' · ⚠ anderes Gerät'
+      : !ghOn()
+        ? ''
+        : saveInfo.online === 'pending'
+          ? ' · online …'
+          : saveInfo.online === 'error'
+            ? ' · offline – wird nachgeholt'
+            : '';
+  return `<button type="button" class="savechip${saveInfo.err || saveInfo.online === 'error' || saveInfo.online === 'conflict' ? ' warnc' : ''}" id="saveChip" data-savesync title="${esc(saveInfo.err || 'Änderungen werden automatisch gespeichert')}">✓ gespeichert ${hm}${on}</button>`;
+}
+function renderSaveChip() {
+  const el = $('#saveChip');
+  if (el) el.outerHTML = saveChipHtml();
+  else if (state.stages.length) applyTab();
+}
+// Fenster schließen/neu laden: ungespeicherte Tour → Browser fragt nach; ausstehende Online-Sicherung sofort versuchen
+window.addEventListener('beforeunload', e => {
+  if (onlineTimer) onlineSave();
+  if (state.stages.length && !savedTour() && !navigator.webdriver) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && onlineTimer) {
+    clearTimeout(onlineTimer);
+    onlineSave();
+  }
+});

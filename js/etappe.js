@@ -134,14 +134,5 @@ async function shareStage(i) {
   copyText(text);
 }
 
-/* Änderungen an einer gespeicherten Tour (Notiz, Datum, Adresse, Ausweichplatz) automatisch sichern */
-const touch = debounce(() => {
-  if (!state.tourId || !state.stages.length) return;
-  const old = loadTours().find(t => t.id === state.tourId);
-  try {
-    storeTour(buildTour(old ? old.name : defaultName(), state.tourId));
-  } catch (e) {
-    return;
-  }
-  syncAndReport();
-}, 800);
+/* Änderungen (Notiz, Datum, Adresse, eigene Angaben …) automatisch sichern – siehe autosaveNow() in export.js */
+const touch = () => autosaveSoon();

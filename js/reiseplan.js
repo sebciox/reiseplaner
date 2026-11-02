@@ -111,6 +111,7 @@ function timelineHtml(ia) {
 // feste Aktionsleiste unten: Hauptaktionen sichtbar, weitere hinter „⋯“ (im Testmodus alles offen und nicht fest)
 const footHtml = (main, extra) =>
   `<div class="actions foot${window.__allTabs ? ' open static' : ''}"><div class="foot-main">${main}</div>${extra ? `<button class="btn ghost more" type="button" data-more aria-expanded="${!!window.__allTabs}" aria-label="Weitere Aktionen" title="Weitere Aktionen">⋯</button><div class="foot-extra">${extra}</div>` : ''}</div>`;
+const grpLoaded = new Set(); // Gruppen, deren Infos (Google, Sehenswürdigkeiten) schon geladen wurden
 function renderTrip() {
   const el = $('#tripView');
   if (!el) return;
@@ -119,11 +120,13 @@ function renderTrip() {
   } else {
     const saved = state.tourId && loadTours().some(t => t.id === state.tourId);
     el.innerHTML =
-      timelineHtml(true) +
+      `<div class="tlhead"><h3 style="margin:6px 0">${esc(tourTitle())}</h3><span class="muted"><button class="linkbtn" type="button" data-tlall="1">alle auf</button> · <button class="linkbtn" type="button" data-tlall="0">alle zu</button></span></div>
+      <div class="muted">${esc(totalsText())}</div>` +
+      `<div class="ptwrap">${planTableHtml()}</div>` +
       (!state.done
         ? `<div class="note" style="margin-top:8px">Noch nicht alle Plätze gewählt – weiter unter <button class="linkbtn" type="button" data-goto="plan">2 Plätze</button>.</div>`
         : '') +
-      `<div class="muted" style="margin-top:10px">${saved ? 'Änderungen (Nächte, Notizen …) werden automatisch gespeichert. ' : ''}<button class="linkbtn" type="button" data-act="offline">Etappenziele für unterwegs laden</button> (Karte offline)</div>` +
+      `<div class="muted" style="margin-top:10px">${saved ? 'Änderungen werden automatisch gespeichert. ' : 'Tour noch nicht gespeichert – Änderungen gehen beim Schließen verloren. '}<button class="linkbtn" type="button" data-act="offline">Etappenziele für unterwegs laden</button> (Karte offline)</div>` +
       footHtml(
         `<button class="btn primary" type="button" data-act="print">Drucken / PDF</button>
         <button class="btn" type="button" data-act="xlsx">Excel</button>
@@ -134,62 +137,37 @@ function renderTrip() {
       );
   }
   el.querySelectorAll('[data-goto]').forEach(b => (b.onclick = () => setTab(b.dataset.goto)));
-  el.querySelectorAll('details[data-tl]').forEach(d =>
-    d.addEventListener('toggle', () => {
-      const i = +d.dataset.tl;
-      tlOpen.add(-1); // -1: Nutzer hat selbst auf-/zugeklappt
-      if (d.open) {
-        tlOpen.add(i);
-        ensureOneAddr(i);
-        if (settings.gkey) {
-          loadRatings([state.stages[i].to]);
-          loadGName(state.stages[i].to).then(f => f && renderPanel());
-        }
-      } else tlOpen.delete(i);
-    })
-  );
+  // aufgeklappte Gruppen: Infos einmal nachladen (z. B. die aktuelle Etappe beim ersten Öffnen)
+  el.querySelectorAll('tbody.grp.open[data-grpb]').forEach(b => {
+    const i = +b.dataset.grpb;
+    if (i >= 0 && !grpLoaded.has(i)) {
+      grpLoaded.add(i);
+      setTimeout(() => openedGroup(i), 0);
+    }
+  });
   // Google-Namen/-Infos aller Plätze des Reiseplans einmal laden (lädt nur, was noch fehlt)
   if (settings.gkey && !gErr && !gBusy) setTimeout(() => loadRatings(state.stages.map(s => s.to).filter(c => c.kind === 'camp')), 0);
-  // Recherche für die Plätze des Reiseplans anstoßen (z. B. OSM-Website tot → Google-Website), nur was noch fehlt
-  setTimeout(() => requestPrices(state.stages.map(s => s.to).filter(c => c.kind === 'camp')), 0);
-  el.querySelectorAll('details[data-tls]').forEach(d =>
-    d.addEventListener('toggle', () => {
-      const k = d.dataset.tls;
-      if (!d.open) {
-        tlsOpen.delete(k);
-        return;
-      }
-      if (tlsOpen.has(k)) return; // schon offen gezeichnet (toggle feuert auch beim Neuzeichnen)
-      tlsOpen.add(k);
-      const x =
-        [...state.via, ...state.via.flatMap(v => v.sights || [])].find(v => sightKey(v) === k) ||
-        state.stages.flatMap(s => s.to.sights || []).find(v => sightKey(v) === k);
-      renderTrip();
-      if (x)
-        Promise.all([enrichSight(x), loadGSight(x)]).then(r => {
-          if (r.some(Boolean)) renderTrip();
-        });
-    })
-  );
+  // Recherche für die Plätze und Sehenswürdigkeiten des Reiseplans anstoßen (nur was noch fehlt)
+  setTimeout(() => {
+    requestPrices(state.stages.map(s => s.to).filter(c => c.kind === 'camp'));
+    requestSights(state.via.filter(v => v.kind !== 'rest').flatMap(v => [v, ...(v.sights || [])]));
+  }, 0);
   el.querySelectorAll('form[data-sweb]').forEach(
     f =>
       (f.onsubmit = e => {
         e.preventDefault();
         const k = f.dataset.sweb,
           w = normWeb(f.w.value);
-        const x = [...state.via, ...state.via.flatMap(v => v.sights || []), ...state.stages.flatMap(s => s.to.sights || [])].find(v => sightKey(v) === k);
+        const x = findSightByKey(k);
         if (!x || !w) {
           flash('Bitte eine gültige Website eintragen.');
           return;
         }
-        x.info = { ...(x.info || {}), web: w, webManual: true };
+        const src = sightSrc(x);
+        src.info = { ...(src.info || {}), web: w, webManual: true };
         touch();
         renderTrip();
-        flash(
-          state.tourId
-            ? 'Website gemerkt – Öffnungszeiten und Preise werden in 1–2 Min. gesucht.'
-            : 'Website gemerkt – Öffnungszeiten und Preise werden nach dem Speichern der Tour gesucht.'
-        );
+        flash('Website gemerkt – Öffnungszeiten und Preise werden in 2–5 Min. gesucht.');
       })
   );
   if (state.via.some(v => v.kind !== 'rest' && [v, ...(v.sights || [])].some(y => !y.info || y.info.v !== INFO_V))) setTimeout(enrichAll, 0);
@@ -198,7 +176,10 @@ function renderTrip() {
       (b.onclick = () => {
         tlOpen.clear();
         tlOpen.add(-1);
-        if (b.dataset.tlall === '1') state.stages.forEach((_, i) => tlOpen.add(i));
+        if (b.dataset.tlall === '1') {
+          tlOpen.add(-3);
+          state.stages.forEach((_, i) => tlOpen.add(i));
+        }
         renderTrip();
         if (b.dataset.tlall === '1') ensureAddrs().then(ch => ch && renderTrip());
       })

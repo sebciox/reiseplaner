@@ -1,30 +1,31 @@
 // Service Worker: hält die App-Dateien offline vor. Karten, Routing und Campingplatz-Abfragen brauchen Netz.
-const CACHE = 'gespann-etappen-v54';
+const CACHE = 'gespann-etappen-v55';
 const TILES = 'gespann-kacheln',
   MAX_TILES = 2500; // angesehene Kartenkacheln für unterwegs (offline)
 const ASSETS = [
   './',
   'index.html',
-  'styles.css?v=54',
+  'styles.css?v=55',
   'manifest.webmanifest',
   'icon.svg',
   'icon-192.png',
   'icon-512.png',
   // App-Skripte (Reihenfolge wie in index.html; ?v= zusammen mit CACHE hochzählen)
-  'js/basis.js?v=54',
-  'js/dienste.js?v=54',
-  'js/daten.js?v=54',
-  'js/recherche.js?v=54',
-  'js/google.js?v=54',
-  'js/etappe.js?v=54',
-  'js/planung.js?v=54',
-  'js/karte.js?v=54',
-  'js/panel.js?v=54',
-  'js/ziele.js?v=54',
-  'js/onlinespeicher.js?v=54',
-  'js/export.js?v=54',
-  'js/reiseplan.js?v=54',
-  'js/start.js?v=54',
+  'js/basis.js?v=55',
+  'js/dienste.js?v=55',
+  'js/daten.js?v=55',
+  'js/recherche.js?v=55',
+  'js/google.js?v=55',
+  'js/etappe.js?v=55',
+  'js/planung.js?v=55',
+  'js/karte.js?v=55',
+  'js/panel.js?v=55',
+  'js/ziele.js?v=55',
+  'js/onlinespeicher.js?v=55',
+  'js/export.js?v=55',
+  'js/tabelle.js?v=55',
+  'js/reiseplan.js?v=55',
+  'js/start.js?v=55',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'
 ];

@@ -18,7 +18,9 @@ const DEF = {
   altRadius: 10,
   filters: { caravan: false, power: false },
   gkey: '',
-  sortBy: 'stage'
+  sortBy: 'stage',
+  adults: 2,
+  kids: 0
 };
 const ORS = 'https://api.openrouteservice.org';
 const OVERPASS = [

@@ -13,6 +13,8 @@ function openSettings() {
   $('#sRepo').value = settings.ghRepo || '';
   $('#sToken').value = settings.ghToken || '';
   $('#sGkey').value = settings.gkey || '';
+  $('#sAdults').value = settings.adults ?? DEF.adults;
+  $('#sKids').value = settings.kids ?? DEF.kids;
   $('#setupLinkBox').hidden = !ghOn();
   $('#sToken').type = 'password';
   $('#sTokenShow').textContent = 'anzeigen';
@@ -45,7 +47,9 @@ $('#settingsDlg').addEventListener('close', () => {
     noToll: $('#sToll').checked,
     ghRepo,
     ghToken,
-    gkey: $('#sGkey').value.trim()
+    gkey: $('#sGkey').value.trim(),
+    adults: Math.max(0, Math.min(20, Math.round(n($('#sAdults').value, DEF.adults)))),
+    kids: Math.max(0, Math.min(20, Math.round(n($('#sKids').value, DEF.kids))))
   };
   if (newConn) {
     try {
@@ -141,5 +145,8 @@ loadFx().then(() => renderAll());
 const viaLink = setupFromLink();
 if (!settings.key && !ghOn()) setStatus('Willkommen! Trag zuerst unter ⚙︎ deinen kostenlosen OpenRouteService-Schlüssel ein.');
 if (viaLink) syncAndReport('Online-Speicher eingerichtet', 'Verbindung zum Online-Speicher fehlgeschlagen: ');
-else syncAndReport();
+else {
+  syncAndReport();
+  setTimeout(offerDraft, 300);
+}
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -285,41 +285,33 @@ const srv = require('./lib/server')(ROOT, 8151);
     await page.click('#result [data-pick]');
   }
   await page.waitForFunction(() => uiTab === 'trip', null, { timeout: 5000 });
-  // Platz-Eintrag: Sehenswürdigkeit nicht mehr in der Kopfzeile, sondern eigener Eintrag darunter
+  const rowS = async () => (await page.textContent('#tripView tr.sight')).replace(/\s+/g, ' ');
+  const rowC = async () => (await page.textContent('#tripView tr.camp')).replace(/\s+/g, ' ');
+  // Reiseplan-Tabelle: eingeklappt Kurzzeile, aufgeklappt eigene Zeile je Sehenswürdigkeit unter dem Platz
+  ok(!(await page.$('#tripView tr.sight')) && /★ 1/.test(await page.textContent('#tripView tr.camp')), 'eingeklappt: Kurzzeile mit ★-Anzahl, ohne Unterzeilen');
+  await page.click('#tripView [data-grp="0"]');
+  await page.waitForSelector('#tripView tr.sight');
   ok(
-    !(await page.textContent('#tripView details[data-tl="0"] summary')).includes('Paris') ||
-      !(await page.textContent('#tripView details[data-tl="0"] summary')).includes('★'),
-    'Kopfzeile des Platzes ohne ★-Zeile'
+    (await page.$$eval('#tripView tr.sight', e => e.length)) === 1 && /★ Paris/.test(await rowS()),
+    'eigene Zeile „★ Paris“ unter dem Platz: ' + (await rowS()).slice(0, 60)
+  );
+  const campTxt = await rowC();
+  ok(/Rezeption/.test(campTxt) && !/★ Paris/.test(campTxt), 'Platz-Zeile: nur Platz-Infos');
+  await page.waitForFunction(() => /laut Google/.test(document.querySelector('#tripView tr.sight')?.textContent || ''), null, { timeout: 6000 });
+  let st = await rowS();
+  ok(
+    /[\d,]+ km/.test(st) && /Champ de Mars, 75007 Paris/.test(st) && /29 € \(OSM\)/.test(st) && /paris\.example/.test(st) && !/Wohnwagen|🧭/.test(st),
+    'Sehenswürdigkeit: Entfernung, Adresse, Preis in Euro, Website: ' + st.slice(0, 200)
   );
   ok(
-    (await page.$$eval('#tripView .tl-stop .tl-sightlist details[data-tls]', e => e.length)) === 1 &&
-      /★ Paris/.test(await page.textContent('.tl-stop .tl-sightlist summary')),
-    'eigener Eintrag „★ Paris“ unter dem Platz: ' + (await page.textContent('.tl-stop .tl-sightlist summary')).trim()
+    await page.evaluate(() => {
+      const r = $('#tripView tr.sight');
+      return /maps\/dir\/.*origin=/.test(r.querySelector('td[data-l="Adresse"] a').href) && /^https?:/.test(r.querySelector('.pname a').href);
+    }),
+    'Adresse → Navigation vom Platz, Name → Google-Eintrag'
   );
-  await page.click('#tripView details[data-tl="0"] summary');
-  await page.waitForTimeout(200);
-  const campTxt = await page.textContent('#tripView details[data-tl="0"] .tl-body');
-  ok(!/Sehenswürdigkeiten/.test(campTxt) && /Adresse/.test(campTxt), 'Platz aufgeklappt: nur Platz-Infos (keine Sehenswürdigkeiten-Zeile)');
-  // Sehenswürdigkeit aufklappen
-  await page.click('.tl-stop .tl-sightlist summary');
-  await page.waitForFunction(() => /laut Google/.test(document.querySelector('.tl-stop .tl-sightlist details[open]')?.textContent || ''), null, {
-    timeout: 6000
-  });
-  let st = (await page.textContent('.tl-stop .tl-sightlist details[open]')).replace(/\s+/g, ' ');
-  ok(
-    /Vom Platz [\d,]+ km/.test(st) &&
-      /Champ de Mars, 75007 Paris/.test(st) &&
-      /Preis 29 € \(OSM\)/.test(st) &&
-      /paris\.example · Google-Eintrag · Navigation vom Platz/.test(st) &&
-      !/Wohnwagen|🧭/.test(st),
-    'Sehenswürdigkeit: Entfernung, Adresse, Preis in Euro, einheitliche Linkzeile: ' + st.slice(0, 200)
-  );
-  ok(/Öffnungszeiten laut Google.*jetzt geöffnet/.test(st) && /★ 4,7/.test(st), 'Google live: Öffnungszeiten + Bewertung');
-  ok(
-    /werden (gesucht|nach dem Speichern)/.test(st) || /Online-Speicher/.test(st),
-    'Hinweis Website-Recherche: ' + (st.match(/Öffnungszeiten und Preise von der Website: [^.]*/) || [''])[0]
-  );
-  ok(await page.evaluate(() => $('#tripView details[data-tl="0"]').open), 'Platz-Eintrag bleibt dabei offen');
+  ok(/laut Google.*jetzt geöffnet/.test(st) && /★ 4,7/.test(st), 'Google live: Öffnungszeiten + Bewertung');
+  ok(await page.evaluate(() => !!$('#tripView tbody[data-grpb="0"].open')), 'Gruppe bleibt dabei offen');
   // Ergebnis des GitHub-Helfers
   await page.evaluate(() => {
     rzData['web:https://paris.example/'] = {
@@ -331,17 +323,17 @@ const srv = require('./lib/server')(ROOT, 8151);
     };
     renderTrip();
   });
-  st = (await page.textContent('.tl-stop .tl-sightlist details[open]')).replace(/\s+/g, ' ');
+  st = await rowS();
   ok(
-    /Öffnungszeiten laut Website: 09:00–23:00/.test(st) && /Erwachsene ab 29 € · Kinder 7 €/.test(st) && /Kinder 7 €/.test(st) && !/Eintritt EUR 29/.test(st),
-    'Website-Recherche: Öffnungszeiten + Preise mit Quelle'
+    /Website: 09:00–23:00 · Quelle/.test(st) && /Erw\. ab 29 € · Kind 7 €/.test(st) && /≈ 58 € für 2 Erw\./.test(st) && !/Eintritt EUR 29/.test(st),
+    'Website-Recherche: Öffnungszeiten + Preise Erwachsene/Kinder, geschätzt für die Reisenden: ' + st.slice(0, 260)
   );
   await page.screenshot({ path: path.join(OUT, 'sights.png') });
   await page.evaluate(() => {
     rzData['web:https://paris.example/'] = { v: 1, status: 'ok', price: { text: '85 kr', snippet: 'Parkering 85 kr/dag', url: 'x' } };
     renderTrip();
   });
-  st = (await page.textContent('.tl-stop .tl-sightlist details[open]')).replace(/\s+/g, ' ');
+  st = await rowS();
   ok(!/85 kr|85 SEK|Parkering/.test(st), 'alte Recherche (Parkgebühr als Preis) wird ignoriert: ' + st.slice(0, 300));
   await page.evaluate(() => {
     rzData['web:https://paris.example/'] = {
@@ -355,10 +347,10 @@ const srv = require('./lib/server')(ROOT, 8151);
     state.via[0].info.charge = '';
     renderTrip();
   });
-  st = (await page.textContent('.tl-stop .tl-sightlist details[open]')).replace(/\s+/g, ' ');
-  ok(/Saison laut Website: 1\. April – 31\. Oktober – Quelle/.test(st), 'Saison von der Website als Datum: ' + (st.match(/Saison[^Q]*Quelle/) || [''])[0]);
+  st = await rowS();
+  ok(/Saison 1\. April – 31\. Oktober/.test(st), 'Saison von der Website als Datum: ' + (st.match(/Saison[^€]{0,30}/) || [''])[0]);
   ok(
-    /Öffnungszeiten auf der Website/.test(st) && /Preise – · auf der Website/.test(st) && !/nicht gefunden/.test(st),
+    /Öffnungszeiten auf der Website/.test(st) && /Preise auf der Website/.test(st) && !/nicht gefunden/.test(st),
     'nichts gefunden → direkte Links zu Öffnungszeiten-/Preis-Seite: ' + st.slice(0, 300)
   );
   await page.evaluate(() => {
@@ -376,9 +368,9 @@ const srv = require('./lib/server')(ROOT, 8151);
     state.via[0].info.web = '';
     renderTrip();
   });
-  ok(await page.$('.tl-stop .tl-sightlist form[data-sweb] input'), 'ohne Website: Eingabefeld (vorbelegt mit Google-Website)');
-  await page.fill('.tl-stop .tl-sightlist form[data-sweb] input', 'www.eigene-seite.example');
-  await page.click('.tl-stop .tl-sightlist form[data-sweb] button');
+  ok(await page.$('#tripView tr.sight form[data-sweb] input'), 'ohne Website: Eingabefeld (vorbelegt mit Google-Website)');
+  await page.fill('#tripView tr.sight form[data-sweb] input', 'www.eigene-seite.example');
+  await page.click('#tripView tr.sight form[data-sweb] button');
   ok(await page.evaluate(() => state.via[0].info.web === 'https://www.eigene-seite.example/'), 'Website gemerkt');
   await page.evaluate(() => {
     state.via[0].info.web = 'https://paris.example/';
@@ -468,27 +460,28 @@ const srv = require('./lib/server')(ROOT, 8151);
     tlOpen.add(0);
     renderTrip();
   });
-  const camp0 = (await page.textContent('#tripView details[data-tl="0"] .tl-body')).replace(/\s+/g, ' ');
+  const camp0 = await rowC();
   await page.evaluate(() => {
     const c = state.stages[0].to;
     rzData[c.id].price = { text: '415:-', snippet: 'exkl. el – 415:-', url: 'https://x.example/priser', power: 'without', elec: '60:-' };
     renderTrip();
   });
-  const campE = (await page.textContent('#tripView details[data-tl="0"] .tl-body')).replace(/\s+/g, ' ');
-  ok(
-    /Preis: ≈ 36 € \(415 SEK\) · ohne Strom \(\+ ≈ 5 € Strom\)/.test(campE),
-    'Platzpreis ohne Strom + Stromzuschlag: ' + (campE.match(/Preis:[^(]*\([^)]*\)[^)]*\)/) || [''])[0]
-  );
+  const campE = await rowC();
+  ok(/≈ 36 € \(415 SEK\) \/ Nacht · ohne Strom \(\+ ≈ 5 € Strom\)/.test(campE), 'Platzpreis ohne Strom + Stromzuschlag: ' + campE.slice(0, 300));
   await page.evaluate(() => {
     const c = state.stages[0].to;
     rzData[c.id].price = { text: '395 kr', snippet: 'Priser – Tomt med el, husvagn per natt · 395 kr', url: 'https://x.example/priser', power: 'with' };
     renderTrip();
   });
-  const campW = (await page.textContent('#tripView details[data-tl="0"] .tl-body')).replace(/\s+/g, ' ');
-  ok(/Preis: ≈ \d+ € \(395 SEK\) · mit Strom/.test(campW), 'Platzpreis mit Strom');
+  const campW = await rowC();
+  ok(/≈ \d+ € \(395 SEK\) \/ Nacht · mit Strom/.test(campW), 'Platzpreis mit Strom');
   ok(
-    /Preis: ≈ \d+ € \(395 SEK\)/.test(camp0) && !/husvagn per natt/.test(camp0) && /Quelle/.test(camp0) && !/Wohnwagen erlaubt|keine Angabe/.test(camp0),
-    'Zeitleiste: Preis pro Nacht von der Website, keine Wohnwagen-Angabe'
+    /≈ \d+ € \(395 SEK\)/.test(camp0) &&
+      !/husvagn per natt/.test(camp0) &&
+      /· Website/.test(camp0) &&
+      /gesamt ≈?\s?\d+ €/.test(camp0) &&
+      !/Wohnwagen erlaubt|keine Angabe/.test(camp0),
+    'Tabelle: Preis pro Nacht von der Website + Gesamtpreis, keine Wohnwagen-Angabe: ' + camp0.slice(camp0.indexOf('≈'), camp0.indexOf('≈') + 200)
   );
   await page.evaluate(() => {
     const c = state.stages[0].to;
@@ -506,13 +499,13 @@ const srv = require('./lib/server')(ROOT, 8151);
     });
     renderTrip();
   });
-  const camp1 = (await page.textContent('#tripView details[data-tl="0"] .tl-body')).replace(/\s+/g, ' ');
+  const camp1 = await rowC();
   ok(
-    /Hultsfreds Camping \(OSM: Lokal 0\)/.test(await page.textContent('#tripView details[data-tl="0"] .tl-name')),
-    'Google-Name als Überschrift, OSM-Name klein dahinter: ' + (await page.textContent('#tripView details[data-tl="0"] .tl-name')).trim()
+    /Hultsfreds Camping \(OSM: Lokal 0\)/.test(await page.textContent('#tripView tr.camp .pname')),
+    'Google-Name als Überschrift, OSM-Name klein dahinter: ' + (await page.textContent('#tripView tr.camp .pname')).trim()
   );
   ok(
-    /Preis: ≈ \d+–\d+ € \(SEK 300–450\)/.test(camp1) && /\(Google\)/.test(camp1) && /Öffnungszeiten laut Google/.test(camp1),
+    /≈ \d+–\d+ € \(SEK 300–450\)/.test(camp1) && /· Google/.test(camp1) && /Öffnungszeiten laut Google/.test(camp1),
     'Google: Preisspanne + Öffnungszeiten am Platz'
   );
   // Preisanfrage an den Helfer (anfragen.json im Online-Speicher)
@@ -558,7 +551,7 @@ const srv = require('./lib/server')(ROOT, 8151);
     body2 && body2.camps.some(c => c.id === 'cw:https://neu.example/camping' && c.website === 'https://neu.example/camping'),
     'Reiseplan: tote OSM-Website → Google-Website wird recherchiert'
   );
-  ok(/neu\.example/.test(await page.textContent('#tripView details[data-tl="0"] .tl-body')), 'Link zeigt die Google-Website');
+  ok(/neu\.example/.test(await rowC()), 'Link zeigt die Google-Website');
   await page.evaluate(() => {
     settings.ghToken = '';
     settings.ghRepo = '';
@@ -572,9 +565,9 @@ const srv = require('./lib/server')(ROOT, 8151);
     renderTrip();
   });
   ok(await page.evaluate(() => state.via[0].info.town === true && !state.via[0].info.oh), 'Ort erkannt (place=city) → info.town');
-  st = (await page.textContent('.tl-stop .tl-sightlist details[open]')).replace(/\s+/g, ' ');
+  st = await rowS();
   ok(
-    !/Öffnungszeiten|Preis|Eintritt|Website eintragen/.test(st) && /Vom Platz/.test(st) && /Google-Eintrag · Navigation vom Platz/.test(st),
+    !/Öffnungszeiten|Preis|Eintritt|Website eintragen/.test(st) && /[\d,]+ km/.test(st) && !(await page.$('#tripView tr.sight form[data-sweb]')),
     'Ort: keine Öffnungszeiten/Preise, nur Entfernung + Links: ' + st.slice(0, 120)
   );
   await page.evaluate(() => {
@@ -584,14 +577,14 @@ const srv = require('./lib/server')(ROOT, 8151);
     tlOpen.add(0);
     renderTrip();
   });
-  const campN = (await page.textContent('#tripView details[data-tl="0"] .tl-body')).replace(/\s+/g, ' ');
+  const campN = await rowC();
   ok(/Preis –/.test(campN) && /Rezeption –/.test(campN), 'nichts gefunden: „Preis –“ und „Rezeption –“ am Platz');
   await page.evaluate(() => {
     state.via[0].info = { v: INFO_V, web: '', oh: '' };
     gSight.set(sightKey(state.via[0]), { oh: [], r: null });
     renderTrip();
   });
-  st = (await page.textContent('.tl-stop .tl-sightlist details[open]')).replace(/\s+/g, ' ');
+  st = await rowS();
   ok(/Öffnungszeiten –/.test(st) && /Preise –/.test(st), 'Sehenswürdigkeit ohne Angaben: „Öffnungszeiten –“, „Preise –“');
   // Handy
   await page.setViewportSize({ width: 390, height: 800 });
