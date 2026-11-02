@@ -150,6 +150,12 @@ Die Arbeitsumgebung erreicht ORS/Overpass oft nicht. Bewährt: Playwright-Test m
 (`page.route` für ORS-Directions/Matrix/Geocode und Overpass, Leaflet lokal aus npm, `serviceWorkers:'block'`),
 Ablauf: planen → Plätze wählen → Zielplatz → Tour-Datei exportieren → neu → importieren.
 Online-Speicher: GitHub-API mit In-Memory-Repo mocken, zwei Browser-Kontexte (Laptop/Handy) gegeneinander.
+**Nachbau-Test Schweden-PDF** (`tests/schweden.test.js`, Daten `tests/fixtures/schweden-2026.json` = Sebastians Reise-PDF 24.07.–14.08.2026):
+plant die Reise wie von Hand (7 ★-Ziele mit Nächten und Sehenswürdigkeiten, Rundreise, Abschnitte 3·1·…·3, Plätze wählen,
+Bauernhof/Ivendorf per „Platz fehlt?“ mit Koordinaten), trägt jede Angabe der PDF in die Tabelle ein (Namen, Adressen, Telefon,
+Zeiten, Preise in SEK/€, Status, Buchungsnr., Stellplatz, Notizen, Besuchstage, Fähren) und prüft nach dem Neuladen. `ok()` = muss
+gehen, `can()` = Fähigkeit gegenüber der PDF – fehlt sie, meldet der Test „LÜCKE“ (kein Fehler) und listet am Ende alle Lücken;
+neue Funktion, die eine Lücke schließt → im Test von `can()` auf `ok()` umstellen. Screenshot `tests/out/schweden-tabelle.png`.
 
 ## Offene Ideen
 

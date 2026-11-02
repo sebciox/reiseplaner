@@ -1,0 +1,205 @@
+{
+  "_info": "Nachbau von Sebastians Reise-PDF „Schweden Rundreise 2026 – Routenplaner mit Fahrzeiten“ (24.07.–14.08.2026). Koordinaten ungefähr (nur für die gemockten Dienste). Duschcode/WLAN bewusst weggelassen (Sebastian: nicht speichern).",
+  "start": { "name": "Witten", "lat": 51.4436, "lon": 7.3532 },
+  "date": "2026-07-24",
+  "ziele": [
+    { "name": "Kreativum Karlshamn", "lat": 56.17, "lon": 14.868, "nights": 1, "sights": [] },
+    {
+      "name": "Astrid Lindgrens Värld",
+      "lat": 57.6747,
+      "lon": 15.8438,
+      "nights": 6,
+      "sights": [
+        { "name": "Hof Näs", "lat": 57.6615, "lon": 15.865 },
+        { "name": "Katthults Hof", "lat": 57.7345, "lon": 15.6575 },
+        { "name": "Filmbyn Småland", "lat": 57.615, "lon": 15.5683 },
+        { "name": "Schärenboot Västervik", "lat": 57.757, "lon": 16.6355 },
+        { "name": "Gamleby Trollwald", "lat": 57.892, "lon": 16.406 }
+      ]
+    },
+    {
+      "name": "Himmelstalund Felsritzungen",
+      "lat": 58.596,
+      "lon": 16.152,
+      "nights": 1,
+      "sights": [{ "name": "Kolmården Tropicarium", "lat": 58.665, "lon": 16.414 }]
+    },
+    { "name": "Vasa-Museum", "lat": 59.328, "lon": 18.0914, "nights": 3, "sights": [{ "name": "Gamla Stan", "lat": 59.3251, "lon": 18.0711 }] },
+    { "name": "Altstadt Eksjö", "lat": 57.6664, "lon": 14.9737, "nights": 3, "sights": [{ "name": "Kleva Gruva", "lat": 57.43, "lon": 15.18 }] },
+    { "name": "Liseberg", "lat": 57.6953, "lon": 11.9919, "nights": 2, "sights": [] },
+    { "name": "Smålandet Elk Safari", "lat": 56.488, "lon": 13.642, "nights": 2, "sights": [{ "name": "IKEA-Museum", "lat": 56.5525, "lon": 14.1365 }] }
+  ],
+  "transit": {
+    "ivendorf": { "name": "Camping Ivendorf / Skandinavienkai", "lat": 53.9442, "lon": 10.855 },
+    "vellinge": { "name": "Bauernhof mit Pferden", "lat": 55.493, "lon": 13.002 }
+  },
+  "camps": [
+    { "id": 1001, "osm": "Järnaviks Camping", "lat": 56.189, "lon": 15.081 },
+    { "id": 1002, "osm": "Hultsfreds Strandcamping", "lat": 57.4907, "lon": 15.847 },
+    { "id": 1003, "osm": "Korskullens Camping", "lat": 58.4802, "lon": 16.3178 },
+    { "id": 1004, "osm": "Bredäng Camping Stockholm", "lat": 59.2948, "lon": 17.9226 },
+    { "id": 1005, "osm": "Eksjö Camping", "lat": 57.6655, "lon": 14.9852 },
+    { "id": 1006, "osm": "Lisebergs camping Askim Strand", "lat": 57.6317, "lon": 11.9195 },
+    { "id": 1007, "osm": "Sjötorpets Camping", "lat": 56.4615, "lon": 13.5985 }
+  ],
+  "plan": [
+    {
+      "von": "24.07.",
+      "bis": "25.07.",
+      "ort": "Travemünde",
+      "camp": "ivendorf",
+      "name": "Camping Ivendorf / Skandinavienkai",
+      "addr": "Zum Hafenplatz 1, 23570 Travemünde",
+      "note": "Von Travemünder Landstraße geradeaus in den Hafen, rechts am Zaun entlang zum Check-in."
+    },
+    {
+      "von": "25.07.",
+      "bis": "26.07.",
+      "ort": "Malmö / Vellinge",
+      "camp": "vellinge",
+      "name": "Bauernhof mit Pferden",
+      "addr": "Gessie ängaväg 61, 235 93 Vellinge",
+      "phone": "(+46) 702512551",
+      "arr": "20:00 (Fähre)",
+      "ppn": "20 €",
+      "status": "booked",
+      "note": "Robert (Roban) hat per Mail bestätigt (im Kalender eingetragen). 20 € inkl. Strom."
+    },
+    {
+      "von": "26.07.",
+      "bis": "27.07.",
+      "ort": "Karlshamn",
+      "camp": 1001,
+      "name": "Järnaviks Camping",
+      "addr": "Bastuviksvägen 61, 372 63 Bräkne Hoby",
+      "phone": "(+46) 708837970",
+      "hours": "Check-in ab 13:00 · Check-out bis 11:00",
+      "total": "45,10 €",
+      "status": "paid",
+      "pitch": "Ö11",
+      "sights": [{ "name": "Kreativum Karlshamn", "addr": "Strömmavägen 28, Karlshamn", "hours": "ab 10:30 Uhr" }]
+    },
+    {
+      "von": "27.07.",
+      "bis": "02.08.",
+      "ort": "Hultsfred",
+      "camp": 1002,
+      "name": "Hultsfred Strandcamping",
+      "addr": "Folkparksvägen 10, 577 36 Hultsfred",
+      "phone": "0495758080",
+      "total": "326,61 €",
+      "status": "paid",
+      "sights": [
+        { "name": "Astrid Lindgrens Värld" },
+        { "name": "Hof Näs", "addr": "Prästgårdsgatan 24, Vimmerby" },
+        { "name": "Katthults Hof", "addr": "Katthult, Vimmerby" },
+        { "name": "Filmbyn Småland", "addr": "Spilhammarvägen 4, Mariannelund" },
+        { "name": "Schärenboot Västervik", "addr": "Slottsholmvägen 8, Västervik" },
+        { "name": "Gamleby Trollwald", "addr": "Garpedansberget, Gamleby" }
+      ]
+    },
+    {
+      "von": "02.08.",
+      "bis": "03.08.",
+      "ort": "Söderköping / Norrköping",
+      "camp": 1003,
+      "name": "Korskullens Camping",
+      "addr": "Skönbergagatan 52, Söderköping",
+      "phone": "+46 12121621",
+      "hours": "Check-in So. 16:00 · Check-out Mo.",
+      "total": "450 SEK",
+      "paid": "42,72 €",
+      "status": "paid",
+      "sights": [{ "name": "Himmelstalund Felsritzungen", "addr": "Campingvägen, Norrköping" }, { "name": "Kolmården Tropicarium" }]
+    },
+    {
+      "von": "03.08.",
+      "bis": "06.08.",
+      "ort": "Stockholm",
+      "camp": 1004,
+      "name": "Bredäng Camping Stockholm",
+      "addr": "Stora Sällskapets Väg 60, Skärholmen",
+      "phone": "08-977071 (Mo–So 9–21 Uhr)",
+      "ppn": "440 SEK",
+      "status": "onsite",
+      "note": "~100 € vor Ort",
+      "sights": [{ "name": "Vasa-Museum", "addr": "Galärvarvsvägen 14, Stockholm", "day": "2026-08-04" }, { "name": "Gamla Stan" }]
+    },
+    {
+      "von": "06.08.",
+      "bis": "09.08.",
+      "ort": "Eksjö",
+      "camp": 1005,
+      "name": "Eksjö Camping",
+      "addr": "Prästängsvägen 5, 575 36 Eksjö",
+      "total": "1170 SEK",
+      "paid": "111,08 €",
+      "status": "paid",
+      "nr": "16924901",
+      "sights": [
+        { "name": "Altstadt Eksjö", "day": "2026-08-07" },
+        { "name": "Kleva Gruva", "addr": "Kleva Gruva 1, Holsbybrunn", "day": "2026-08-08" }
+      ]
+    },
+    {
+      "von": "09.08.",
+      "bis": "11.08.",
+      "ort": "Göteborg",
+      "camp": 1006,
+      "name": "Lisebergs Camping Askim Strand / Lisebergsbyn",
+      "addr": "Olbersgatan 9, 416 55 Göteborg",
+      "phone": "+46 31-400 100",
+      "total": "1190 SEK",
+      "paid": "112,98 €",
+      "status": "paid",
+      "nr": "ZMAC58",
+      "note": "Ausflug in die Innenstadt / Liseberg.",
+      "sights": [{ "name": "Liseberg" }]
+    },
+    {
+      "von": "11.08.",
+      "bis": "13.08.",
+      "ort": "Markaryd",
+      "camp": 1007,
+      "name": "Sjötorpet Camping",
+      "addr": "Strandvägen 4, 285 31 Markaryd",
+      "hours": "Check-in 13:00 · Check-out 12:00",
+      "total": "720 SEK",
+      "status": "onsite",
+      "sights": [
+        { "name": "Smålandet Elk Safari", "addr": "Misterhult 2032, Markaryd", "day": "2026-08-11" },
+        { "name": "IKEA-Museum", "addr": "IKEAgatan 5, Älmhult", "day": "2026-08-12" }
+      ]
+    },
+    {
+      "von": "13.08.",
+      "bis": "14.08.",
+      "ort": "Malmö / Rückfahrt",
+      "camp": "vellinge",
+      "name": "Bauernhof Vellinge",
+      "addr": "Gessie ängaväg 61, Vellinge",
+      "ppn": "20 €",
+      "status": "booked",
+      "note": "Zwischenstopp vor der Fähre."
+    },
+    {
+      "von": "14.08.",
+      "bis": "15.08.",
+      "ort": "Travemünde",
+      "camp": "ivendorf",
+      "name": "Camping Ivendorf",
+      "addr": "Zum Hafenplatz 1, 23570 Travemünde",
+      "note": "Ankunft Fähre Fr., 14.08., 19:15 Uhr."
+    }
+  ],
+  "ferries": [
+    {
+      "nach": "Bauernhof mit Pferden",
+      "name": "Fähre Travemünde – Malmö",
+      "dep": "25.07., 11:00 (Check-in ab 09:00)",
+      "arr": "20:00",
+      "note": "ca. 9 Std. Überfahrt"
+    },
+    { "nach": "Camping Ivendorf", "name": "Fähre Malmö – Travemünde", "dep": "14.08., 08:00 da sein", "arr": "19:15", "note": "ca. 9 Std. Überfahrt" }
+  ]
+}
