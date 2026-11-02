@@ -124,6 +124,22 @@ let dirCalls = 0;
     }
     if (u.includes('overpass')) {
       const q = decodeURIComponent(r.request().postData().slice(5));
+      if (q.includes('"route"="ferry"'))
+        return r.fulfill({
+          json: {
+            elements: [
+              {
+                type: 'way',
+                id: 81,
+                tags: { route: 'ferry', name: 'Travemünde – Malmö', operator: 'Finnlines', duration: '09:00' },
+                geometry: [
+                  { lat: 53.944, lon: 10.86 },
+                  { lat: 55.61, lon: 12.99 }
+                ]
+              }
+            ]
+          }
+        });
       const m = q.match(/\(([\d.\-]+),([\d.\-]+),([\d.\-]+),([\d.\-]+)\)/);
       if (!m) return r.fulfill({ json: { elements: [] } });
       const [S, W, N, E] = m.slice(1).map(Number);
@@ -498,6 +514,29 @@ let dirCalls = 0;
   const tourJson = await page.evaluate(() => JSON.stringify(tourFile(loadTours().find(t => t.name === 'Schweden Rundreise 2026')), null, 1));
   fs.writeFileSync(path.join(OUT, 'schweden.etappen.json'), tourJson);
   ok(JSON.parse(tourJson).tour.stages.length === 12, 'Tour-Datei tests/out/schweden.etappen.json geschrieben');
+  // Fahrt anpassen: Hinfahrt Ivendorf → Schweden mit der OSM-Fährverbindung → App bietet die Rückfahrt mit der Fähre an
+  await page.evaluate(() => setTab('trip'));
+  const hin = await page.evaluate(() => state.stages.findIndex(s => s.from.lat < 54.2 && s.to.lat > 55 && !ferryViaOf(s)));
+  if (hin >= 0) {
+    await page.click(`#tripView [data-legopen="${hin}"]`);
+    await page.waitForSelector('#legDlg [data-legroute]');
+    await page.click('#legDlg [data-legroute="0"]');
+    await page.click('#legApply');
+    await page.waitForSelector('#askDlg[open]', { timeout: 10000 });
+    const q = await page.textContent('#askText');
+    await page.click('#askBtns button.primary');
+    await page.waitForFunction(() => !state.busy && state.stages.filter(s => ferryViaOf(s)).length === 2, null, { timeout: 10000 });
+    ok(
+      /Malmö → Travemünde/.test(q) &&
+        (await page.evaluate(() =>
+          state.stages
+            .filter(s => ferryViaOf(s))
+            .map(s => shortLabel(ferryViaOf(s).label) + '→' + shortLabel(ferryViaOf(s).to.label))
+            .join()
+        )) === 'Travemünde→Malmö,Malmö→Travemünde',
+      'Fähre auf der Hinfahrt (OSM-Verbindung) → Rückfahrt mit der Fähre angeboten und eingetragen'
+    );
+  } else ok(false, 'Hinfahrt Ivendorf → Schweden ohne Fähre nicht gefunden');
   console.log('INFO  Duschcode/WLAN aus der PDF: bewusst nicht vorgesehen (Sebastian: nicht speichern)');
   console.log('INFO  Platznamen kommen aus OSM/Google (nicht mehr bearbeitbar); Telefon, Buchungsnr. und Stellplatz stehen in der Notiz');
 

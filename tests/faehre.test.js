@@ -90,6 +90,32 @@ const srv = require('./lib/server')(ROOT, 8154);
     }
     if (u.includes('overpass')) {
       const q = decodeURIComponent(r.request().postData().slice(5));
+      if (q.includes('"route"="ferry"'))
+        return r.fulfill({
+          json: {
+            elements: [
+              {
+                type: 'way',
+                id: 81,
+                tags: { route: 'ferry', name: 'Travemünde – Malmö', operator: 'Finnlines', duration: '09:00' },
+                geometry: [
+                  { lat: 53.944, lon: 10.86 },
+                  { lat: 54.6, lon: 11.9 },
+                  { lat: 55.61, lon: 12.99 }
+                ]
+              },
+              {
+                type: 'way',
+                id: 82,
+                tags: { route: 'ferry', name: 'Travemünde – Helsinki' },
+                geometry: [
+                  { lat: 53.944, lon: 10.86 },
+                  { lat: 60.16, lon: 24.95 }
+                ]
+              }
+            ]
+          }
+        });
       if (q.includes('ferry_terminal'))
         return r.fulfill({
           json: {
@@ -297,6 +323,26 @@ const srv = require('./lib/server')(ROOT, 8154);
   await page.waitForFunction(() => !$('#legErr').hidden && /Ankunftshafen/.test($('#legErr').textContent), null, { timeout: 8000 });
   ok(await page.evaluate(() => $('#legDlg').open), 'nur Abfahrtshafen → Hinweis im Dialog, Dialog bleibt offen');
   await page.click('#legCancel');
+  // 2c. Fährverbindung aus OSM antippen → Häfen und Dauer übernommen; unpassende (Helsinki) nicht angeboten
+  await page.click('#tripView [data-legopen="2"]');
+  await page.waitForSelector('#legDlg[open] #legFerryDel');
+  await page.click('#legFerryDel');
+  await page.waitForFunction(() => !state.busy && !state.stages[2].ex?.ferryH, null, { timeout: 10000 });
+  await page.click('#tripView [data-legopen="2"]');
+  await page.waitForSelector('#legDlg [data-legroute]');
+  const rts = await page.$$eval('#legDlg [data-legroute]', b => b.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+  ok(
+    rts.length === 1 && /Travemünde – Malmö/.test(rts[0]) && /Finnlines/.test(rts[0]) && /9 h/.test(rts[0]),
+    'OSM-Fährverbindungen: Travemünde – Malmö (Finnlines, 9 h), Helsinki nicht: ' + rts.join(' | ')
+  );
+  await page.click('#legDlg [data-legroute="0"]');
+  ok((await page.inputValue('#legHours')) === '9', 'Verbindung angetippt → Dauer 9 h übernommen');
+  await page.click('#legApply');
+  await page.waitForFunction(() => !state.busy && state.stages[2].ex?.ferryH === 9, null, { timeout: 10000 });
+  ok(
+    await page.evaluate(() => ferryViaOf(state.stages[2])?.label === 'Travemünde' && ferryViaOf(state.stages[2])?.to?.label === 'Malmö'),
+    'Fähre aus OSM-Verbindung eingetragen (Travemünde → Malmö)'
+  );
   // 3. km und Zeit von Hand
   await page.click('#tripView [data-ed="c|2|drv"]');
   await page.fill('#tripView .edin', '45 km + 9 h Fähre');

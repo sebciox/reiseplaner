@@ -79,6 +79,62 @@ async function setLegVias(j, list) {
 }
 
 /* ---------- Dialog „Fahrt anpassen“ ---------- */
+// Fährverbindungen aus OSM (route=ferry, Linien mit Geometrie) im Rechteck um die Fahrt: passend ist eine Verbindung,
+// deren Enden die Straßenstücke kurz halten (Anfang → Hafen 1, Hafen 2 → Ziel), sortiert nach diesen Straßen-km.
+// Dauer aus dem OSM-Merkmal duration („09:00“, „9:30“, „PT9H“), Hafennamen aus from/to bzw. dem Namen („A – B“).
+let legRoutes = null;
+const durH = d => {
+  if (!d) return null;
+  let m = String(d).match(/^(\d{1,2}):(\d{2})/);
+  if (m) return +m[1] + +m[2] / 60;
+  m = String(d).match(/^PT(?:(\d+)H)?(?:(\d+)M)?/i);
+  return m && (m[1] || m[2]) ? (+m[1] || 0) + (+m[2] || 0) / 60 : null;
+};
+async function ferryRoutes(a, b) {
+  const pad = 0.4,
+    S = Math.min(a.lat, b.lat) - pad,
+    N = Math.max(a.lat, b.lat) + pad,
+    W = Math.min(a.lon, b.lon) - pad * 1.6,
+    E = Math.max(a.lon, b.lon) + pad * 1.6;
+  const q = `[out:json][timeout:25];way["route"="ferry"](${S.toFixed(3)},${W.toFixed(3)},${N.toFixed(3)},${E.toFixed(3)});out tags geom 200;`;
+  const els = await overpass(q, { passes: 1 });
+  const air = hav([a.lat, a.lon], [b.lat, b.lon]),
+    seen = new Set();
+  return (els || [])
+    .filter(e => e.geometry && e.geometry.length > 1)
+    .map(e => {
+      let g1 = e.geometry[0],
+        g2 = e.geometry[e.geometry.length - 1];
+      const t = e.tags || {};
+      let parts = t.from && t.to ? [t.from, t.to] : String(t.name || '').split(/\s+[–—-]\s+|\s*↔\s*/);
+      if (parts.length !== 2) parts = [null, null];
+      // Richtung: erstes Ende nahe am Anfang der Fahrt
+      if (
+        hav([a.lat, a.lon], [g2.lat, g2.lon]) + hav([b.lat, b.lon], [g1.lat, g1.lon]) <
+        hav([a.lat, a.lon], [g1.lat, g1.lon]) + hav([b.lat, b.lon], [g2.lat, g2.lon])
+      ) {
+        [g1, g2] = [g2, g1];
+        parts = [parts[1], parts[0]];
+      }
+      const road = hav([a.lat, a.lon], [g1.lat, g1.lon]) + hav([g2.lat, g2.lon], [b.lat, b.lon]);
+      const fmt = p => ({ lat: +p.lat.toFixed(5), lon: +p.lon.toFixed(5) });
+      return {
+        name: t.name || (parts[0] && parts[1] ? `${parts[0]} – ${parts[1]}` : 'Fährverbindung'),
+        op: t.operator || '',
+        from: { ...fmt(g1), label: parts[0] || 'Fährhafen' },
+        to: { ...fmt(g2), label: parts[1] || 'Fährhafen' },
+        hours: durH(t.duration),
+        road
+      };
+    })
+    .filter(r => r.road < air * 0.8 && hav([r.from.lat, r.from.lon], [r.to.lat, r.to.lon]) > 3000)
+    .sort((x, y) => x.road - y.road)
+    .filter(r => {
+      const k = r.name + r.op;
+      return !seen.has(k) && seen.add(k);
+    })
+    .slice(0, 6);
+}
 async function ferryTerminals(p) {
   const q = `[out:json][timeout:25];nwr["amenity"="ferry_terminal"]["name"](around:60000,${(+p.lat).toFixed(4)},${(+p.lon).toFixed(4)});out center tags 40;`;
   const els = await overpass(q, { passes: 1 });
@@ -97,8 +153,13 @@ function openLeg(j) {
   const f = ferryViaOf(s);
   legFerry = f ? { from: { label: f.label, lat: f.lat, lon: f.lon }, to: f.to, hours: +f.hours || 4, uid: f.uid } : null;
   legPorts = { a: null, b: null };
+  legRoutes = null;
   renderLeg();
   $('#legDlg').showModal();
+  Promise.race([ferryRoutes(s.from, s.to), new Promise((_, no) => setTimeout(() => no(new Error('Zeit')), 15000))])
+    .then(r => (legRoutes = r))
+    .catch(() => (legRoutes = []))
+    .finally(() => legJ === j && $('#legDlg').open && renderLeg());
   if (!f)
     ['a', 'b'].forEach(k =>
       Promise.race([ferryTerminals(k === 'a' ? s.from : s.to), new Promise((_, no) => setTimeout(() => no(new Error('Zeit')), 15000))])
@@ -145,13 +206,24 @@ function renderLeg() {
     return `<div class="legport"><div class="chips">${chips}</div><input data-legsearch="${k}" placeholder="${k === 'a' ? 'Abfahrtshafen' : 'Ankunftshafen'} suchen – Enter" value="${sel ? esc(cleanLabel(sel.label)) : ''}" aria-label="${k === 'a' ? 'Abfahrtshafen' : 'Ankunftshafen'}"></div>`;
   };
   const F = legFerry || {};
-  const fer = `<div class="legsec"><h3>⛴ Fähre auf dieser Fahrt</h3>
+  const routes =
+    legRoutes == null
+      ? '<div class="muted small">Fährverbindungen aus OpenStreetMap werden gesucht …</div>'
+      : legRoutes.length
+        ? `<div class="leglab">Fährverbindungen (OpenStreetMap) – antippen übernimmt Häfen und Dauer</div><div class="legroutes">${legRoutes
+            .map(
+              (r, i) =>
+                `<button type="button" class="chip${legFerry?.from && legFerry?.to && Math.abs(legFerry.from.lat - r.from.lat) < 1e-4 && Math.abs(legFerry.to.lat - r.to.lat) < 1e-4 ? ' on' : ''}" data-legroute="${i}">⛴ ${esc(r.name)}${r.op ? ` <span class="muted">${esc(r.op)}</span>` : ''}${r.hours ? ` <span class="muted">· ${fhours(Math.round(r.hours * 2) / 2)}</span>` : ''}</button>`
+            )
+            .join('')}</div>`
+        : '<div class="muted small">Keine Fährverbindung in OpenStreetMap gefunden – Häfen selbst wählen.</div>';
+  const fer = `<div class="legsec"><h3>⛴ Fähre auf dieser Fahrt</h3>${routes}
     ${
       legFerry
         ? `<div class="leglab">ab</div>${port('a', F.from)}<div class="leglab">nach</div>${port('b', F.to)}
         <label class="leghrs"><input type="number" min="0.5" max="36" step="0.5" id="legHours" value="${F.hours || 4}"> h Überfahrt</label>
         ${legFerry && legFerry.uid ? '<button type="button" class="linkbtn" id="legFerryDel">Fähre entfernen (wieder Landweg)</button>' : ''}`
-        : `<button type="button" class="btn small" id="legFerryOn">Fähre eintragen</button>`
+        : `<button type="button" class="btn small" id="legFerryOn">Häfen selbst wählen</button>`
     }</div>`;
   const ps = legPasses(s);
   const pas = `<div class="legsec"><h3>Route führt über …</h3>
@@ -245,6 +317,37 @@ async function applyLeg() {
   }
   $('#legDlg').close();
   await setLegVias(j, list);
+  const f = ferryViaOf(state.stages[j]);
+  if (f && !legFerry?.uid) offerReturnFerry(j, f);
+}
+// Rückfahrt: eine andere Fahrt ohne Fähre, die in Gegenrichtung zwischen denselben Gegenden läuft → Fähre zurück anbieten
+async function offerReturnFerry(j, f) {
+  const near = (p, q) => hav([p.lat, p.lon], [q.lat, q.lon]) < 80000;
+  const k = state.stages.findIndex((s, i) => i !== j && !ferryViaOf(s) && near(s.from, f.to) && near(s.to, f));
+  if (k < 0) return;
+  const s = state.stages[k];
+  const r = await askChoice(
+    'Rückfahrt auch mit der Fähre?',
+    `Die Fahrt ${shortLabel(s.from.label)} → ${shortLabel(stayTown(k) || s.to.label)} geht noch über Land. Soll sie auch mit der Fähre ${shortLabel(f.to.label)} → ${shortLabel(f.label)} fahren?`,
+    [
+      { v: 'yes', label: `Ja, Fähre ${shortLabel(f.to.label)} → ${shortLabel(f.label)}`, primary: true },
+      { v: '', label: 'Nein' }
+    ]
+  );
+  if (r !== 'yes') return;
+  await setLegVias(k, [
+    ...visitsOf(s),
+    {
+      uid: 'v' + ++viaSeq,
+      label: f.to.label,
+      lat: f.to.lat,
+      lon: f.to.lon,
+      kind: 'ferry',
+      pin: true,
+      hours: f.hours,
+      to: { label: f.label, lat: f.lat, lon: f.lon }
+    }
+  ]);
 }
 $('#legDlg').addEventListener('click', async e => {
   const t = e.target;
@@ -257,6 +360,19 @@ $('#legDlg').addEventListener('click', async e => {
   if (t.closest('#legFerryDel')) {
     legFerry = null;
     return applyLeg();
+  }
+  const rt = t.closest('[data-legroute]');
+  if (rt) {
+    const r = legRoutes[+rt.dataset.legroute];
+    legFerry = {
+      ...(legFerry || {}),
+      from: { ...r.from },
+      to: { ...r.to },
+      hours: r.hours ? Math.round(r.hours * 2) / 2 : legFerry?.hours || 4,
+      hoursSet: !!r.hours
+    };
+    if (r.from.label === 'Fährhafen' || r.to.label === 'Fährhafen') legMsg('Hafennamen fehlen in OSM – du kannst sie unten noch eintragen.');
+    return renderLeg();
   }
   const pp = t.closest('[data-legport]');
   if (pp) {
