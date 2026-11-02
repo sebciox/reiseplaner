@@ -427,6 +427,7 @@ function renderMap() {
     (v.sights || []).forEach(x =>
       L.marker([x.lat, x.lon], { icon: pinIcon('★', 'sight'), zIndexOffset: -120 })
         .bindPopup(() => sightPopHtml(x))
+        .on('click', () => focusRow('s' + sightKey(x)))
         .addTo(lyr.pins)
     )
   );
@@ -436,6 +437,11 @@ function renderMap() {
       zIndexOffset: -100
     })
       .bindPopup(() => sightPopHtml(v))
+      .on('click', () => {
+        // Pause/freie Tage = Campingplatz → dessen Zeile; sonst die Sehenswürdigkeit bzw. der Besuch
+        const k = v.kind === 'rest' ? state.stages.findIndex(s => s.to.kind === 'camp' && hav([s.to.lat, s.to.lon], [v.lat, v.lon]) < 300) : -1;
+        focusRow(k >= 0 ? 'c' + k : 's' + sightKey(v));
+      })
       .addTo(lyr.pins)
   );
   if (state.pending && state.pending.mode === 'anchor') {
@@ -453,16 +459,19 @@ function renderMap() {
   if (state.start)
     L.marker([state.start.lat, state.start.lon], { icon: pinIcon('S') })
       .bindPopup(esc(state.start.label))
+      .on('click', () => focusRow('start'))
       .addTo(lyr.pins);
   if (state.end && !endIsCamp)
     L.marker([state.end.lat, state.end.lon], { icon: pinIcon('Z', 'end') })
       .bindPopup(esc(state.end.label))
+      .on('click', () => focusRow('end'))
       .addTo(lyr.pins);
   state.stages.forEach((s, i) => {
     if (s.to.kind !== 'camp') return;
     const fin = state.done && i === state.stages.length - 1;
     L.marker([s.to.lat, s.to.lon], { icon: fin ? pinIcon('Z', 'end') : pinIcon(String(i + 1)) })
       .bindPopup(() => campInfo(s.to, 'chosen'))
+      .on('click', () => focusRow('c' + i))
       .addTo(lyr.pins);
   });
 }

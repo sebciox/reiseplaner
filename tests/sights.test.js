@@ -289,7 +289,12 @@ const srv = require('./lib/server')(ROOT, 8151);
   const rowS = async () => (await page.textContent('#tripView tr.sight')).replace(/\s+/g, ' ');
   const rowC = async () => (await page.textContent('#tripView tr.camp')).replace(/\s+/g, ' ');
   // Reiseplan-Tabelle: eingeklappt Kurzzeile, aufgeklappt eigene Zeile je Sehenswürdigkeit unter dem Platz
-  ok(!(await page.$('#tripView tr.sight')) && /★ 1/.test(await page.textContent('#tripView tr.camp')), 'eingeklappt: Kurzzeile mit ★-Anzahl, ohne Unterzeilen');
+  ok(
+    !(await page.$('#tripView tr.sight')) &&
+      /▶\s*1 Sehenswürdigkeit/.test(await page.textContent('#tripView tr.sgrow')) &&
+      !/★ 1/.test(await page.textContent('#tripView tr.camp')),
+    'zugeklappt: Aufklapp-Zeile „▶ 1 Sehenswürdigkeit“ unter dem Platz, ohne Unterzeilen, kein ★-Zähler'
+  );
   await page.click('#tripView [data-grp="0"]');
   await page.waitForSelector('#tripView tr.sight');
   ok(
@@ -582,14 +587,19 @@ const srv = require('./lib/server')(ROOT, 8151);
     renderTrip();
   });
   const campN = await rowC();
-  ok(/Preis –/.test(campN) && /Rezeption –/.test(campN), 'nichts gefunden: „Preis –“ und „Rezeption –“ am Platz');
+  const phC = await page.$$eval('#tripView tr.camp .ed .ph', x => x.map(y => y.textContent).join('|'));
+  ok(
+    /Preis \/ Nacht/.test(phC) && /Rezeption, Check-in/.test(phC) && !/Preis –|Rezeption –/.test(campN),
+    'nichts gefunden: blasse Platzhalter „Preis / Nacht“, „Rezeption, Check-in“ am Platz'
+  );
   await page.evaluate(() => {
     state.via[0].info = { v: INFO_V, web: '', oh: '' };
     gSight.set(sightKey(state.via[0]), { oh: [], r: null });
     renderTrip();
   });
   st = await rowS();
-  ok(/Öffnungszeiten –/.test(st) && /Preise –/.test(st), 'Sehenswürdigkeit ohne Angaben: „Öffnungszeiten –“, „Preise –“');
+  const phS = await page.$$eval('#tripView tr.sight .ed .ph', x => x.map(y => y.textContent).join('|'));
+  ok(/Öffnungszeiten/.test(phS) && /Preis/.test(phS), 'Sehenswürdigkeit ohne Angaben: blasse Platzhalter „Öffnungszeiten“, „Preis“');
   // Handy
   await page.setViewportSize({ width: 390, height: 800 });
   await page.evaluate(() => setSheet('full'));

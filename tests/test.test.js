@@ -59,8 +59,8 @@ const srv = require('./lib/server')(ROOT, 8123);
     }
     if (u.includes('tile.openstreetmap.org')) return r.fulfill({ status: 204, body: '' });
     if (u.includes('/geocode/')) {
-      const t = new URL(u).searchParams.get('text');
-      const k = Object.keys(PLACES).find(k => t.includes(k));
+      const t = new URL(u).searchParams.get('text') || ''; // Rückwärtssuche (Adresse) hat keinen Text
+      const k = t && Object.keys(PLACES).find(k => t.includes(k));
       const p = PLACES[k];
       return r.fulfill({ json: { features: p ? [{ geometry: { coordinates: [p[1], p[0]] }, properties: { label: k + ', Testland' } }] : [] } });
     }

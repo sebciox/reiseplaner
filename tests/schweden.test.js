@@ -40,6 +40,13 @@ const findPlace = t => {
   return PLACES.find(p => p.name.toLowerCase() === t) || PLACES.find(p => t.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(t));
 };
 const srv = require('./lib/server')(ROOT, 8153);
+// gefundene Adressen (Rückwärtssuche): je Platz der PDF die erste Adresse an seinen Koordinaten
+const ADDRS = [];
+for (const p of F.plan) {
+  const c = typeof p.camp === 'number' ? F.camps.find(x => x.id === p.camp) : F.transit[p.camp];
+  if (c && !ADDRS.some(a => a.lat === c.lat && a.lon === c.lon)) ADDRS.push({ lat: c.lat, lon: c.lon, addr: p.addr });
+}
+const addrAt = (lat, lon) => ADDRS.find(a => hav([a.lat, a.lon], [lat, lon]) < 3000)?.addr;
 let dirCalls = 0;
 
 (async () => {
@@ -60,7 +67,12 @@ let dirCalls = 0;
       });
     }
     if (u.includes('tile.openstreetmap.org') || u.includes('arcgisonline')) return r.fulfill({ status: 204, body: '' });
-    if (u.includes('/geocode/reverse') || u.includes('photon.komoot.io/reverse')) return r.fulfill({ json: { features: [] } });
+    if (u.includes('/geocode/reverse')) {
+      const q = new URL(u).searchParams,
+        a = addrAt(+q.get('point.lat'), +q.get('point.lon'));
+      return r.fulfill({ json: { features: a ? [{ properties: { label: a } }] : [] } });
+    }
+    if (u.includes('photon.komoot.io/reverse')) return r.fulfill({ json: { features: [] } });
     if (u.includes('/geocode/')) {
       const p = findPlace(new URL(u).searchParams.get('text'));
       return r.fulfill({
@@ -255,13 +267,15 @@ let dirCalls = 0;
     }, name);
   let entered = 0,
     missing = [];
+  // Name und Adresse sind nicht bearbeitbar (kommen aus OSM/Google bzw. der Adresssuche); Telefon, Buchungsnr. und
+  // Stellplatz schreibt man in die Notiz (ein freies Feld)
+  const noteOf = p => [p.note, p.phone && 'Tel. ' + p.phone, p.nr && 'Buchungsnr. ' + p.nr, p.pitch && 'Stellplatz ' + p.pitch].filter(Boolean).join('\n');
+  ok(!(await page.$('#tripView [data-ed$="|name"][data-ed^="c|"], #tripView [data-ed$="|addr"]')), 'Name und Adresse sind Links, nicht bearbeitbar');
   for (const [i, p] of F.plan.entries()) {
-    const shown = await page.evaluate(i => nameText(state.stages[i].to) || state.stages[i].to.label, i);
-    if (shown !== p.name) (await edit(`c|${i}|name`, p.name)) ? entered++ : missing.push(`${p.name}: Name`);
     const town = await page.evaluate(i => stayTown(i), i);
     if (p.ort && town !== p.ort) (await edit(`c|${i}|ort`, p.ort)) ? entered++ : missing.push(`${p.name}: Ort`);
-    for (const f of ['addr', 'phone', 'hours', 'arr', 'ppn', 'total', 'paid', 'nr', 'pitch', 'note'])
-      if (p[f]) (await edit(`c|${i}|${f}`, p[f])) ? entered++ : missing.push(`${p.name}: ${f}`);
+    for (const f of ['hours', 'arr', 'ppn', 'total', 'paid']) if (p[f]) (await edit(`c|${i}|${f}`, p[f])) ? entered++ : missing.push(`${p.name}: ${f}`);
+    if (noteOf(p)) (await edit(`c|${i}|note`, noteOf(p))) ? entered++ : missing.push(`${p.name}: Notiz`);
     if (p.status) (await status(`c|${i}|status`, p.status)) ? entered++ : missing.push(`${p.name}: Status`);
     for (const s of p.sights || []) {
       const k = await sightUid(s.name);
@@ -270,7 +284,15 @@ let dirCalls = 0;
         continue;
       }
       if (!(await page.$(`#tripView tbody[data-grpb="${i}"] tr.sight[data-row="s${k}"]`))) missing.push(`${s.name}: nicht unter ${p.name}`);
-      if (s.addr) (await edit(`s|${k}|addr`, s.addr)) ? entered++ : missing.push(`${s.name}: Adresse`);
+      // Adresse der Sehenswürdigkeit = gefundener Wert (sonst OSM/Google beim Hinzufügen)
+      if (s.addr)
+        await page.evaluate(
+          ([k, a]) => {
+            const x = sightSrc(findSightByKey(k));
+            x.info = { ...(x.info || {}), v: INFO_V, addr: a };
+          },
+          [k, s.addr]
+        );
       if (s.hours) (await edit(`s|${k}|hours`, s.hours)) ? entered++ : missing.push(`${s.name}: Öffnungszeiten`);
       if (s.day) {
         const d = `#tripView input.dayin[data-sel="s|${k}|day"]`;
@@ -289,6 +311,7 @@ let dirCalls = 0;
     (await status(`f|${j}|status`, 'paid')) ? entered++ : missing.push(`${f.name}: Status`);
   }
   ok(!missing.length, `${entered} Angaben der PDF eingetragen` + (missing.length ? ' – fehlgeschlagen: ' + missing.join('; ') : ''));
+  await page.evaluate(() => touch());
   await page.waitForTimeout(1500); // Autospeichern
 
   /* ---------- 3. Neu laden und prüfen: steht alles so in der Tabelle wie in der PDF? ---------- */
@@ -303,18 +326,21 @@ let dirCalls = 0;
   let bad = [];
   for (const [i, p] of F.plan.entries()) {
     const g = await grpText(i);
-    const want = [p.name, p.addr, p.phone, p.hours, p.arr, p.nr, p.pitch, p.note, p.ppn && money(p.ppn), p.total && money(p.total), p.paid].filter(Boolean);
+    const c = typeof p.camp === 'number' ? F.camps.find(x => x.id === p.camp) : F.transit[p.camp];
+    const want = [addrAt(c.lat, c.lon), p.phone, p.hours, p.arr, p.nr, p.pitch, p.note, p.ppn && money(p.ppn), p.total && money(p.total), p.paid].filter(
+      Boolean
+    );
     const miss = want.filter(w => !g.includes(w));
     if (p.status) {
       const sel = await page.evaluate(i => document.querySelector(`#tripView select[data-sel="c|${i}|status"]`)?.value, i);
       if (sel !== p.status) miss.push('Status ' + p.status);
     }
-    for (const s of p.sights || []) for (const w of [s.name, s.addr, s.hours].filter(Boolean)) if (!g.includes(w)) miss.push(w);
+    for (const s of p.sights || []) for (const w of [s.addr, s.hours].filter(Boolean)) if (!g.includes(w)) miss.push(w);
     if (miss.length) bad.push(`${p.von} ${p.name}: ${miss.join(', ')}`);
   }
   ok(
     !bad.length,
-    'nach dem Neuladen steht jede Unterkunft mit Adresse, Telefon, Zeiten, Preis, Status, Buchung, Notiz und Sehenswürdigkeiten in der Tabelle' +
+    'nach dem Neuladen steht jede Unterkunft mit Adresse, Zeiten, Preis, Status, Notiz (Telefon, Buchungsnr., Stellplatz) und Sehenswürdigkeiten in der Tabelle' +
       (bad.length ? ': ' + bad.join(' | ') : '')
   );
   const days = await page.evaluate(() => [...document.querySelectorAll('#tripView input.dayin[data-sel^="s|"]')].map(x => x.value).filter(Boolean));
@@ -380,7 +406,7 @@ let dirCalls = 0;
   const pr = (await page.evaluate(() => $('#print').innerText)).replace(/\s+/g, ' ');
   const prCols = await page.evaluate(() => [...document.querySelectorAll('#print .ptab thead th')].map(t => t.textContent.trim()).join(' | '));
   ok(
-    prCols === 'Datum | Name | Adresse | Zeiten | Preis / Status | Notiz / Buchung | Weiter / Entfernung' &&
+    prCols === 'Datum | Name | Adresse | Zeiten | Preis / Status | Notiz | Weiter / Entfernung' &&
       /ZMAC58/.test(pr) &&
       /326,61/.test(pr) &&
       /Vasa-Museum/.test(pr) &&
@@ -438,7 +464,7 @@ let dirCalls = 0;
     n: state.stages.length,
     ferry: state.stages[1].ex.ferry > 500,
     est: state.stages.some(s => (s.to.sights || []).some(x => x.est)),
-    nr: state.stages.find(s => s.my?.nr === 'ZMAC58') != null,
+    nr: state.stages.some(s => /ZMAC58/.test(s.memo?.text || '')),
     st: state.stages[2].my?.status
   }));
   ok(
@@ -450,6 +476,7 @@ let dirCalls = 0;
   fs.writeFileSync(path.join(OUT, 'schweden.etappen.json'), tourJson);
   ok(JSON.parse(tourJson).tour.stages.length === 12, 'Tour-Datei tests/out/schweden.etappen.json geschrieben');
   console.log('INFO  Duschcode/WLAN aus der PDF: bewusst nicht vorgesehen (Sebastian: nicht speichern)');
+  console.log('INFO  Platznamen kommen aus OSM/Google (nicht mehr bearbeitbar); Telefon, Buchungsnr. und Stellplatz stehen in der Notiz');
 
   console.log(
     `\nNachbau Schweden-PDF (${Math.round((Date.now() - t0) / 1000)} s): ${passed + okCaps.length} Prüfungen erfüllt, ${gaps.length} Lücken, ${failures} Fehler.`

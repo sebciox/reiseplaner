@@ -112,6 +112,7 @@ function timelineHtml(ia) {
 const footHtml = (main, extra) =>
   `<div class="actions foot${window.__allTabs ? ' open static' : ''}"><div class="foot-main">${main}</div>${extra ? `<button class="btn ghost more" type="button" data-more aria-expanded="${!!window.__allTabs}" aria-label="Weitere Aktionen" title="Weitere Aktionen">⋯</button><div class="foot-extra">${extra}</div>` : ''}</div>`;
 const grpLoaded = new Set(); // Gruppen, deren Infos (Google, Sehenswürdigkeiten) schon geladen wurden
+const addrTried = new Set(); // Touren, für die fehlende Adressen schon gesucht wurden
 function renderTrip() {
   const el = $('#tripView');
   if (!el) return;
@@ -141,6 +142,12 @@ function renderTrip() {
   // Chip „n offen · … €“ in der Reisezeile mitziehen
   const oc = $('#tripBar [data-opento]');
   if (oc) oc.outerHTML = openChipHtml();
+  // Platz-Zeilen sind immer vollständig: fehlende Adressen einmal je Tour nachtragen
+  const ak = String(state.tourId || 'neu') + ':' + state.stages.length;
+  if (state.stages.length && !addrTried.has(ak) && state.stages.some(s => s.to.kind === 'camp' && !s.to.addr)) {
+    addrTried.add(ak);
+    setTimeout(() => ensureAddrs().then(ch => ch && renderTrip()), 0);
+  }
   // aufgeklappte Gruppen: Infos einmal nachladen (z. B. die aktuelle Etappe beim ersten Öffnen)
   el.querySelectorAll('tbody.grp.open[data-grpb]').forEach(b => {
     const i = +b.dataset.grpb;
@@ -179,13 +186,18 @@ function renderTrip() {
     b =>
       (b.onclick = () => {
         tlOpen.clear();
-        tlOpen.add(-1);
         if (b.dataset.tlall === '1') {
           tlOpen.add(-3);
-          state.stages.forEach((_, i) => tlOpen.add(i));
+          state.stages.forEach((_, i) => {
+            tlOpen.add(i);
+            if (!grpLoaded.has(i)) {
+              grpLoaded.add(i);
+              openedGroup(i);
+            }
+          });
         }
+        saveGrp();
         renderTrip();
-        if (b.dataset.tlall === '1') ensureAddrs().then(ch => ch && renderTrip());
       })
   );
   el.querySelectorAll('[data-tlnight]').forEach(
