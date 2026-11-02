@@ -317,20 +317,22 @@ function driveHtml(j) {
   const fl = [s.ex?.ferry > 200 ? 'Fähre' : '', s.ex?.toll > 1000 ? 'Maut' : ''].filter(Boolean).join(' · ');
   return `<div>nach ${esc(stayTown(j) || shortLabel(s.to.label))}</div><div class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${fl ? ' · ' + fl : ''}</div>`;
 }
-// Aufklapp-Zeile unter dem Platz: „▶ 2 Sehenswürdigkeiten · 1 Besuch unterwegs“ (Gruppe i, Start = -1)
-function sgRowHtml(i, open, ns, nv) {
+// Aufklapp-Knopf in der Platz-Zeile (unter dem Namen): „▶ 2 Sehenswürdigkeiten · 1 Besuch unterwegs“ (Gruppe i, Start = -1)
+function sgTogHtml(i, open, ns, nv) {
   if (XP || !(ns + nv)) return '';
   const t = [ns && `${ns} ${ns === 1 ? 'Sehenswürdigkeit' : 'Sehenswürdigkeiten'}`, nv && `${nv} ${nv === 1 ? 'Besuch' : 'Besuche'} unterwegs`]
     .filter(Boolean)
     .join(' · ');
-  return `<tr class="sgrow"><td colspan="7"><button class="sgtog" type="button" data-grp="${i}" aria-expanded="${open}"><span class="tri" aria-hidden="true">${open ? '▼' : '▶'}</span> ${t}</button></td></tr>`;
+  return `<div class="x"><button class="sgtog" type="button" data-grp="${i}" aria-expanded="${open}"><span class="tri" aria-hidden="true">${open ? '▼' : '▶'}</span> ${t}</button></div>`;
 }
+// Unterzeilen (Sehenswürdigkeiten, Besuche) hängen per Linie am Platz – die letzte schließt die Linie ab
+const treeLast = h => h.replace(/<tr class="sight"(?![^]*<tr class="sight")/, '<tr class="sight last"');
 function startRows(ds, open) {
   const vs = state.stages[0] ? sightVisitsOf(state.stages[0]) : [];
-  let h = `<tr class="pt" data-row="start">${td('Datum', ds ? `<span class="dat">${fdate(ds[0])}</span>` : '')}${td('Name', `<b>Start: ${esc(shortLabel(state.start.label))}</b>`)}${td('Adresse', esc(cleanLabel(state.start.label)))}${td('Zeiten', '')}${td('Preis / Status', '')}${td('Notiz', '')}${td('Weiter / Entfernung', driveHtml(0))}</tr>`;
-  h += sgRowHtml(-1, open, 0, vs.length);
-  if (open) vs.forEach(v => (h += visitRowHtml(v)));
-  return h + groupExtrasHtml(-1, ds);
+  let h = `<tr class="pt" data-row="start">${td('Datum', ds ? `<span class="dat">${fdate(ds[0])}</span>` : '')}${td('Name', `<b>Start: ${esc(shortLabel(state.start.label))}</b>${sgTogHtml(-1, open, 0, vs.length)}`)}${td('Adresse', esc(cleanLabel(state.start.label)))}${td('Zeiten', '')}${td('Preis / Status', '')}${td('Notiz', '')}${td('Weiter / Entfernung', driveHtml(0))}</tr>`;
+  let sub = '';
+  if (open) vs.forEach(v => (sub += visitRowHtml(v)));
+  return h + treeLast(sub) + groupExtrasHtml(-1, ds);
 }
 // Platz-Zeile: immer vollständig (Datum, Nächte, Ort · Name + Links · Adresse, Telefon, Koordinaten · Zeiten, Ankunft,
 // Abfahrt · Preis/Nacht, gesamt, Status, bezahlt · Notiz · Weiterfahrt)
@@ -360,6 +362,8 @@ function campRowHtml(i, ds, cur) {
     if (!XP)
       name += `<div class="x sbtns"><button class="linkbtn" type="button" data-share="${i}">Teilen</button> · <button class="linkbtn" type="button" data-tledit="${i}">Platz ändern</button></div>`;
   }
+  const nx = state.stages[i + 1];
+  name += sgTogHtml(i, tlOpen.has(i), (c.sights || []).length, nx ? sightVisitsOf(nx).length : 0);
   // Adresse = Link Navigation, darunter gefundene Telefonnummer und Koordinaten
   const addr = own('addr') ? m.addr : campAddrFound(c);
   let ad = `<a href="${esc(navUrl(c))}" target="_blank" rel="noopener">${esc(addr || (camp ? 'Navigation' : cleanLabel(c.label)))}</a>`;
@@ -483,6 +487,8 @@ function endRowHtml(i, ds) {
     home = state.segs && state.segs[state.segs.length - 1].kind === 'home';
   return `<tr class="pt" data-row="end">${td('Datum', ds ? `<span class="dat">${fdate(ds[i])}</span>` : '')}${td('Name', `<b>${home ? 'Zurück in' : 'Ziel:'} ${esc(shortLabel(s.to.label))}</b>`)}${td('Adresse', `<a href="${esc(navUrl(s.to))}" target="_blank" rel="noopener">${esc(cleanLabel(s.to.label))}</a>`)}${td('Zeiten', '')}${td('Preis / Status', '')}${td('Notiz', '')}${td('Weiter / Entfernung', '<span class="muted">–</span>')}</tr>`;
 }
+// Abstand zwischen zwei Aufenthalten (nur online; Word/PDF ohne Leerzeile)
+const GAP = () => (XP ? '' : '<tr class="gap" aria-hidden="true"><td colspan="7"></td></tr>');
 /* Auf-/zugeklappte Gruppen je Tour merken (gp.ui.grp {tourId: [Gruppen]}; Start-Gruppe = -3), beim ersten Mal alle zu */
 let grpFor = null;
 const grpTourKey = () => String(state.tourId || 'neu');
@@ -530,19 +536,20 @@ function planTableHtml() {
   h += `<tbody class="grp start${o0 ? ' open' : ''}" data-grpb="-1">${startRows(ds, o0)}</tbody>`;
   st.forEach((s, i) => {
     if (i === last && s.to.kind !== 'camp') {
-      h += `<tbody class="grp">${endRowHtml(i, ds)}${groupExtrasHtml(i, ds)}</tbody>`;
+      h += `<tbody class="grp">${GAP()}${endRowHtml(i, ds)}${groupExtrasHtml(i, ds)}</tbody>`;
       return;
     }
     const open = XP || tlOpen.has(i),
       sg = s.to.sights || [],
       vs = st[i + 1] ? sightVisitsOf(st[i + 1]) : [];
-    let b = campRowHtml(i, ds, cur) + sgRowHtml(i, open, sg.length, vs.length);
+    let b = campRowHtml(i, ds, cur),
+      sub = '';
     if (open) {
-      sortSights(sg).forEach(x => (b += sightRowHtml(x, s.to)));
-      vs.forEach(v => (b += visitRowHtml(v)));
+      sortSights(sg).forEach(x => (sub += sightRowHtml(x, s.to)));
+      vs.forEach(v => (sub += visitRowHtml(v)));
     }
-    b += groupExtrasHtml(i, ds);
-    h += `<tbody class="grp${open ? ' open' : ''}" data-grpb="${i}">${b}</tbody>`;
+    b += treeLast(sub) + groupExtrasHtml(i, ds);
+    h += `<tbody class="grp${open ? ' open' : ''}" data-grpb="${i}">${GAP()}${b}</tbody>`;
   });
   return h + '</table>' + (XP ? '' : openListHtml());
 }

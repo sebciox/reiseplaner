@@ -307,7 +307,7 @@ const srv = require('./lib/server')(ROOT, 8147);
   await page.click('[data-tlall="0"]');
   await page.waitForTimeout(200);
   const camps = await page.$$eval('#tripView tr.camp', e => e.map(x => x.innerText.replace(/\s+/g, ' ').trim()));
-  const sg = await page.$$eval('#tripView tr.sgrow', e => e.map(x => x.innerText.replace(/\s+/g, ' ').trim()));
+  const sg = await page.$$eval('#tripView .sgtog', e => e.map(x => x.innerText.replace(/\s+/g, ' ').trim()));
   ok(
     camps.length >= 1 && !/★ 1/.test(camps[0]) && /Nacht/.test(camps[0]) && /▶ 1 Sehenswürdigkeit/.test(sg[0] || ''),
     'Tabelle zugeklappt: Platz-Zeile je Aufenthalt, darunter „▶ 1 Sehenswürdigkeit“: ' + camps[0].slice(0, 60) + ' | ' + sg[0]

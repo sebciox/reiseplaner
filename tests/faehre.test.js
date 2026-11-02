@@ -182,7 +182,7 @@ const srv = require('./lib/server')(ROOT, 8154);
     'Reiseplan: Fähr-Zeile mit Name, Häfen und Dauer aus dem Zwischenziel: ' + fr.slice(0, 120)
   );
   ok(
-    (await page.$$eval('#tripView tbody[data-grpb="1"] tr.ferry', x => x.length)) === 1 && !(await page.$('#tripView tr.sgrow')),
+    (await page.$$eval('#tripView tbody[data-grpb="1"] tr.ferry', x => x.length)) === 1 && !(await page.$('#tripView .sgtog')),
     'Fähr-Zeile in der Gruppe von Ivendorf, kein „Besuch unterwegs“ für die Fähre'
   );
   // Speichern → neu laden: Kennzeichen der Überfahrt bleibt in der Linie

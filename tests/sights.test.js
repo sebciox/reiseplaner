@@ -291,7 +291,7 @@ const srv = require('./lib/server')(ROOT, 8151);
   // Reiseplan-Tabelle: eingeklappt Kurzzeile, aufgeklappt eigene Zeile je Sehenswürdigkeit unter dem Platz
   ok(
     !(await page.$('#tripView tr.sight')) &&
-      /▶\s*1 Sehenswürdigkeit/.test(await page.textContent('#tripView tr.sgrow')) &&
+      /▶\s*1 Sehenswürdigkeit/.test(await page.textContent('#tripView .sgtog')) &&
       !/★ 1/.test(await page.textContent('#tripView tr.camp')),
     'zugeklappt: Aufklapp-Zeile „▶ 1 Sehenswürdigkeit“ unter dem Platz, ohne Unterzeilen, kein ★-Zähler'
   );

@@ -477,7 +477,7 @@ const srv = require('./lib/server')(ROOT, 8152);
   await page.screenshot({ path: path.join(OUT, 'tabelle-laptop.png') });
   // Aufklapp-Zeile „▶ n Sehenswürdigkeiten“, kein ★-Zähler am Namen; Platz-Zeile immer vollständig
   ok(
-    /▼\s*1 Sehenswürdigkeit/.test(await page.textContent('#tripView tbody[data-grpb="0"] tr.sgrow')) && !(await page.$('#tripView .cnt')),
+    /▼\s*1 Sehenswürdigkeit/.test(await page.textContent('#tripView tbody[data-grpb="0"] .sgtog')) && !(await page.$('#tripView .cnt')),
     'Aufklapp-Zeile unter dem Platz: „▼ 1 Sehenswürdigkeit“, kein ★-Zähler'
   );
   await page.click('[data-tlall="0"]');
@@ -492,7 +492,7 @@ const srv = require('./lib/server')(ROOT, 8152);
   ok(await page.evaluate(() => state.stages[1].my?.ppn === '250 SEK'), 'Preis in der zugeklappten Gruppe eingetragen');
   ok(!(await page.$('#tripView select[data-sel="c|0|status"].isopen')), 'bezahlter Platz: Status nicht hinterlegt');
   // aufgeklappte Gruppen werden je Tour gemerkt
-  await page.click('#tripView tr.sgrow [data-grp="0"]');
+  await page.click('#tripView [data-grp="0"]');
   await page.waitForSelector('#tripView tbody[data-grpb="0"].open tr.sight');
   ok(
     await page.evaluate(() => (JSON.parse(localStorage.getItem('gp.ui.grp'))[state.tourId] || []).includes(0)),
