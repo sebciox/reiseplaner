@@ -7,19 +7,21 @@ function renderVia() {
   const ul = $('#viaList');
   ul.innerHTML = state.via
     .map(
-      (v, i) => `<li class="${v.kind === 'visit' ? 'visit' : v.kind === 'ferry' ? 'visit ferry' : ''}" data-vi="${i}">
+      (v, i) => `<li class="${v.kind === 'visit' || v.kind === 'pass' ? 'visit' : v.kind === 'ferry' ? 'visit ferry' : ''}" data-vi="${i}">
     <button type="button" class="vgrip" data-vgrip="${i}" aria-label="${esc(v.label)} verschieben (ziehen oder Pfeiltasten)" title="ziehen zum Verschieben">
       <svg viewBox="0 0 12 20" width="12" height="20" aria-hidden="true" fill="currentColor"><circle cx="3" cy="4" r="1.6"/><circle cx="9" cy="4" r="1.6"/><circle cx="3" cy="10" r="1.6"/><circle cx="9" cy="10" r="1.6"/><circle cx="3" cy="16" r="1.6"/><circle cx="9" cy="16" r="1.6"/></svg></button>
     <span class="vn">${i + 1}</span>
     <div class="vt"><b>${esc(cleanLabel(v.label))}</b><div class="vopts">
-      <select data-vkind="${i}" aria-label="Art des Zwischenziels"><option value="stay"${v.kind === 'stay' || !v.kind ? ' selected' : ''}>★ Übernachten in der Nähe</option><option value="rest"${v.kind === 'rest' ? ' selected' : ''}>Pause / freie Tage (nur Campingplatz)</option><option value="visit"${v.kind === 'visit' ? ' selected' : ''}>Besuch unterwegs</option><option value="ferry"${v.kind === 'ferry' ? ' selected' : ''}>⛴ Fähre ab hier</option></select>
+      <select data-vkind="${i}" aria-label="Art des Zwischenziels"><option value="stay"${v.kind === 'stay' || !v.kind ? ' selected' : ''}>★ Übernachten in der Nähe</option><option value="rest"${v.kind === 'rest' ? ' selected' : ''}>Pause / freie Tage (nur Campingplatz)</option><option value="visit"${v.kind === 'visit' ? ' selected' : ''}>Besuch unterwegs</option><option value="ferry"${v.kind === 'ferry' ? ' selected' : ''}>⛴ Fähre ab hier</option><option value="pass"${v.kind === 'pass' ? ' selected' : ''}>über (nur Route, kein Halt)</option></select>
       ${
         v.kind === 'ferry'
           ? `<label><input type="number" min="0.5" max="36" step="0.5" data-vhours="${i}" value="${+v.hours || 4}"> h Überfahrt</label></div>
         <div class="vferry">nach <input class="vfto" data-vfto="${i}" placeholder="Ankunftshafen, z. B. Malmö Hamn – Enter" enterkeyhint="enter" aria-label="Ankunftshafen" value="${v.to ? esc(cleanLabel(v.to.label)) : ''}">${v.to ? ' <span class="ok">✓</span>' : ' <span class="warnt">Ankunftshafen fehlt</span>'}`
-          : v.kind !== 'visit'
-            ? `<label><input type="number" min="1" max="30" data-vnights="${i}" value="${Math.max(1, +v.nights || 1)}"> Nächte</label>`
-            : `<label><input type="number" min="0.5" max="12" step="0.5" data-vhours="${i}" value="${+v.hours || 2}"> h Besuch</label>`
+          : v.kind === 'pass'
+            ? ''
+            : v.kind !== 'visit'
+              ? `<label><input type="number" min="1" max="30" data-vnights="${i}" value="${Math.max(1, +v.nights || 1)}"> Nächte</label>`
+              : `<label><input type="number" min="0.5" max="12" step="0.5" data-vhours="${i}" value="${+v.hours || 2}"> h Besuch</label>`
       }</div>
       ${
         v.kind === 'stay' || !v.kind

@@ -154,7 +154,7 @@ async function enrichAll() {
   enrichRun = true;
   try {
     const all = state.via
-      .filter(v => v.kind !== 'rest' && v.kind !== 'ferry')
+      .filter(v => v.kind !== 'rest' && v.kind !== 'ferry' && v.kind !== 'pass')
       .flatMap(v => [v, ...(v.sights || [])])
       .filter(v => !v.info || v.info.v !== INFO_V);
     for (const v of all) {

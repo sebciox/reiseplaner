@@ -191,12 +191,14 @@ function renderPanel() {
           s.vias && s.vias.length
             ? `<div class="muted">unterwegs: ${visitsOf(s)
                 .map(v =>
-                  v.kind === 'ferry'
-                    ? `⛴ Fähre ${esc(shortLabel(v.label))} → ${esc(shortLabel(v.to?.label || '?'))} (≈ ${fhours(v.hours)})`
-                    : `${esc(shortLabel(v.label))} (≈ ${fhours(v.hours)} · <a href="${parkUrl(v)}" target="_blank" rel="noopener">Parken fürs Gespann</a>)`
+                  v.kind === 'pass'
+                    ? `über ${esc(shortLabel(v.label))}`
+                    : v.kind === 'ferry'
+                      ? `⛴ Fähre ${esc(shortLabel(v.label))} → ${esc(shortLabel(v.to?.label || '?'))} (≈ ${fhours(v.hours)})`
+                      : `${esc(shortLabel(v.label))} (≈ ${fhours(v.hours)} · <a href="${parkUrl(v)}" target="_blank" rel="noopener">Parken fürs Gespann</a>)`
                 )
                 .join(', ')}
-          · Tag gesamt ≈ ${fdur(s.dur + visitsOf(s).reduce((a, v) => a + (+v.hours || 2) * 3600, 0))}</div>`
+          · Tag gesamt ≈ ${fdur(s.dur + visitsOf(s).reduce((a, v) => a + (v.kind === 'pass' ? 0 : +v.hours || 2) * 3600, 0))}</div>`
             : ''
         }
         ${i < state.stages.length - 1 || !state.done ? `<div class="nstep">Nächte hier <button type="button" data-nstep="${i}" data-d="-1" aria-label="eine Nacht weniger" ${(s.nights || 1) <= 1 ? 'disabled' : ''}>−</button><b>${s.nights || 1}</b><button type="button" data-nstep="${i}" data-d="1" aria-label="eine Nacht mehr">+</button>${(s.nights || 1) > 1 ? ` · ${(s.nights || 1) - 1} ${(s.nights || 1) === 2 ? 'freier Tag' : 'freie Tage'}` : ''}</div>` : ''}

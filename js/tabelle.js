@@ -214,6 +214,7 @@ function foundVal(scope, id, f) {
     if (f === 'name') return c.kind === 'camp' ? nameText(c) : c.label;
     if (f === 'addr') return campAddrFound(c);
     if (f === 'hours') return campHoursFound(c);
+    if (f === 'drv') return legText(state.stages[+id]);
     if (f === 'ppn') return priceOf(c)?.text || '';
     if (f === 'total') {
       const mo = campMoney({ ...s, my: { ...campMy(s), total: '' } });
@@ -261,7 +262,8 @@ const FIELD = {
   note: { l: 'Notiz', multi: true, ph: '' },
   amount: { l: 'Betrag', ph: 'Preis' },
   price: { l: 'Preis', ph: 'Preis' },
-  text: { l: 'Aufgabe', ph: 'Aufgabe' }
+  text: { l: 'Aufgabe', ph: 'Aufgabe' },
+  drv: { l: 'Strecke und Fahrzeit', ph: 'Strecke / Fahrzeit' }
 };
 const edKey = (scope, id, f) => esc(`${scope}|${id}|${f}`);
 // bearbeitbarer Wert: antippen → Eingabefeld (keine Symbole, keine Marke „von dir“). Leer → blasser Platzhalter;
@@ -296,7 +298,7 @@ function townOf(addr) {
   const parts = String(addr || '')
     .split(',')
     .map(x => x.trim())
-    .filter(x => x && !COUNTRY_RE.test(x));
+    .filter(x => x && !COUNTRY_RE.test(x) && !/^[A-Z]{1,3}$/.test(x)); // ohne Länder und Regionskürzel (SN, ST, CT …)
   if (parts.length < 2) return '';
   const t = parts[parts.length - 1].replace(/^(?:[A-Z]{1,2}-?)?\d[\d\s-]*\s+/, '').trim();
   return /\d/.test(t) ? '' : t;
@@ -314,8 +316,19 @@ function stayTown(i) {
 function driveHtml(j) {
   const s = state.stages[j];
   if (!s) return '<span class="muted">–</span>';
-  const fl = [s.ex?.ferry > 200 ? 'Fähre' : '', s.ex?.toll > 1000 ? 'Maut' : ''].filter(Boolean).join(' · ');
-  return `<div>nach ${esc(stayTown(j) || shortLabel(s.to.label))}</div><div class="muted">${fkm(s.dist)} · ${fdur(s.dur)}${fl ? ' · ' + fl : ''}</div>`;
+  const own = campMy(s).drv;
+  const ps = visitsOf(s).filter(v => v.kind === 'pass');
+  // km/Zeit: eigener Wert (von Hand, z. B. „45 km + 9 h Fähre“) gewinnt; „Fahrt anpassen“ = Fähre/Zwischenpunkte (fahrt.js)
+  return (
+    `<div>nach ${esc(stayTown(j) || shortLabel(s.to.label))}</div><div class="muted">${ed('c', j, 'drv', esc(own || legText(s)))}</div>` +
+    (ps.length ? `<div class="muted">über ${ps.map(v => esc(shortLabel(v.label))).join(', ')}</div>` : '') +
+    (XP ? '' : `<div class="x"><button class="linkbtn" type="button" data-legopen="${j}">Fahrt anpassen</button></div>`)
+  );
+}
+// berechnete Fahrt als Text: „306 km · 4 h 49 min · Maut“ bzw. mit Fähre „45 km · 1 h 2 min + Fähre ≈ 9 h“
+function legText(s) {
+  const fe = s.ex?.ferryH ? ` + Fähre ≈ ${fhours(s.ex.ferryH)}` : s.ex?.ferry > 200 ? ' · Fähre' : '';
+  return `${fkm(s.dist)} · ${fdur(s.dur)}${fe}${s.ex?.toll > 1000 ? ' · Maut' : ''}`;
 }
 // Aufklapp-Knopf in der Platz-Zeile (unter dem Namen): „▶ 2 Sehenswürdigkeiten · 1 Besuch unterwegs“ (Gruppe i, Start = -1)
 function sgTogHtml(i, open, ns, nv) {
@@ -718,6 +731,8 @@ $('#tripView').addEventListener('click', e => {
       return;
     }
   }
+  const lo = e.target.closest('[data-legopen]');
+  if (lo) return openLeg(+lo.dataset.legopen); // „Fahrt anpassen“ (fahrt.js)
   const wo = e.target.closest('[data-swebopen]');
   if (wo) {
     swebOpen.add(wo.dataset.swebopen);

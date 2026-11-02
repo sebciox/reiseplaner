@@ -113,7 +113,7 @@ async function computeSegs() {
   const segs = [];
   let pend = [];
   for (const v of state.via) {
-    if (v.kind === 'visit' || v.kind === 'ferry') {
+    if (v.kind === 'visit' || v.kind === 'ferry' || v.kind === 'pass') {
       pend.push(v);
       continue;
     }
@@ -450,7 +450,7 @@ async function searchAddCamp(form) {
 const viaByUid = uid => state.via.find(v => v.uid === uid);
 const visitsOf = s => (s.vias || []).map(viaByUid).filter(Boolean);
 // Besuche unterwegs ohne Fähren (Fähren haben ihre eigene Zeile im Reiseplan)
-const sightVisitsOf = s => visitsOf(s).filter(v => v.kind !== 'ferry');
+const sightVisitsOf = s => visitsOf(s).filter(v => v.kind !== 'ferry' && v.kind !== 'pass'); // ohne Fähren und reine Zwischenpunkte
 // Fähre (Zwischenziel) auf der Fahrt einer Etappe
 const ferryViaOf = s => (s ? visitsOf(s).find(v => v.kind === 'ferry' && v.to) || null : null);
 // Abstand eines Punktes entlang der Linie (nächster Linienpunkt)

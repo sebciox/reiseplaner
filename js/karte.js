@@ -463,30 +463,33 @@ function renderMap() {
         .bindPopup(`<b>⛴ Ankunft</b><br>${esc(cleanLabel(v.to.label))}`)
         .addTo(lyr.pins);
   });
+  if (typeof drawLegHandles === 'function') drawLegHandles(lyr.route); // Fahrt anpassen (fahrt.js): Linie antippen, Zwischenpunkte ziehen
   state.via.forEach((v, i) =>
-    L.marker([v.lat, v.lon], {
-      icon: pinIcon(
-        v.kind === 'visit' ? '•' : v.kind === 'ferry' ? '⛴' : v.kind === 'rest' ? 'P' : '★',
-        v.kind === 'visit' || v.kind === 'ferry' ? 'visit' : 'sight'
-      ),
-      zIndexOffset: -100
-    })
-      .bindPopup(() =>
-        v.kind === 'ferry'
-          ? `<b>⛴ Fähre ab ${esc(shortLabel(v.label))}</b><br>${v.to ? `nach ${esc(shortLabel(v.to.label))} · ≈ ${fhours(+v.hours || 4)}` : 'Ankunftshafen fehlt'}`
-          : sightPopHtml(v)
-      )
-      .on('click', () => {
-        // Pause/freie Tage = Campingplatz → dessen Zeile; Fähre → Fähr-Zeile; sonst die Sehenswürdigkeit bzw. der Besuch
-        if (v.kind === 'ferry') {
-          const j = state.stages.findIndex(s => ferryViaOf(s)?.uid === v.uid);
-          if (j >= 0) focusRow('f' + j);
-          return;
-        }
-        const k = v.kind === 'rest' ? state.stages.findIndex(s => s.to.kind === 'camp' && hav([s.to.lat, s.to.lon], [v.lat, v.lon]) < 300) : -1;
-        focusRow(k >= 0 ? 'c' + k : 's' + sightKey(v));
-      })
-      .addTo(lyr.pins)
+    v.kind === 'pass'
+      ? null
+      : L.marker([v.lat, v.lon], {
+          icon: pinIcon(
+            v.kind === 'visit' ? '•' : v.kind === 'ferry' ? '⛴' : v.kind === 'rest' ? 'P' : '★',
+            v.kind === 'visit' || v.kind === 'ferry' ? 'visit' : 'sight'
+          ),
+          zIndexOffset: -100
+        })
+          .bindPopup(() =>
+            v.kind === 'ferry'
+              ? `<b>⛴ Fähre ab ${esc(shortLabel(v.label))}</b><br>${v.to ? `nach ${esc(shortLabel(v.to.label))} · ≈ ${fhours(+v.hours || 4)}` : 'Ankunftshafen fehlt'}`
+              : sightPopHtml(v)
+          )
+          .on('click', () => {
+            // Pause/freie Tage = Campingplatz → dessen Zeile; Fähre → Fähr-Zeile; sonst die Sehenswürdigkeit bzw. der Besuch
+            if (v.kind === 'ferry') {
+              const j = state.stages.findIndex(s => ferryViaOf(s)?.uid === v.uid);
+              if (j >= 0) focusRow('f' + j);
+              return;
+            }
+            const k = v.kind === 'rest' ? state.stages.findIndex(s => s.to.kind === 'camp' && hav([s.to.lat, s.to.lon], [v.lat, v.lon]) < 300) : -1;
+            focusRow(k >= 0 ? 'c' + k : 's' + sightKey(v));
+          })
+          .addTo(lyr.pins)
   );
   if (state.pending && state.pending.mode === 'anchor') {
     const q = state.pending.sight;

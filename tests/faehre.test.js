@@ -90,6 +90,16 @@ const srv = require('./lib/server')(ROOT, 8154);
     }
     if (u.includes('overpass')) {
       const q = decodeURIComponent(r.request().postData().slice(5));
+      if (q.includes('ferry_terminal'))
+        return r.fulfill({
+          json: {
+            elements: [
+              { type: 'node', id: 91, lat: 53.944, lon: 10.86, tags: { amenity: 'ferry_terminal', name: 'Travemünde Skandinavienkai' } },
+              { type: 'node', id: 92, lat: 55.61, lon: 12.99, tags: { amenity: 'ferry_terminal', name: 'Malmö Hamn' } },
+              { type: 'node', id: 93, lat: 55.37, lon: 13.15, tags: { amenity: 'ferry_terminal', name: 'Trelleborg' } }
+            ]
+          }
+        });
       const m = q.match(/\(([\d.\-]+),([\d.\-]+),([\d.\-]+),([\d.\-]+)\)/);
       if (!m) return r.fulfill({ json: { elements: [] } });
       const [S, W, N, E] = m.slice(1).map(Number);
@@ -225,6 +235,90 @@ const srv = require('./lib/server')(ROOT, 8154);
       (await page.evaluate(() => state.stages[2].ex?.ferryH === 9 && (state.stages[2].vias || []).length === 1 && !(state.stages[1].vias || []).length)),
     'Fähre nachträglich eingefügt: alle Plätze bleiben, Fähre auf Etappe Ivendorf → Karlshamn, nur diese neu geroutet'
   );
+
+  /* ---------- Fahrt von Hand anpassen (fahrt.js) ---------- */
+  await page.evaluate(() => setTab('trip'));
+  await page.waitForSelector('#tripView [data-legopen="2"]');
+  const keep01 = await page.evaluate(() => [state.stages[0].dist, state.stages[1].dist].join());
+  // 1. Fähre über „Fahrt anpassen“ wieder entfernen → Landweg
+  await page.click('#tripView [data-legopen="2"]');
+  await page.waitForSelector('#legDlg[open] #legFerryDel');
+  dirCalls = [];
+  await page.click('#legFerryDel');
+  await page.waitForFunction(() => !state.busy && !state.stages[2].ex?.ferryH && !state.via.some(v => v.kind === 'ferry'), null, { timeout: 10000 });
+  ok(
+    dirCalls.length <= 1 && (await page.evaluate(() => [state.stages[0].dist, state.stages[1].dist].join())) === keep01,
+    'Fahrt anpassen: Fähre entfernt → nur diese Fahrt neu berechnet (Landweg)'
+  );
+  // 2. Fähre neu eintragen: Häfen aus den Vorschlägen (OSM-Fährterminals am Anfang und Ende der Fahrt)
+  await page.click('#tripView [data-legopen="2"]');
+  await page.waitForSelector('#legDlg[open] #legFerryOn');
+  await page.click('#legFerryOn');
+  await page.waitForSelector('#legDlg [data-legport^="a:"]');
+  const chipsA = await page.$$eval('#legDlg [data-legport^="a:"]', b => b.map(x => x.textContent.trim()));
+  ok(/Travemünde Skandinavienkai/.test(chipsA[0]), 'Vorschlag Abfahrtshafen: nächstes Fährterminal zuerst – ' + chipsA.join(' | '));
+  await page.click('#legDlg [data-legport^="a:"]:has-text("Travemünde")');
+  await page.waitForSelector('#legDlg [data-legport^="b:"]');
+  await page.click('#legDlg [data-legport^="b:"]:has-text("Malmö Hamn")');
+  await page.fill('#legHours', '9');
+  await page.dispatchEvent('#legHours', 'change');
+  await page.click('#legApply');
+  await page.waitForFunction(() => !state.busy && state.stages[2].ex?.ferryH === 9, null, { timeout: 10000 });
+  ok(
+    (await page.evaluate(() => [state.stages[0].dist, state.stages[1].dist].join())) === keep01 &&
+      (await page.evaluate(() => state.via.filter(v => v.kind === 'ferry').length === 1 && (state.stages[2].vias || []).length === 1)),
+    'Fähre eingetragen: nur Etappe 3 neu, andere Fahrten unverändert, Fähre ist Zwischenziel (bleibt bei „Strecke berechnen“)'
+  );
+  ok(
+    /\+ Fähre ≈ 9 h/.test(await page.textContent('#tripView tbody[data-grpb="1"] tr.camp td[data-l="Weiter / Entfernung"]')),
+    'Spalte „Weiter“: „… + Fähre ≈ 9 h“'
+  );
+  // 3. km und Zeit von Hand
+  await page.click('#tripView [data-ed="c|2|drv"]');
+  await page.fill('#tripView .edin', '45 km + 9 h Fähre');
+  await page.press('#tripView .edin', 'Enter');
+  ok(
+    (await page.evaluate(() => state.stages[2].my?.drv)) === '45 km + 9 h Fähre' &&
+      /45 km \+ 9 h Fähre/.test(await page.textContent('#tripView tbody[data-grpb="1"] tr.camp td[data-l="Weiter / Entfernung"]')),
+    'km/Zeit von Hand eingetragen und angezeigt'
+  );
+  // 4. Karte: Linie der ersten Fahrt antippen → „Zwischenpunkt hier“ → ziehen → entfernen
+  const n0 = await page.evaluate(() => {
+    let hit = null;
+    lyr.route.eachLayer(l => {
+      if (!hit && l.options.className === 'leghit') hit = l;
+    });
+    const p = state.stages[0].line[Math.floor(state.stages[0].line.length / 2)];
+    hit.fire('click', { latlng: L.latLng(p[0] + 0.05, p[1] + 0.05) });
+    return state.via.length;
+  });
+  await page.click('.leaflet-popup [data-legpt]');
+  await page.waitForFunction(n => !state.busy && state.via.length === n + 1 && state.via.some(v => v.kind === 'pass'), n0, { timeout: 10000 });
+  ok(
+    await page.evaluate(() => (state.stages[0].vias || []).length === 1 && viaByUid(state.stages[0].vias[0]).kind === 'pass'),
+    'Karte: Zwischenpunkt auf der Linie gesetzt → Route der ersten Fahrt führt darüber'
+  );
+  ok(/über /.test(await page.textContent('#tripView tbody[data-grpb="-1"]')), 'Reiseplan zeigt „über …“ an der Fahrt');
+  dirCalls = [];
+  await page.evaluate(() => {
+    lyr.route.eachLayer(l => {
+      if (l.options.draggable) {
+        l.setLatLng([52.1, 8.4]);
+        l.fire('dragend');
+      }
+    });
+  });
+  await page.waitForFunction(() => !state.busy && state.via.some(v => v.kind === 'pass' && v.lat === 52.1), null, { timeout: 10000 });
+  ok(dirCalls.length === 1 && dirCalls[0].some(c => c[1] === 52.1), 'Zwischenpunkt gezogen → Fahrt über den neuen Punkt neu berechnet');
+  await page.evaluate(() =>
+    lyr.route.eachLayer(l => {
+      if (l.options.draggable) l.openPopup();
+    })
+  );
+  await page.click('.leaflet-popup [data-legpdel2]');
+  await page.waitForFunction(() => !state.busy && !state.via.some(v => v.kind === 'pass') && !(state.stages[0].vias || []).length, null, { timeout: 10000 });
+  ok(true, 'Zwischenpunkt entfernt');
+  ok(await page.evaluate(() => townOf('Gessie Ängavag, Gessie, SN, Schweden') === 'Gessie'), 'Ort ohne Regionskürzel („Gessie“ statt „SN“)');
   await page.screenshot({ path: path.join(OUT, 'faehre.png') });
   await browser.close();
   srv.close();
