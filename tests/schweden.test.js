@@ -62,7 +62,11 @@ const srv = require('./lib/server')(ROOT, 8153);
     if (u.includes('/geocode/reverse') || u.includes('photon.komoot.io/reverse')) return r.fulfill({ json: { features: [] } });
     if (u.includes('/geocode/')) {
       const p = findPlace(new URL(u).searchParams.get('text'));
-      return r.fulfill({ json: { features: p ? [{ geometry: { coordinates: [p.lon, p.lat] }, properties: { label: p.name + (p === F.start ? ', Deutschland' : ', Schweden') } }] : [] } });
+      return r.fulfill({
+        json: {
+          features: p ? [{ geometry: { coordinates: [p.lon, p.lat] }, properties: { label: p.name + (p === F.start ? ', Deutschland' : ', Schweden') } }] : []
+        }
+      });
     }
     if (u.includes('photon.komoot.io/api')) return r.fulfill({ json: { features: [] } });
     if (u.includes('/v2/directions/')) {
