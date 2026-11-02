@@ -435,11 +435,14 @@ function sightRowHtml(x, from) {
       r = sightRz(s);
     const gx = XP && !own('hours') && hf && hf.src === 'Google' && g && g.oh ? (m.day ? `${xpDay(m.day)}: ${esc(hf.t)}` : esc(ohText(g.oh))) : '';
     zt = ed('s', k, 'hours', own('hours') ? esc(m.hours) : gx || (hf ? `${hf.pre ? hf.pre + ': ' : ''}${esc(hf.t)}` : ''), { ph: 'Öffnungszeiten' });
-    if (!own('hours') && hf)
+    if (!own('hours') && hf) {
+      if (!XP && hf.src === 'Google' && !m.day && g.open === true) zt += ' · <b>jetzt geöffnet</b>';
       zt += ` <span class="muted">(${hf.url ? `<a href="${esc(safeUrl(hf.url))}" target="_blank" rel="noopener">${hf.src}</a>` : XP && hf.src === 'Google' ? gStand() : hf.src})</span>`;
+    }
     if (!own('hours') && hf && hf.src === 'Google' && r && r.hoursS && r.hoursS.text)
       zt += line(`Website: ${esc(r.hoursS.text)}${r.hoursS.url ? ' · ' + linkA(safeUrl(r.hoursS.url), 'Quelle') : ''}`);
-    if (g && g.oh && g.oh.length && !XP) zt += gHoursHtml(g.oh, g.open);
+    // Google-Woche: steht „heute/Besuchstag: …“ schon oben, nur noch die Woche zum Aufklappen (sonst doppelt)
+    if (g && g.oh && g.oh.length && !XP) zt += !own('hours') && hf && hf.src === 'Google' ? gWeekHtml(g.oh) : gHoursHtml(g.oh, g.open);
     if (r && r.hoursUrl && !(r.hoursS && r.hoursS.text)) zt += line(linkA(safeUrl(r.hoursUrl), 'Öffnungszeiten auf der Website'));
     if (r && r.season && r.season.from && dmDe(r.season.from) && dmDe(r.season.to)) zt += line(`Saison ${dmDe(r.season.from)} – ${dmDe(r.season.to)}`);
     const mo = sightMoney(s);

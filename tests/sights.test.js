@@ -303,7 +303,7 @@ const srv = require('./lib/server')(ROOT, 8151);
   );
   const campTxt = await rowC();
   ok(/Rezeption/.test(campTxt) && !/★ Paris/.test(campTxt), 'Platz-Zeile: nur Platz-Infos');
-  await page.waitForFunction(() => /laut Google/.test(document.querySelector('#tripView tr.sight')?.textContent || ''), null, { timeout: 6000 });
+  await page.waitForFunction(() => /\(Google\)/.test(document.querySelector('#tripView tr.sight')?.textContent || ''), null, { timeout: 6000 });
   let st = await rowS();
   ok(
     /[\d,]+ km/.test(st) && /Champ de Mars, 75007 Paris/.test(st) && /29 € \(OSM\)/.test(st) && /paris\.example/.test(st) && !/Wohnwagen|🧭/.test(st),
@@ -316,7 +316,8 @@ const srv = require('./lib/server')(ROOT, 8151);
     }),
     'Adresse → Navigation vom Platz, Name → Google-Eintrag'
   );
-  ok(/laut Google.*jetzt geöffnet/.test(st) && /★ 4,7/.test(st), 'Google live: Öffnungszeiten + Bewertung');
+  ok(/heute: .*jetzt geöffnet.*\(Google\)/.test(st) && /ganze Woche/.test(st) && /★ 4,7/.test(st), 'Google live: Öffnungszeiten + Bewertung');
+  ok((st.match(/heute/g) || []).length === 1 && !/laut Google/.test(st), 'Öffnungszeiten nur einmal (kein zweites „heute … laut Google“): ' + st.slice(0, 300));
   ok(await page.evaluate(() => !!$('#tripView tbody[data-grpb="0"].open')), 'Gruppe bleibt dabei offen');
   // Ergebnis des GitHub-Helfers
   await page.evaluate(() => {

@@ -186,6 +186,11 @@ function gHoursHtml(oh, open, label) {
   const today = oh.find(l => l.toLowerCase().startsWith(wd)) || oh[(new Date().getDay() + 6) % 7] || '';
   return `<details class="gh"><summary>${label || 'Öffnungszeiten'} laut Google${today ? ': ' + esc(today.replace(/^[^:]+:\s*/, 'heute ')) : ''}${open === true ? ' · <b>jetzt geöffnet</b>' : open === false ? ' · jetzt geschlossen' : ''}</summary><ul class="ghours">${oh.map(l => `<li>${esc(l)}</li>`).join('')}</ul></details>`;
 }
+// Nur die Wochenliste zum Aufklappen (wenn „heute: …“ schon daneben steht – sonst doppelt)
+function gWeekHtml(oh) {
+  if (!oh || !oh.length) return '';
+  return `<details class="gh"><summary>ganze Woche</summary><ul class="ghours">${oh.map(l => `<li>${esc(l)}</li>`).join('')}</ul></details>`;
+}
 function rateHtml(c) {
   const g = gRate.get(c.id);
   if (g && g.r == null) return ' <span class="stars none">★ –</span>';
