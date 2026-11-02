@@ -2780,3 +2780,72 @@ select.stsel.isopen {
 .pin.idea span {
   color: var(--brand-ink);
 }
+/* Ideen-Ablage: eingeklappt, solange leer; Ideen auf eine Station ziehen */
+.pinfield {
+  padding: 6px 12px;
+}
+.pinhead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pintog {
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--brand-ink);
+  cursor: pointer;
+}
+.pinfield.closed .pinbody {
+  display: none;
+}
+.pinbody {
+  padding-bottom: 6px;
+}
+.pinlist li[data-pindrag] {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.pinlist li.dragging {
+  opacity: 0.4;
+}
+.pinghost {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1px solid var(--brand);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.pinghost button,
+.pinghost .muted {
+  display: none;
+}
+#viaList li.droptgt,
+#viaList.droptgt,
+#viaIn.droptgt {
+  outline: 2px dashed var(--brand-ink);
+  outline-offset: 2px;
+  background: var(--brand-soft);
+}
+.dlg-actions.stack {
+  flex-direction: column;
+  align-items: stretch;
+  overflow-y: auto;
+}
+.dlg-actions.stack .btn {
+  text-align: left;
+}

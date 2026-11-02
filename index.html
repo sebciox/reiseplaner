@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Reiseplaner" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-    <link rel="stylesheet" href="styles.css?v=69" />
+    <link rel="stylesheet" href="styles.css?v=72" />
   </head>
   <body>
     <div id="map" aria-label="Karte"></div>
@@ -90,31 +90,39 @@
           <button class="linkbtn" type="button" id="fbOff">zurück zu ORS</button>
         </div>
         <form id="planForm" autocomplete="off">
+          <div class="grid2">
+            <div class="field"><label for="dateIn">Reisebeginn</label><input type="date" id="dateIn" /></div>
+            <div class="field"><label for="retIn" id="retLbl">Reiseende</label><input type="date" id="retIn" /></div>
+          </div>
           <div class="field">
             <label for="startIn">Start</label>
             <input id="startIn" placeholder="z. B. Witten" enterkeyhint="next" />
             <ul class="sugg" id="startSugg"></ul>
           </div>
           <div class="field pinfield" id="pinField">
-            <label for="pinIn"
-              >Pinnwand – Ideen sammeln <span class="muted" style="text-transform: none; font-weight: 400">(optional, für Rundreisen)</span></label
-            >
-            <div class="muted small">
-              Sehenswürdigkeiten sammeln, ohne schon an Übernachtungen zu denken – die App fasst nahe Ideen zu Basislagern zusammen.
+            <div class="pinhead">
+              <button type="button" class="pintog" id="pinTog" aria-expanded="false" aria-controls="pinBody">
+                <span class="tri" aria-hidden="true">▸</span> Ideen <span id="pinCount"></span></button
+              ><span class="muted small">noch ohne Station · für Rundreisen</span>
             </div>
-            <ul class="pinlist" id="pinList"></ul>
-            <div class="viaadd">
-              <input id="pinIn" placeholder="Idee, z. B. Kleva Gruva" enterkeyhint="enter" aria-label="Idee zur Pinnwand hinzufügen" />
-              <button class="btn small" type="button" id="pinAddBtn">+ Idee</button>
-              <ul class="sugg" id="pinSugg"></ul>
+            <div class="pinbody" id="pinBody">
+              <ul class="pinlist" id="pinList"></ul>
+              <div class="viaadd">
+                <input id="pinIn" placeholder="Idee sammeln, z. B. Kleva Gruva" enterkeyhint="enter" aria-label="Idee hinzufügen" />
+                <button class="btn small" type="button" id="pinAddBtn">+ Idee</button>
+                <ul class="sugg" id="pinSugg"></ul>
+              </div>
+              <div class="muted small pinhint" id="pinHint">
+                Idee auf eine Station ziehen (★ Übernachten → Sehenswürdigkeit dort, sonst Besuch unterwegs danach) oder die App Basislager vorschlagen lassen.
+              </div>
+              <div class="pintools"><button class="btn small" type="button" id="pinSuggest" hidden>Basislager vorschlagen</button></div>
+              <div id="pinProp"></div>
             </div>
-            <div class="pintools">
-              <span class="muted small" id="pinCount"></span><button class="btn small" type="button" id="pinSuggest" hidden>Basislager vorschlagen</button>
-            </div>
-            <div id="pinProp"></div>
           </div>
           <div class="field">
-            <label for="viaIn">Zwischenziele / Sehenswürdigkeiten <span class="muted" style="text-transform: none; font-weight: 400">(optional)</span></label>
+            <label for="viaIn"
+              >Reiseverlauf <span class="muted" style="text-transform: none; font-weight: 400">(Zwischenziele in Reihenfolge, optional)</span></label
+            >
             <ol class="vialist" id="viaList"></ol>
             <div class="viaadd">
               <input id="viaIn" placeholder="z. B. Astrid Lindgrens Värld" enterkeyhint="enter" aria-label="Zwischenziel hinzufügen" />
@@ -122,17 +130,16 @@
               <ul class="sugg" id="viaSugg"></ul>
             </div>
             <div class="muted small" id="viaHint">Beliebig viele Ziele nacheinander eingeben (Enter oder „+ Hinzufügen“), Reihenfolge per Ziehen am ⠿.</div>
-            <div class="viatools" id="viaTools" hidden><button class="btn small" type="button" id="viaOpt">Reihenfolge optimieren</button></div>
+            <div class="viatools" id="viaTools" hidden>
+              <button class="btn small" type="button" id="viaOpt">Reihenfolge optimieren</button
+              ><button class="btn small" type="button" id="viaBack" hidden>Hinweg als Rückweg …</button>
+            </div>
           </div>
           <div class="field">
             <label for="endIn">Ziel</label>
             <input id="endIn" placeholder="z. B. Malmö" enterkeyhint="go" />
             <ul class="sugg" id="endSugg"></ul>
             <label class="check" style="margin-top: 6px"><input type="checkbox" id="roundIn" /><span>zurück zum Start (Rundreise)</span></label>
-          </div>
-          <div class="grid2">
-            <div class="field"><label for="dateIn">Abfahrt</label><input type="date" id="dateIn" /></div>
-            <div class="field"><label for="retIn" id="retLbl">Ankunft spätestens</label><input type="date" id="retIn" /></div>
           </div>
           <div class="actions foot" id="goalsFoot">
             <div class="foot-main">
@@ -268,23 +275,23 @@
     <div id="print" aria-hidden="true"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script src="js/basis.js?v=69"></script>
-    <script src="js/dienste.js?v=69"></script>
-    <script src="js/daten.js?v=69"></script>
-    <script src="js/recherche.js?v=69"></script>
-    <script src="js/google.js?v=69"></script>
-    <script src="js/etappe.js?v=69"></script>
-    <script src="js/planung.js?v=69"></script>
-    <script src="js/karte.js?v=69"></script>
-    <script src="js/panel.js?v=69"></script>
-    <script src="js/ziele.js?v=69"></script>
-    <script src="js/pinnwand.js?v=69"></script>
-    <script src="js/onlinespeicher.js?v=69"></script>
-    <script src="js/export.js?v=69"></script>
-    <script src="js/tabelle.js?v=69"></script>
-    <script src="js/zusatz.js?v=69"></script>
-    <script src="js/ausgabe.js?v=69"></script>
-    <script src="js/reiseplan.js?v=69"></script>
-    <script src="js/start.js?v=69"></script>
+    <script src="js/basis.js?v=72"></script>
+    <script src="js/dienste.js?v=72"></script>
+    <script src="js/daten.js?v=72"></script>
+    <script src="js/recherche.js?v=72"></script>
+    <script src="js/google.js?v=72"></script>
+    <script src="js/etappe.js?v=72"></script>
+    <script src="js/planung.js?v=72"></script>
+    <script src="js/karte.js?v=72"></script>
+    <script src="js/panel.js?v=72"></script>
+    <script src="js/ziele.js?v=72"></script>
+    <script src="js/pinnwand.js?v=72"></script>
+    <script src="js/onlinespeicher.js?v=72"></script>
+    <script src="js/export.js?v=72"></script>
+    <script src="js/tabelle.js?v=72"></script>
+    <script src="js/zusatz.js?v=72"></script>
+    <script src="js/ausgabe.js?v=72"></script>
+    <script src="js/reiseplan.js?v=72"></script>
+    <script src="js/start.js?v=72"></script>
   </body>
 </html>

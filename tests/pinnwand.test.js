@@ -41,7 +41,13 @@ const srv = require('./lib/server')(ROOT, 8155);
       });
     }
     if (u.includes('tile.openstreetmap.org') || u.includes('arcgisonline')) return r.fulfill({ status: 204, body: '' });
-    if (u.includes('/geocode/reverse') || u.includes('photon.komoot.io')) return r.fulfill({ json: { features: [] } });
+    if (u.includes('/geocode/reverse') || u.includes('photon.komoot.io/reverse')) return r.fulfill({ json: { features: [] } });
+    if (u.includes('photon.komoot.io')) {
+      const t = (new URL(u).searchParams.get('q') || '').toLowerCase();
+      const k = Object.keys(PLACES).find(k => t.includes(k.toLowerCase()) || k.toLowerCase().includes(t));
+      const p = k && PLACES[k];
+      return r.fulfill({ json: { features: p ? [{ geometry: { coordinates: [p[1], p[0]] }, properties: { name: k, country: 'Schweden' } }] : [] } });
+    }
     if (u.includes('/geocode/')) {
       const t = (new URL(u).searchParams.get('text') || '').toLowerCase();
       const k = Object.keys(PLACES).find(k => t.includes(k.toLowerCase()) || k.toLowerCase().includes(t));
@@ -64,7 +70,12 @@ const srv = require('./lib/server')(ROOT, 8155);
   await page.waitForTimeout(500);
   await page.press('#viaIn', 'Enter');
   await page.waitForFunction(() => state.via.length === 1);
-  ok(await page.isVisible('#pinField'), 'Reiter 1: Pinnwand „Ideen sammeln“ sichtbar');
+  ok(
+    (await page.isVisible('#pinTog')) && !(await page.isVisible('#pinIn')) && /Reiseverlauf/.test(await page.textContent('label[for=viaIn]')),
+    'Reiter 1: Ideen-Ablage eingeklappt, solange leer; darunter „Reiseverlauf“'
+  );
+  await page.click('#pinTog');
+  ok(await page.isVisible('#pinIn'), 'antippen öffnet die Ideen-Ablage');
   ok(await page.evaluate(() => $('#pinSuggest').hidden), 'ohne Ideen kein „Basislager vorschlagen“');
 
   // Ideen sammeln (Enter im Feld)
@@ -74,7 +85,7 @@ const srv = require('./lib/server')(ROOT, 8155);
     await page.waitForFunction(n => state.ideas.length === n, ['Filmbyn Småland', 'Altstadt Eksjö', 'Kleva Gruva', 'Liseberg'].indexOf(t) + 1);
   }
   ok(
-    (await page.$$eval('#pinList li', e => e.length)) === 4 && /4 Ideen ohne Basislager/.test(await page.textContent('#pinCount')),
+    (await page.$$eval('#pinList li', e => e.length)) === 4 && /\(4\)/.test(await page.textContent('#pinCount')),
     'vier Ideen auf der Pinnwand: ' + (await page.textContent('#pinCount'))
   );
   ok(await page.evaluate(() => state.via.length === 1 && !state.stages.length), 'Ideen ändern weder Zwischenziele noch Planung');
@@ -154,6 +165,95 @@ const srv = require('./lib/server')(ROOT, 8155);
   await page.evaluate(t => loadTour(null, { ...t, stages: [] }, true), t);
   ok(await page.evaluate(() => state.ideas.length === 2 && $('#pinList').children.length === 2), 'Tour laden: Pinnwand wiederhergestellt');
 
+  // Idee auf eine Station ziehen: auf ★-Ziel = Sehenswürdigkeit dort
+  const drag = async (from, to) => {
+    const a = await page.locator(from).first().boundingBox(),
+      b = await page.locator(to).boundingBox();
+    await page.mouse.move(a.x + 15, a.y + a.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(a.x + 40, a.y + 30, { steps: 4 });
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 });
+    await page.mouse.up();
+  };
+  const st = await page.evaluate(() => state.via.findIndex(v => v.kind === 'stay'));
+  const nIdeas = await page.evaluate(() => state.ideas.length);
+  await drag('#pinList li[data-pindrag]', `#viaList li[data-vi="${st}"]`);
+  ok(
+    await page.evaluate(([st, n]) => state.ideas.length === n - 1 && state.via[st].sights.length === 1, [st, nIdeas]),
+    'Idee auf ★-Station gezogen → Sehenswürdigkeit dort'
+  );
+  // auf einen Besuch unterwegs = neuer Besuch danach
+  const vis = await page.evaluate(() => state.via.findIndex(v => v.kind === 'visit'));
+  const nv = await page.evaluate(() => state.via.length);
+  await drag('#pinList li[data-pindrag]', `#viaList li[data-vi="${vis}"]`);
+  ok(
+    await page.evaluate(([vis, nv]) => state.via.length === nv + 1 && state.via[vis + 1].kind === 'visit' && !state.ideas.length, [vis, nv]),
+    'Idee auf Besuch gezogen → neuer Besuch unterwegs danach; Ablage leer'
+  );
+
+  // Gleiche Orte auf Hin- und Rückweg: Fähre + Pause-Platz am Anfang, „Hinweg als Rückweg“
+  await page.evaluate(() => {
+    state.via.unshift(
+      {
+        uid: 'vF',
+        label: 'Travemünde Skandinavienkai, Deutschland',
+        lat: 53.944,
+        lon: 10.86,
+        kind: 'ferry',
+        pin: true,
+        hours: 9,
+        to: { lat: 55.61, lon: 12.99, label: 'Malmö Hamn, Schweden' }
+      },
+      { uid: 'vR', label: 'Bauernhof Vellinge, Schweden', lat: 55.493, lon: 13.002, kind: 'rest', nights: 1 }
+    );
+    renderVia();
+  });
+  ok(await page.isVisible('#viaBack'), 'Rundreise: Knopf „Hinweg als Rückweg …“');
+  const n0 = await page.evaluate(() => state.via.length);
+  await page.click('#viaBack');
+  await page.waitForSelector('#askDlg[open]');
+  const btns = await page.$$eval('#askBtns button', b => b.map(x => x.textContent + (x.classList.contains('primary') ? ' *' : '')));
+  ok(
+    btns.some(t => /1–2 \(bis Bauernhof Vellinge\) \*/.test(t)),
+    'Vorschlag: Anreise bis vor das erste ★-Ziel: ' + btns.join(' | ')
+  );
+  await page.click('#askBtns button.primary');
+  const back = await page.evaluate(
+    n0 => state.via.slice(n0).map(v => ({ k: v.kind, l: shortLabel(v.label), to: v.to && shortLabel(v.to.label), pin: v.pin, uid: v.uid })),
+    n0
+  );
+  console.log('     Rückweg:', JSON.stringify(back));
+  ok(
+    back.length === 2 &&
+      back[0].k === 'rest' &&
+      back[0].l === 'Bauernhof Vellinge' &&
+      back[1].k === 'ferry' &&
+      back[1].l === 'Malmö Hamn' &&
+      back[1].to === 'Travemünde Skandinavienkai' &&
+      back.every(v => v.pin && !['vF', 'vR'].includes(v.uid)),
+    'Rückweg: Vellinge, dann Fähre Malmö → Travemünde (Gegenrichtung), neue uid, 📌'
+  );
+  // Duplizieren: Kopie direkt darunter
+  const nd = await page.evaluate(() => state.via.length);
+  await page.click('[data-vdup="1"]');
+  ok(
+    await page.evaluate(nd => state.via.length === nd + 1 && state.via[2].label === state.via[1].label && state.via[2].uid !== state.via[1].uid, nd),
+    'Duplizieren: Kopie direkt darunter (eigene uid)'
+  );
+  // gleichen Ort noch einmal eingeben → Rückfrage statt Abweisung (Dialog wird bestätigt)
+  const na = await page.evaluate(() => state.via.length);
+  await page.fill('#viaIn', 'Liseberg');
+  await page.waitForTimeout(500);
+  await page.press('#viaIn', 'Enter');
+  ok(
+    await page
+      .waitForFunction(na => state.via.length === na + 1, na, { timeout: 8000 })
+      .then(
+        () => true,
+        () => false
+      ),
+    'gleicher Ort noch einmal: nach Rückfrage hinzugefügt'
+  );
   await page.screenshot({ path: path.join(OUT, 'pinnwand.png') });
   await browser.close();
   srv.close();

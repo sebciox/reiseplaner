@@ -364,7 +364,7 @@ const srv = require('./lib/server')(ROOT, 8136);
   await page.dispatchEvent('#dateIn', 'change');
   await page.fill('#retIn', '2027-07-04');
   await page.dispatchEvent('#retIn', 'change');
-  ok((await page.textContent('#retLbl')).includes('Ankunft spätestens'), 'Beschriftung „Ankunft spätestens“ (keine Rundreise)');
+  ok((await page.textContent('#retLbl')).includes('Reiseende'), 'Beschriftung „Reiseende“');
   await page.click('#planForm button[type=submit]');
   await page.waitForSelector('#segGo', { timeout: 15000 });
   let trip = (await page.textContent('#tripBar .trip')).replace(/\s+/g, ' ');

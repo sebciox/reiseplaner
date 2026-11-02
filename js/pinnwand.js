@@ -9,6 +9,7 @@
 const PIN_NEAR = 40; // km: Idee gehört zu einem bestehenden Basislager, wenn sie so nah an dessen Mitte liegt
 const PIN_SPAN = 70; // km: größter Abstand zweier Ideen in einem neuen Basislager (Tagesausflug ohne Wohnwagen)
 let pinProp = null; // Vorschlag {groups: [{key, base (via-uid) | null, nights}], pick: {ideaUid: groupKey | 'visit' | 'keep'}}
+let pinOpen = null; // Ideen-Ablage auf/zu (null = automatisch: offen, sobald es Ideen gibt)
 
 const pinKm = (a, b) => hav([a.lat, a.lon], [b.lat, b.lon]) / 1000;
 const pinMid = pts => ({ lat: pts.reduce((s, p) => s + +p.lat, 0) / pts.length, lon: pts.reduce((s, p) => s + +p.lon, 0) / pts.length });
@@ -205,14 +206,26 @@ function renderPinboard() {
         .map(v => ({ v, d: pinKm(x, baseMid(v)) }))
         .sort((a, b) => a.d - b.d)[0];
       const hint = near && near.d <= PIN_NEAR ? `<span class="muted"> · ${fkm1(near.d * 1000)} von ${esc(shortLabel(near.v.label))}</span>` : '';
-      return `<li><span class="pn">${esc(shortLabel(x.label))}</span>${hint}<button type="button" data-pindel="${esc(x.uid)}" aria-label="${esc(shortLabel(x.label))} entfernen" title="von der Pinnwand entfernen">✕</button></li>`;
+      return `<li data-pindrag="${esc(x.uid)}" title="auf eine Station ziehen"><span class="pn">${esc(shortLabel(x.label))}</span>${hint}<button type="button" data-pindel="${esc(x.uid)}" aria-label="${esc(shortLabel(x.label))} entfernen" title="von der Pinnwand entfernen">✕</button></li>`;
     })
     .join('');
-  $('#pinCount').textContent = ideas.length ? `${ideas.length} ${ideas.length === 1 ? 'Idee' : 'Ideen'} ohne Basislager` : '';
+  $('#pinCount').textContent = ideas.length ? `(${ideas.length})` : '';
+  // eingeklappt, solange leer (antippen öffnet); mit Ideen offen, außer selbst zugeklappt
+  const open = pinOpen ?? ideas.length > 0;
+  $('#pinField').classList.toggle('closed', !open);
+  $('#pinTog').setAttribute('aria-expanded', open);
+  $('#pinTog .tri').textContent = open ? '▾' : '▸';
+  $('#pinHint').hidden = !ideas.length || !!pinProp;
   $('#pinSuggest').hidden = !ideas.length || !!pinProp;
   $('#pinProp').innerHTML = propHtml();
 }
 $('#pinField').addEventListener('click', e => {
+  if (e.target.closest('#pinTog')) {
+    pinOpen = !(pinOpen ?? (state.ideas || []).length > 0);
+    renderPinboard();
+    if (pinOpen) $('#pinIn').focus();
+    return;
+  }
   const del = e.target.closest('[data-pindel]');
   if (del) {
     state.ideas = (state.ideas || []).filter(x => x.uid !== del.dataset.pindel);
@@ -346,3 +359,72 @@ function drawIdeas(layer) {
   });
   $('#pinAddBtn').onclick = add;
 })();
+
+/* Idee auf eine Station ziehen: auf ein ★-Zwischenziel = Sehenswürdigkeit dort, auf ein anderes = Besuch unterwegs danach,
+   auf die Liste bzw. das Eingabefeld darunter = neues ★-Zwischenziel am Ende */
+function dropIdea(uid, vi) {
+  const x = (state.ideas || []).find(y => y.uid === uid);
+  if (!x) return;
+  const v = vi != null ? state.via[vi] : null,
+    n = shortLabel(x.label);
+  if (v && (v.kind || 'stay') === 'stay') {
+    v.sights = (v.sights || []).concat(ideaPt(x));
+    flash(`„${n}“ gehört jetzt zu „${shortLabel(v.label)}“.`);
+  } else if (v) {
+    state.via.splice(vi + 1, 0, { ...ideaPt(x), uid: 'v' + ++viaSeq, kind: 'visit', hours: 2 });
+    flash(`„${n}“ als Besuch unterwegs nach „${shortLabel(v.label)}“ eingefügt.`);
+  } else {
+    state.via.push({ ...ideaPt(x), uid: 'v' + ++viaSeq, kind: 'stay', nights: 2 });
+    flash(`„${n}“ als neues Zwischenziel (★ Übernachten, 2 Nächte) ans Ende gesetzt.`);
+  }
+  state.ideas = state.ideas.filter(y => y !== x);
+  pinProp = null;
+  renderVia();
+  renderPinboard();
+  renderMap();
+  touch();
+}
+$('#pinList').addEventListener('pointerdown', e => {
+  const li = e.target.closest('[data-pindrag]');
+  if (!li || e.target.closest('button') || e.button > 0) return;
+  const uid = li.dataset.pindrag,
+    x0 = e.clientX,
+    y0 = e.clientY;
+  let ghost = null,
+    tgt = null;
+  const targetAt = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    if (!el || el.closest('#pinField')) return null;
+    return el.closest('#viaList li[data-vi]') || el.closest('#viaList, #viaIn');
+  };
+  const move = ev => {
+    if (!ghost) {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      ghost = li.cloneNode(true);
+      ghost.className = 'pinghost';
+      document.body.appendChild(ghost);
+      li.classList.add('dragging');
+    }
+    ev.preventDefault();
+    ghost.style.left = ev.clientX + 10 + 'px';
+    ghost.style.top = ev.clientY + 10 + 'px';
+    const t = targetAt(ev.clientX, ev.clientY);
+    if (t !== tgt) {
+      tgt?.classList.remove('droptgt');
+      tgt = t;
+      tgt?.classList.add('droptgt');
+    }
+  };
+  const up = () => {
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', up);
+    document.removeEventListener('pointercancel', up);
+    li.classList.remove('dragging');
+    ghost?.remove();
+    tgt?.classList.remove('droptgt');
+    if (ghost && tgt) dropIdea(uid, tgt.dataset.vi != null ? +tgt.dataset.vi : null);
+  };
+  document.addEventListener('pointermove', move, { passive: false });
+  document.addEventListener('pointerup', up);
+  document.addEventListener('pointercancel', up);
+});

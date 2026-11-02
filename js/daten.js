@@ -95,7 +95,7 @@ function tripChips() {
   const e = tripEnd(),
     dm = d => `${d.getDate()}.${d.getMonth() + 1}.`;
   if (!e)
-    return `<div class="tripline"><button type="button" class="tripchips" data-tripdate><span class="chip">📅 Abfahrtsdatum eintragen</span></button>${openChipHtml()}${saveChipHtml()}</div><div class="tripdet" hidden>${tripHtml()}</div>`;
+    return `<div class="tripline"><button type="button" class="tripchips" data-tripdate><span class="chip">📅 Reisebeginn eintragen</span></button>${openChipHtml()}${saveChipHtml()}</div><div class="tripdet" hidden>${tripHtml()}</div>`;
   const d0 = new Date(state.date + 'T12:00:00'),
     days = dayDiff(e, d0) + 1;
   let st = '';

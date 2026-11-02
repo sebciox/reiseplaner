@@ -30,7 +30,14 @@ const OVERPASS = [
 ];
 const AREA_ZOOM = 10;
 // Vorerst zum Testen: Start/Ziel vorausgefüllt (bei Bedarf hier leeren)
-const DEMO = { start: 'Witten', end: 'Sant Pere Pescador, CT, Spanien' };
+// Vorbelegung während der Entwicklung (später entfernen): Reisebeginn/-ende = Schweden 2026 (24.7. los nach Travemünde,
+// 15.8. Rückfahrt Travemünde → Witten); Daten nicht in automatischen Tests (navigator.webdriver), die erwarten leere Felder
+const DEMO = { start: 'Witten', end: 'Sant Pere Pescador, CT, Spanien', date: '2026-07-24', ret: '2026-08-15' };
+function demoDates() {
+  if (navigator.webdriver) return;
+  state.date = DEMO.date;
+  state.ret = DEMO.ret;
+}
 
 let settings = loadSettings();
 function loadSettings() {

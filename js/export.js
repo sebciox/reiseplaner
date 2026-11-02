@@ -377,6 +377,7 @@ function resetTour() {
   });
   $('#startIn').value = DEMO.start;
   $('#endIn').value = DEMO.end;
+  demoDates();
   renderVia();
   uiTab = 'goals';
   prevDone = false;
@@ -523,6 +524,7 @@ function askChoice(title, text, buttons) {
   const d = $('#askDlg');
   $('#askTitle').textContent = title;
   $('#askText').textContent = text;
+  $('#askBtns').classList.toggle('stack', buttons.length > 3); // viele Möglichkeiten untereinander
   $('#askBtns').innerHTML = buttons
     .map(b => `<button class="btn${b.primary ? ' primary' : ''}" type="button" data-v="${esc(b.v)}">${esc(b.label)}</button>`)
     .join('');

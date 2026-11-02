@@ -218,7 +218,8 @@ const srv = require('./lib/server')(ROOT, 8141);
   await page.goto('http://localhost:8141/');
   await page.evaluate(() => localStorage.setItem('gp.settings', JSON.stringify({ key: 'eyJtest' })));
   await page.reload();
-  page.on('dialog', d => d.accept(d.type() === 'prompt' ? 'Schweden' : undefined));
+  let confirmNo = false; // Rückfrage „schon in der Reise – trotzdem noch einmal?“ ablehnen
+  page.on('dialog', d => (confirmNo && d.type() === 'confirm' ? d.dismiss() : d.accept(d.type() === 'prompt' ? 'Schweden' : undefined)));
   await page.route('**/photon.komoot.io/api/**', r => {
     const q = new URL(r.request().url()).searchParams.get('q');
     const f = /strandcamping/i.test(q)
@@ -269,12 +270,22 @@ const srv = require('./lib/server')(ROOT, 8141);
   });
   await page.waitForFunction(() => state.via.length === 5);
   ok(await page.evaluate(() => !state.overview), 'Kein Planungsstart durch Absenden im Zwischenziel-Feld');
-  // 5) Doppelt
+  // 5) Doppelt: Rückfrage „trotzdem noch einmal (Rückweg)?“ – Nein = nicht hinzugefügt, Ja = zweites Mal
+  confirmNo = true;
   await page.fill('#viaIn', 'Stockholm');
   await page.press('#viaIn', 'Enter');
   await page.waitForTimeout(400);
+  confirmNo = false;
   labels = await page.evaluate(() => state.via.map(v => v.label));
-  ok(labels.length === 5, 'Doppeltes Ziel abgewiesen: ' + labels.map(l => l.split(',')[0]).join(', '));
+  ok(labels.length === 5, 'Doppeltes Ziel nach Rückfrage „Nein“ nicht hinzugefügt: ' + labels.map(l => l.split(',')[0]).join(', '));
+  await page.fill('#viaIn', 'Stockholm');
+  await page.press('#viaIn', 'Enter');
+  await page.waitForFunction(() => state.via.length === 6);
+  ok(true, 'Doppeltes Ziel nach Rückfrage „Ja“ ein zweites Mal (z. B. Rückweg)');
+  await page.evaluate(() => {
+    state.via.pop();
+    renderVia();
+  });
   ok(await page.$eval('#viaIn', e => e.value === ''), 'Eingabefeld leer');
   // Campingplatz über Photon
   await page.fill('#viaIn', 'Hultsfred Strandcamping');

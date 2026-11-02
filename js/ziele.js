@@ -27,13 +27,14 @@ function renderVia() {
         <input class="vsin" data-vsadd="${i}" placeholder="+ weitere Sehenswürdigkeit hier (Basislager) – Enter" enterkeyhint="enter"></div>`
           : ''
       }</div>
-    <div class="vbtns">${v.pin ? `<button type="button" data-vpin="${i}" class="pin-on" title="Platz festgelegt – Antippen löst die Festlegung" aria-label="Festlegung lösen">📌</button>` : ''}<button type="button" data-vdel="${i}" aria-label="entfernen" title="entfernen">✕</button></div></li>`
+    <div class="vbtns">${v.pin ? `<button type="button" data-vpin="${i}" class="pin-on" title="Platz festgelegt – Antippen löst die Festlegung" aria-label="Festlegung lösen">📌</button>` : ''}<button type="button" data-vdup="${i}" aria-label="duplizieren" title="Duplizieren – Kopie darunter, dann am Griff an ihren Platz ziehen (Fähre: Gegenrichtung)">${DUP_SVG}</button><button type="button" data-vdel="${i}" aria-label="entfernen" title="entfernen">✕</button></div></li>`
     )
     .join('');
-  $('#viaTools').hidden = state.via.length < 2;
+  $('#viaTools').hidden = state.via.length < 2 && !(state.round && state.via.length);
+  $('#viaOpt').hidden = state.via.length < 2;
+  $('#viaBack').hidden = !state.round || !state.via.length;
   if (typeof renderPinboard === 'function') renderPinboard();
   $('#roundIn').checked = !!state.round;
-  $('#retLbl').textContent = state.round ? 'Zurück spätestens' : 'Ankunft spätestens';
   $('#dateIn').value = state.date || '';
   $('#retIn').value = state.ret || '';
   $('#retIn').min = state.date || '';
@@ -149,6 +150,22 @@ function renderVia() {
     };
     g.onpointerdown = e => startViaDrag(e, g);
   });
+  ul.querySelectorAll('[data-vdup]').forEach(
+    b =>
+      (b.onclick = () => {
+        const i = +b.dataset.vdup,
+          v = state.via[i],
+          c = viaCopy(v);
+        state.via.splice(i + 1, 0, c);
+        ch();
+        touch();
+        flash(
+          v.kind === 'ferry'
+            ? `Fähre in Gegenrichtung (${shortLabel(c.label)} → ${shortLabel(c.to.label)}) eingefügt – am Griff ⠿ an ihren Platz ziehen.`
+            : `Kopie von „${shortLabel(v.label)}“ eingefügt – am Griff ⠿ an ihren Platz ziehen.`
+        );
+      })
+  );
   ul.querySelectorAll('[data-vdel]').forEach(
     b =>
       (b.onclick = () => {
@@ -165,6 +182,43 @@ function renderVia() {
         touch();
       })
   );
+}
+const DUP_SVG =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg>';
+// Kopie eines Zwischenziels (Rückweg): neue uid, ohne eigene Einträge und ohne weitere Sehenswürdigkeiten
+// (die besucht man nicht zweimal); Fähre in Gegenrichtung. Kopien bekommen 📌 (bleiben beim Optimieren an ihrem Platz).
+function viaCopy(v) {
+  const c = { uid: 'v' + ++viaSeq, label: v.label, lat: v.lat, lon: v.lon, kind: v.kind || 'stay', pin: true };
+  if (v.nights) c.nights = v.nights;
+  if (v.hours) c.hours = v.hours;
+  if (v.kind === 'ferry' && v.to) Object.assign(c, { label: v.to.label, lat: v.to.lat, lon: v.to.lon, to: { lat: v.lat, lon: v.lon, label: v.label } });
+  else if (v.info) c.info = v.info;
+  return c;
+}
+// Rundreise: die ersten k Stationen (Anreise) in umgekehrter Reihenfolge ans Ende kopieren, Fähren in Gegenrichtung
+async function backWay() {
+  const P = state.via;
+  if (!P.length) return;
+  // Vorschlag = Anreise: Fähren und Pause-Plätze am Anfang (bis zum ersten ★-Ziel oder Besuch – die besucht man nicht zweimal)
+  const first = P.findIndex(v => v.kind !== 'ferry' && v.kind !== 'rest');
+  const sugg = first > 0 ? first : 1,
+    max = Math.min(P.length, 6);
+  const btns = [];
+  for (let k = 1; k <= max; k++)
+    btns.push({ v: String(k), label: k === 1 ? `nur 1. ${shortLabel(P[0].label)}` : `1–${k} (bis ${shortLabel(P[k - 1].label)})`, primary: k === sugg });
+  btns.push({ v: '', label: 'Abbrechen' });
+  const r = await askChoice(
+    'Hinweg als Rückweg',
+    'Welche Stationen vom Anfang der Reise sollen auf dem Rückweg noch einmal angefahren werden? Sie kommen in umgekehrter Reihenfolge ans Ende, Fähren in Gegenrichtung.',
+    btns
+  );
+  const k = +r;
+  if (!k) return;
+  state.via.push(...P.slice(0, k).reverse().map(viaCopy));
+  renderVia();
+  renderMap();
+  touch();
+  flash(`${k} ${k === 1 ? 'Station' : 'Stationen'} als Rückweg ans Ende gesetzt.`);
 }
 // Ziel von Position i nach j verschieben; das verschobene Ziel behält beim Optimieren seinen Platz (📌)
 function moveVia(i, j) {
@@ -253,8 +307,8 @@ function fitGoals() {
 function addVia(g) {
   if (!g) return;
   const dup = state.via.find(v => v.label === g.label && Math.abs(v.lat - g.lat) < 1e-4 && Math.abs(v.lon - g.lon) < 1e-4);
-  if (dup) {
-    flash(`„${shortLabel(g.label)}“ ist schon in der Liste.`);
+  // gleicher Ort noch einmal (z. B. Rückweg über denselben Hafen) – nur nach Rückfrage
+  if (dup && !confirm(`„${shortLabel(g.label)}“ ist schon in der Reise.\n\nTrotzdem noch einmal hinzufügen (z. B. für den Rückweg)?`)) {
     $('#viaIn').value = '';
     $('#viaSugg').innerHTML = '';
     return;
@@ -421,6 +475,7 @@ async function optimizeVia() {
   });
   $('#viaAddBtn').onclick = () => addViaFromInput();
   $('#viaOpt').onclick = optimizeVia;
+  $('#viaBack').onclick = backWay;
   $('#roundIn').onchange = () => {
     state.round = $('#roundIn').checked;
     if (state.round) state.end = null;
@@ -457,7 +512,7 @@ async function optimizeVia() {
     let r = $('#retIn').value || null;
     if (r && state.date && r < state.date) {
       r = state.date;
-      flash('Rückkehr kann nicht vor der Abfahrt liegen – auf den Abfahrtstag gesetzt.');
+      flash('Das Reiseende kann nicht vor dem Reisebeginn liegen – auf den Reisebeginn gesetzt.');
     }
     state.ret = r;
     touch();

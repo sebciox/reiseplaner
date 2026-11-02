@@ -138,6 +138,7 @@ $('#importIn').addEventListener('change', e => {
 /* ---------- Start ---------- */
 $('#startIn').value = DEMO.start;
 $('#endIn').value = DEMO.end;
+demoDates();
 renderVia();
 renderAll();
 popupPad();
