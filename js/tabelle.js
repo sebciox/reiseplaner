@@ -353,7 +353,11 @@ function campRowHtml(i, ds, cur) {
   if (camp) dat += `<div class="ort">${ed('c', i, 'ort', esc(stayTown(i)))}</div>`;
   // Name = Link Google-Eintrag (eigener Name aus älteren Touren wird weiter angezeigt)
   const nm = own('name') ? esc(m.name) : camp ? nameHtml(c) : esc(c.label);
-  let name = `<span class="pname"><a href="${esc(gEntryUrl(c))}" target="_blank" rel="noopener">${nm}</a></span>`;
+  // eigener Platz (Koordinaten, nicht in OSM): Name antippen = ändern (sonst Link zum Google-Eintrag, nicht bearbeitbar)
+  const ownCamp = camp && String(c.id).startsWith('eigen/');
+  let name = ownCamp
+    ? `<span class="pname">${ed('c', i, 'name', nm)}</span>`
+    : `<span class="pname"><a href="${esc(gEntryUrl(c))}" target="_blank" rel="noopener">${nm}</a></span>`;
   if (i === cur) name += ' <span class="badge best">heute/nächste</span>';
   if (camp) {
     const w = campWeb(c),

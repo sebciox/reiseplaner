@@ -286,6 +286,21 @@ const srv = require('./lib/server')(ROOT, 8145);
     return c && [c.lat, c.lon];
   });
   ok(c && c[0] === 48.85 && c[1] === 2.31, 'Google-Link: Name + Platz-Koordinaten (!3d/!4d) ' + JSON.stringify(c));
+  // Grad/Minuten/Sekunden wie bei park4night (typografische Zeichen), Garmin-Schreibweise, Himmelsrichtung hinten
+  const dms = await page.evaluate(() =>
+    ['N 55°29’40.668” E 12°57’7.452”', '55°29\'40.7"N 12°57\'07.5"E', "N 55° 29.678' E 012° 57.124'", '55.4946 N, 12.9521 E', 'Gessie ängaväg 61'].map(t => {
+      const c = parseCoords(t);
+      return c ? [+c.lat.toFixed(4), +c.lon.toFixed(4)] : null;
+    })
+  );
+  ok(
+    dms.slice(0, 4).every(c => c && c[0] === 55.4946 && c[1] === 12.9521) && dms[4] === null,
+    'Koordinaten in Grad/Minuten/Sekunden (park4night, Garmin, Google) erkannt, Adresse nicht: ' + JSON.stringify(dms)
+  );
+  await page.fill('form.addcamp input', 'N 48°49’12” E 2°25’48”');
+  await page.click('form.addcamp button');
+  await page.waitForFunction(() => state.pending.cands.some(x => Math.abs(x.lat - 48.82) < 1e-4 && Math.abs(x.lon - 2.43) < 1e-4), null, { timeout: 8000 });
+  ok(true, 'park4night-Koordinaten „N 48°49’12” E 2°25’48”“ → eigener Platz in der Liste');
   await page.fill('form.addcamp input', 'https://maps.app.goo.gl/abc');
   await page.click('form.addcamp button');
   ok((await page.textContent('.addres')).includes('Kurzlinks'), 'Kurzlink → Erklärung');

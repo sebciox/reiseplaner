@@ -240,7 +240,30 @@ function parseCoords(t) {
       if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) return { lat, lon };
     }
   }
-  return null;
+  return parseDms(t);
+}
+/* Koordinaten mit Himmelsrichtung / Grad-Minuten-Sekunden, wie park4night, Garmin, Google sie anzeigen:
+   „N 55°29'40.668" E 12°57'7.452"“, „55°29'40.7"N 12°57'07.5"E“, „N 55° 29.678' E 012° 57.124'“, „55.4946 N, 12.9521 E“
+   (auch typografische Anführungszeichen ’ ” ′ ″, Komma als Dezimalzeichen, O für Ost). */
+function parseDms(t) {
+  const s = t
+    .replace(/[’‘′´`]/g, "'")
+    .replace(/[”“″]|''/g, '"')
+    .replace(/(\d),(\d)/g, '$1.$2');
+  const num = '(\\d{1,3}(?:\\.\\d+)?)';
+  const body = `${num}\\s*°?\\s*(?:${num}\\s*')?\\s*(?:${num}\\s*")?`;
+  const pre = /^\s*[NSEOW]/i.test(s);
+  const re = new RegExp(pre ? `([NSEOW])\\s*${body}` : `${body}\\s*([NSEOW])`, 'gi');
+  const parts = [...s.matchAll(re)].map(m => {
+    const [h, d, mi, se] = pre ? [m[1], m[2], m[3], m[4]] : [m[4], m[1], m[2], m[3]];
+    const v = +d + (+mi || 0) / 60 + (+se || 0) / 3600;
+    const H = h.toUpperCase();
+    return { lat: H === 'N' || H === 'S', v: H === 'S' || H === 'W' ? -v : v };
+  });
+  if (parts.length !== 2 || parts[0].lat === parts[1].lat) return null;
+  const lat = (parts[0].lat ? parts[0] : parts[1]).v,
+    lon = (parts[0].lat ? parts[1] : parts[0]).v;
+  return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
 }
 const nameFromUrl = t => {
   const m = t.match(/\/place\/([^/@?]+)/);
@@ -354,7 +377,7 @@ async function searchAddCamp(form) {
   }
   const co = parseCoords(t);
   if (co) {
-    const name = nameFromUrl(t) || prompt('Name des Campingplatzes:', 'Eigener Platz');
+    const name = nameFromUrl(t) || prompt('Name des Platzes (später im Reiseplan änderbar, Beschreibung in die Notiz):', 'Eigener Platz');
     if (name === null) return;
     out.innerHTML = '';
     return run(() => addCustomCamp(ctx, { ...co, name: name.trim() || 'Eigener Platz' }));

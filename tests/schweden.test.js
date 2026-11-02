@@ -270,7 +270,16 @@ let dirCalls = 0;
   // Name und Adresse sind nicht bearbeitbar (kommen aus OSM/Google bzw. der Adresssuche); Telefon, Buchungsnr. und
   // Stellplatz schreibt man in die Notiz (ein freies Feld)
   const noteOf = p => [p.note, p.phone && 'Tel. ' + p.phone, p.nr && 'Buchungsnr. ' + p.nr, p.pitch && 'Stellplatz ' + p.pitch].filter(Boolean).join('\n');
-  ok(!(await page.$('#tripView [data-ed$="|name"][data-ed^="c|"], #tripView [data-ed$="|addr"]')), 'Name und Adresse sind Links, nicht bearbeitbar');
+  ok(
+    await page.evaluate(
+      () =>
+        !document.querySelector('#tripView [data-ed$="|addr"]') &&
+        [...document.querySelectorAll('#tripView [data-ed$="|name"][data-ed^="c|"]')].every(e =>
+          String(state.stages[+e.dataset.ed.split('|')[1]].to.id).startsWith('eigen/')
+        )
+    ),
+    'Name und Adresse sind Links, nicht bearbeitbar (Name nur bei eigenen Plätzen)'
+  );
   for (const [i, p] of F.plan.entries()) {
     const town = await page.evaluate(i => stayTown(i), i);
     if (p.ort && town !== p.ort) (await edit(`c|${i}|ort`, p.ort)) ? entered++ : missing.push(`${p.name}: Ort`);
@@ -379,6 +388,20 @@ let dirCalls = 0;
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(OUT, 'schweden-tabelle.png') });
   await page.setViewportSize({ width: 1400, height: 950 });
+
+  // eigener Platz (per Koordinaten ergänzt): Name im Reiseplan antippen = ändern
+  const own = await page.evaluate(() => state.stages.findIndex(s => String(s.to.id).startsWith('eigen/')));
+  ok(own >= 0 && !!(await page.$(`#tripView tr[data-row="c${own}"] .pname [data-ed]`)), 'eigener Platz: Name im Reiseplan bearbeitbar');
+  if (own >= 0) {
+    await page.click(`#tripView tr[data-row="c${own}"] .pname [data-ed]`);
+    await page.fill('#tripView .edin', 'Bauernhof Gessie');
+    await page.press('#tripView .edin', 'Enter');
+    ok(
+      (await page.evaluate(i => state.stages[i].my?.name, own)) === 'Bauernhof Gessie' &&
+        /Bauernhof Gessie/.test(await page.textContent(`#tripView tr[data-row="c${own}"] .pname`)),
+      'eigener Platz umbenannt: „Bauernhof Gessie“'
+    );
+  }
 
   /* ---------- 4. Was die PDF zeigt, die App aber (noch) nicht so ---------- */
   // früher Lücken, jetzt Pflicht: Ort unter dem Datum, „nach <Ort>“, Fährdauer, keine alten Suchhinweise
